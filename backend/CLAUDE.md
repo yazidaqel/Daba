@@ -13,4 +13,12 @@ Référence : cahier des charges §8 (règles de gestion), §9 (notifications), 
 
 ## Commandes
 
-À compléter dès que le squelette existe.
+Depuis `backend/`, avec un JDK 25 dans `JAVA_HOME` (le wrapper télécharge Maven).
+
+- Build + tests : `./mvnw verify` (Testcontainers démarre `postgis/postgis:18-3.6` : Docker doit tourner)
+- Un test : `./mvnw test -Dtest=ModulesTest`
+- Lancer contre la base du compose : `docker compose up -d db` (à la racine), puis `./mvnw spring-boot:run`
+- Image : `docker compose build backend` (à la racine)
+- Configuration : `DB_URL`, `DB_USER`, `DB_PASSWORD` (défaut : `jdbc:postgresql://localhost:5433/daba`, `daba`/`daba`).
+- Nouvelle migration : `src/main/resources/db/migration/V<n>__<description>.sql`.
+- `ModulesTest` (Spring Modulith) échoue si un module utilise les classes internes d'un autre : l'API publique d'un module est son package racine, le reste va dans des sous-packages.

@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgis/postgis:18-3.6
+    environment:
+      POSTGRES_DB: daba
+      POSTGRES_USER: daba
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-daba}
+    ports:
+      # 5433 côté hôte pour ne pas entrer en conflit avec un PostgreSQL local.
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      # PostgreSQL 18 : le volume se monte sur /var/lib/postgresql (et non plus .../data).
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U daba -d daba"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/daba
+      DB_USER: daba
+      DB_PASSWORD: ${DB_PASSWORD:-daba}
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:

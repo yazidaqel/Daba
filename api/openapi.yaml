@@ -1,0 +1,294 @@
+openapi: 3.1.0
+info:
+  title: Daba API
+  version: 0.1.0
+  description: |
+    Contrat unique entre le back-end, les apps mobiles (ambulant, hanout) et les portails web.
+    Changement incompatible = nouvelle version de l'endpoint (/v2/...), jamais de rupture silencieuse.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+
+paths:
+  /v1/auth/otp:
+    post:
+      tags: [comptes]
+      operationId: demanderOtp
+      summary: Envoie un code OTP par SMS au numéro donné
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpRequest'
+      responses:
+        '202':
+          description: Code envoyé (réponse identique que le numéro soit connu ou non)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OtpSent'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+
+  /v1/auth/otp/verify:
+    post:
+      tags: [comptes]
+      operationId: verifierOtp
+      summary: Vérifie le code OTP et ouvre une session sur l'appareil
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpVerify'
+      responses:
+        '200':
+          description: Code valide
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+
+  /v1/hanouts:
+    get:
+      tags: [referentiel]
+      operationId: listerHanouts
+      summary: Liste les hanouts (base POS fournie par RED)
+      description: |
+        Recherche par nom ou téléphone (`q`) et/ou par proximité (`lat`, `lon`, `rayonM`).
+        Avec une position, les résultats sont triés par distance croissante.
+      parameters:
+        - name: q
+          in: query
+          description: Nom du hanout, nom du gérant ou téléphone
+          schema:
+            type: string
+            minLength: 2
+        - name: lat
+          in: query
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+        - name: lon
+          in: query
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+        - name: rayonM
+          in: query
+          description: Rayon en mètres, utilisé seulement avec lat et lon
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50000
+            default: 2000
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: taille
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: Page de hanouts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HanoutPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Problem:
+      description: Erreur (RFC 9457)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    Telephone:
+      type: string
+      description: Numéro marocain au format E.164
+      pattern: '^\+212[5-7][0-9]{8}$'
+      examples: ['+212612345678']
+
+    Langue:
+      type: string
+      enum: [fr, ar, ary-Arab, ary-Latn]
+      description: fr, arabe (RTL), darija en caractères arabes ou latins
+
+    OtpRequest:
+      type: object
+      required: [telephone]
+      properties:
+        telephone:
+          $ref: '#/components/schemas/Telephone'
+        langue:
+          $ref: '#/components/schemas/Langue'
+
+    OtpSent:
+      type: object
+      required: [expireDans]
+      properties:
+        expireDans:
+          type: integer
+          description: Durée de validité du code, en secondes
+          examples: [300]
+
+    OtpVerify:
+      type: object
+      required: [telephone, code, appareilId]
+      properties:
+        telephone:
+          $ref: '#/components/schemas/Telephone'
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+        appareilId:
+          type: string
+          format: uuid
+          description: UUID généré par l'appareil ; sert aussi de préfixe de numérotation hors ligne (RG-F1)
+
+    Session:
+      type: object
+      required: [accessToken, refreshToken, expireDans, utilisateur]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        expireDans:
+          type: integer
+          description: Durée de validité de l'accessToken, en secondes
+        utilisateur:
+          $ref: '#/components/schemas/Utilisateur'
+
+    Utilisateur:
+      type: object
+      required: [id, telephone, roles, organisationId]
+      properties:
+        id:
+          type: string
+          format: uuid
+        telephone:
+          $ref: '#/components/schemas/Telephone'
+        nom:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT, ADMIN]
+        organisationId:
+          type: string
+          format: uuid
+        nouveau:
+          type: boolean
+          description: Vrai à la première connexion (profil à compléter, consentement CNDP à recueillir)
+
+    Hanout:
+      type: object
+      required: [id, nom, position]
+      properties:
+        id:
+          type: string
+          format: uuid
+        codePos:
+          type: string
+          description: Identifiant dans la base POS de RED
+        nom:
+          type: string
+        gerant:
+          type: string
+        telephone:
+          $ref: '#/components/schemas/Telephone'
+        position:
+          $ref: '#/components/schemas/Position'
+        adresse:
+          type: string
+        ville:
+          type: string
+        photoFacadeUrl:
+          type: string
+          format: uri
+        ice:
+          type: string
+          pattern: '^[0-9]{15}$'
+        distanceM:
+          type: integer
+          description: Présente seulement si lat et lon sont fournis
+
+    Position:
+      type: object
+      required: [lat, lon]
+      properties:
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+
+    HanoutPage:
+      type: object
+      required: [contenu, page, taille, total]
+      properties:
+        contenu:
+          type: array
+          items:
+            $ref: '#/components/schemas/Hanout'
+        page:
+          type: integer
+        taille:
+          type: integer
+        total:
+          type: integer
+          format: int64
+
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string

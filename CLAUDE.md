@@ -48,4 +48,10 @@ Acteurs :
 
 ## Commandes
 
-À compléter dès que le squelette du projet existe (build, tests, lint, lancement local).
+Prérequis : Docker, et JDK 25 dans `JAVA_HOME` pour builder hors conteneur.
+
+- Tout lancer (PostgreSQL 18 + PostGIS sur l'hôte en 5433, back-end en 8080) : `docker compose up -d --build`
+- Santé : `curl localhost:8080/actuator/health` ; Swagger UI : http://localhost:8080/swagger-ui.html
+- Arrêter : `docker compose down` (ajouter `-v` pour effacer la base)
+- Valider le contrat : `npx @redocly/cli lint api/openapi.yaml`
+- Back-end : voir `backend/CLAUDE.md`.
