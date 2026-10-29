@@ -1,0 +1,30 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Java
+target/
+build/
+.gradle/
+*.class
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Secrets et local
+.env
+.env.*
+!.env.example
+.claude/settings.local.json
+*.log
+.DS_Store
