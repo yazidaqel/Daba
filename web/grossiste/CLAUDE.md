@@ -3,6 +3,9 @@
 Référence : cahier des charges §4 et §7.2. Règles communes : `../CLAUDE.md`.
 
 Vite 8 + React 19.3 + TypeScript 6.0 + Tailwind CSS 4.3 + shadcn/ui (style radix-nova, classes logiques pour le RTL).
+Police : IBM Plex Sans (latin) et IBM Plex Sans Arabic (arabe), auto-hébergées depuis `@fontsource` 5.3.0 (OFL 1.1) ;
+`src/polices.css` ne déclare que les woff2 des graisses 400, 500, 600 (sous-ensembles latin, latin-ext, arabic) ;
+la face arabe passe en tête pour `lang="ar"` et `ary-Arab` (`src/index.css`).
 TypeScript 7 est sorti mais openapi-typescript et le JS API en dépendent encore : rester en 6.0.x.
 
 ## Commandes (depuis `web/grossiste/`)

@@ -1,9 +1,10 @@
 @import "tailwindcss";
+@import "./polices.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: system-ui, "Segoe UI", Roboto, "Noto Sans Arabic", Tahoma, sans-serif;
+  --font-sans: var(--police);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -110,4 +111,14 @@
   header, .no-print {
     display: none;
   }
+}
+
+/* IBM Plex : la face latine d'abord en français et en darija latin ; la face arabe d'abord en arabe et en
+   darija arabe. Chaque face comble les glyphes que l'autre n'a pas (mots arabes dans le sélecteur de langue). */
+:root {
+  --police: "IBM Plex Sans", "IBM Plex Sans Arabic", system-ui, sans-serif;
+}
+:root:lang(ar),
+:root:lang(ary-Arab) {
+  --police: "IBM Plex Sans Arabic", "IBM Plex Sans", system-ui, sans-serif;
 }
