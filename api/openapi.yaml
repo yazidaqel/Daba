@@ -1,21 +1,66 @@
 openapi: 3.1.0
 info:
   title: Daba API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     Contrat unique entre le back-end, les apps mobiles (ambulant, hanout) et les portails web.
     Changement incompatible = nouvelle version de l'endpoint (/v2/...), jamais de rupture silencieuse.
+
+    **Cloisonnement multi-tenant.** Chaque appel authentifié est cloisonné par l'organisation
+    portée par le jeton (`organisationId` de la Session) ; aucun chemin ne prend l'organisation
+    en paramètre. Une ressource d'une autre organisation répond 404, comme une ressource inexistante.
+    Les seules lectures croisées sont celles du métier, et elles sont limitées aux champs décrits :
+    - la marque voit les dépôts de ses campagnes (jamais les ambulants ni les hanouts, §5.4) ;
+    - le grossiste voit les réservations faites sur ses dépôts ;
+    - l'ambulant voit les offres promo (campagnes et dépôts d'autres organisations), les demandes
+      de dépannage qui lui sont proposées et les bons de sortie qui lui sont adressés ;
+    - le hanout voit les documents qui lui sont adressés, ses comptes de crédit et leurs relevés.
+
+    **Langues.** Les clients affichent à partir des codes (enums, `Problem.type`, `regle`) ; les
+    textes libres renvoyés par le serveur suivent l'en-tête `Accept-Language` (fr, ar, ary-Arab, ary-Latn).
+    `x-roles` liste les rôles autorisés ; un autre rôle reçoit 403.
+
+    **Hors ligne.** Toutes les écritures de l'app ambulant passent par `POST /v1/sync/operations`
+    (UUID générés par l'appareil, rejouables sans effet de bord). Seules la réservation d'une promo
+    et les actions de dépannage (disponibilité, acceptation) exigent le réseau.
+
+    **Montants** en centimes de dirham (entiers). **Quantités** en unités du produit
+    (un produit = un code EAN et un conditionnement).
+
+    **Erreurs** au format RFC 9457 ; `regle` nomme la règle de gestion violée (ex. RG-P3).
+  license:
+    name: Propriétaire
+    identifier: LicenseRef-Daba-Proprietaire
 servers:
   - url: http://localhost:8080
 security:
   - bearerAuth: []
 
+tags:
+  - name: comptes
+    description: Authentification OTP, appareils, liens signés
+  - name: referentiel
+    description: Hanouts (base POS RED), produits, grossistes
+  - name: sync
+    description: Synchronisation de l'app ambulant hors ligne
+  - name: stock
+    description: Stock embarqué, mouvements (RG-S*), bons de sortie
+  - name: ventes
+    description: Bons de livraison, factures, avoirs, versements, karni (RG-C*, RG-F*)
+  - name: promos
+    description: Campagnes, dépôts, réservations, retraits (§7.2, RG-P*)
+  - name: depannage
+    description: Ruptures signalées par les hanouts et dispatch (§7.1, RG-D*)
+  - name: analytique
+    description: Données agrégées et anonymisées pour les grands clients (§5.4)
+
 paths:
+  # ---------------------------------------------------------------- comptes
   /v1/auth/otp:
     post:
       tags: [comptes]
       operationId: demanderOtp
-      summary: Envoie un code OTP par SMS au numéro donné
+      summary: Envoie un code OTP par SMS au numéro donné, ou au numéro d'un lien signé
       security: []
       requestBody:
         required: true
@@ -32,6 +77,8 @@ paths:
                 $ref: '#/components/schemas/OtpSent'
         '400':
           $ref: '#/components/responses/Problem'
+        '410':
+          $ref: '#/components/responses/LienExpire'
         '429':
           $ref: '#/components/responses/Problem'
 
@@ -58,9 +105,128 @@ paths:
           $ref: '#/components/responses/Problem'
         '401':
           $ref: '#/components/responses/Problem'
+        '410':
+          $ref: '#/components/responses/LienExpire'
         '429':
           $ref: '#/components/responses/Problem'
 
+  /v1/liens/{jeton}:
+    get:
+      tags: [comptes]
+      operationId: ouvrirLien
+      summary: Résout un lien hanout signé reçu par SMS (sans authentification)
+      description: |
+        Le lien est signé et à durée limitée. Il ne donne accès à aucune donnée :
+        il indique seulement la cible, que la PWA affiche après connexion OTP
+        (`POST /v1/auth/otp` avec `lienJeton`).
+      security: []
+      parameters:
+        - name: jeton
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 16
+      responses:
+        '200':
+          description: Lien valide
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LienCible'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          $ref: '#/components/responses/LienExpire'
+
+  /v1/appareils/{appareilId}/push:
+    put:
+      tags: [comptes]
+      operationId: enregistrerJetonPush
+      summary: Enregistre ou remplace le jeton push de l'appareil connecté
+      x-roles: [AMBULANT, HANOUT, GROSSISTE]
+      parameters:
+        - $ref: '#/components/parameters/AppareilId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JetonPush'
+      responses:
+        '204':
+          description: Jeton enregistré
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/moi/consentement:
+    get:
+      tags: [comptes]
+      operationId: lireConsentement
+      summary: Consentement CNDP de l'utilisateur connecté (loi 09-08)
+      x-roles: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT]
+      responses:
+        '200':
+          description: Dernier consentement enregistré
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Consentement'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [comptes]
+      operationId: enregistrerConsentement
+      summary: Enregistre ou retire le consentement (journalisé, horodaté, avec la version du texte)
+      description: |
+        Tant que le dernier consentement enregistré n'a pas `traitementDonnees = true`, toute
+        opération authentifiée répond 403 (Problem `type` …/consentement-requis, quelle que soit
+        la connexion), sauf `GET`/`PUT /v1/moi/consentement`, `GET /v1/moi/donnees` (droit d'accès)
+        et `POST /v1/sync/operations` : les pièces de vente déjà émises doivent pouvoir remonter
+        (obligation légale de conservation, RG-C4).
+        Retirer `geolocalisation` coupe la disponibilité de l'ambulant et efface sa dernière position.
+      x-roles: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentementSaisie'
+      responses:
+        '200':
+          description: Consentement enregistré
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Consentement'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/moi/donnees:
+    get:
+      tags: [comptes]
+      operationId: exporterMesDonnees
+      summary: Droit d'accès (loi 09-08) — export des données personnelles de l'utilisateur connecté
+      x-roles: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT]
+      responses:
+        '200':
+          description: Export JSON (profil, consentements, appareils, positions conservées)
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ---------------------------------------------------------------- referentiel
   /v1/hanouts:
     get:
       tags: [referentiel]
@@ -69,6 +235,11 @@ paths:
       description: |
         Recherche par nom ou téléphone (`q`) et/ou par proximité (`lat`, `lon`, `rayonM`).
         Avec une position, les résultats sont triés par distance croissante.
+        CNDP : `lat`/`lon` est uniquement le centre de la carte choisi par l'utilisateur, jamais
+        la position GPS de l'appareil ; il n'est ni stocké ni journalisé. Pour trier autour de
+        lui, l'app utilise les hanouts déjà synchronisés (entité HANOUT) et calcule la distance
+        sur l'appareil.
+      x-roles: [AMBULANT, ADMIN]
       parameters:
         - name: q
           in: query
@@ -76,41 +247,11 @@ paths:
           schema:
             type: string
             minLength: 2
-        - name: lat
-          in: query
-          schema:
-            type: number
-            format: double
-            minimum: -90
-            maximum: 90
-        - name: lon
-          in: query
-          schema:
-            type: number
-            format: double
-            minimum: -180
-            maximum: 180
-        - name: rayonM
-          in: query
-          description: Rayon en mètres, utilisé seulement avec lat et lon
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 50000
-            default: 2000
-        - name: page
-          in: query
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-        - name: taille
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 200
-            default: 50
+        - $ref: '#/components/parameters/Lat'
+        - $ref: '#/components/parameters/Lon'
+        - $ref: '#/components/parameters/RayonM'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
       responses:
         '200':
           description: Page de hanouts
@@ -121,7 +262,1373 @@ paths:
         '400':
           $ref: '#/components/responses/Problem'
         '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/produits:
+    get:
+      tags: [referentiel]
+      operationId: listerProduits
+      summary: Recherche dans le référentiel produits
+      x-roles: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT, ADMIN]
+      parameters:
+        - name: q
+          in: query
+          description: Libellé (toutes langues) ou marque
+          schema:
+            type: string
+            minLength: 2
+        - name: ean
+          in: query
+          schema:
+            $ref: '#/components/schemas/Ean'
+        - name: categorie
+          in: query
+          schema:
+            type: string
+        - name: habituels
+          in: query
+          description: Hanout seulement — restreint aux produits qu'il a déjà achetés à ses ambulants (signalement de rupture)
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
+      responses:
+        '200':
+          description: Page de produits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProduitPage'
+        '400':
           $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/grossistes:
+    get:
+      tags: [referentiel]
+      operationId: listerGrossistes
+      summary: Liste les grossistes, sur carte ou filtrés (choix des dépositaires, §5.2)
+      x-roles: [GRAND_CLIENT, ADMIN]
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+            minLength: 2
+        - name: ville
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Lat'
+        - $ref: '#/components/parameters/Lon'
+        - $ref: '#/components/parameters/RayonM'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
+      responses:
+        '200':
+          description: Page de grossistes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrossistePage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ---------------------------------------------------------------- sync
+  /v1/sync/operations:
+    post:
+      tags: [sync]
+      operationId: pousserOperations
+      summary: Envoie un lot d'opérations enregistrées hors ligne
+      description: |
+        Les opérations sont appliquées dans l'ordre du tableau. Chacune porte un UUID généré par
+        l'appareil : la rejouer renvoie `DEJA_APPLIQUEE` sans nouvel effet (idempotence).
+        Une opération qui reflète un fait terrain (vente, versement, chargement) n'est jamais refusée
+        pour une règle de gestion : elle est appliquée et signalée en anomalie (RG-S1, RG-C3, RG-F1…).
+        Seule une opération mal formée (dont une FACTURE sans `mentionsLegales`, RG-F2) ou qui
+        référence un objet inconnu est `REJETEE` ; elle est journalisée et
+        l'appareil doit l'afficher. Aucun écrasement silencieux : tout conflit est
+        résolu côté serveur, journalisé et décrit dans le résultat.
+      x-roles: [AMBULANT]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LotOperations'
+      responses:
+        '200':
+          description: Un résultat par opération, dans l'ordre reçu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultatLot'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/AppareilRevoque'
+        '413':
+          $ref: '#/components/responses/Problem'
+
+  /v1/sync/changements:
+    get:
+      tags: [sync]
+      operationId: tirerChangements
+      summary: Récupère les changements depuis un curseur (synchronisation différentielle)
+      description: |
+        Sans curseur, renvoie l'état initial complet de l'appareil. Appeler tant que
+        `plusDeChangements` est vrai, puis conserver le dernier `curseur`.
+        Les documents de vente ne sont jamais supprimés : un avoir arrive comme un nouveau document.
+      x-roles: [AMBULANT]
+      parameters:
+        - name: curseur
+          in: query
+          description: Curseur opaque renvoyé par l'appel précédent
+          schema:
+            type: string
+        - name: limite
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 500
+      responses:
+        '200':
+          description: Changements, du plus ancien au plus récent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LotChangements'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/AppareilRevoque'
+        '410':
+          description: Curseur trop ancien ; repartir d'une synchronisation complète (sans curseur)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
+  # ---------------------------------------------------------------- stock
+  /v1/stock:
+    get:
+      tags: [stock]
+      operationId: lireStockEmbarque
+      summary: Stock embarqué actuel de l'ambulant connecté, stock promo isolé par campagne (RG-S3)
+      x-roles: [AMBULANT]
+      responses:
+        '200':
+          description: Stock calculé à partir des mouvements reçus
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockEmbarque'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/stock/mouvements:
+    get:
+      tags: [stock]
+      operationId: listerMouvements
+      summary: Journal des mouvements du stock embarqué (RG-S2)
+      x-roles: [AMBULANT]
+      parameters:
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/TypeMouvement'
+        - name: produitId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Depuis'
+        - $ref: '#/components/parameters/Jusqua'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
+      responses:
+        '200':
+          description: Page de mouvements, du plus récent au plus ancien
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MouvementPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/bons-sortie:
+    post:
+      tags: [stock]
+      operationId: creerBonSortie
+      summary: Le grossiste émet un bon de sortie pour un ambulant
+      description: |
+        Le bon est adressé à un ambulant et lui est transmis automatiquement par synchronisation
+        (entité BON_SORTIE, §4.3). L'ambulant confirme la réception physique en scannant le QR
+        (`qrJeton`), même hors ligne : opération `CHARGEMENT`. Un bon ne se charge qu'une fois,
+        et seulement par son destinataire.
+      x-roles: [GROSSISTE]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BonSortieSaisie'
+      responses:
+        '200':
+          description: Bon déjà émis par une requête précédente au même id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BonSortie'
+        '201':
+          description: Bon émis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BonSortie'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+    get:
+      tags: [stock]
+      operationId: listerBonsSortie
+      summary: Bons de sortie émis par le grossiste connecté
+      x-roles: [GROSSISTE]
+      parameters:
+        - $ref: '#/components/parameters/Depuis'
+        - $ref: '#/components/parameters/Jusqua'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
+      responses:
+        '200':
+          description: Page de bons de sortie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BonSortiePage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/bons-sortie/{bonSortieId}:
+    get:
+      tags: [stock]
+      operationId: lireBonSortie
+      summary: Détail d'un bon de sortie
+      x-roles: [GROSSISTE]
+      parameters:
+        - name: bonSortieId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Bon de sortie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BonSortie'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- ventes
+  /v1/documents:
+    get:
+      tags: [ventes]
+      operationId: listerDocuments
+      summary: Bons de livraison, factures et avoirs
+      description: |
+        L'ambulant voit les documents qu'il a émis, le hanout ceux qui lui sont adressés.
+        Les documents sont créés par synchronisation (opérations `EMISSION_DOCUMENT` et `AVOIR`) ;
+        il n'existe ni modification ni suppression (RG-C4).
+      x-roles: [AMBULANT, HANOUT]
+      parameters:
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/TypeDocument'
+        - name: hanoutId
+          in: query
+          description: Ambulant seulement
+          schema:
+            type: string
+            format: uuid
+        - name: ambulantId
+          in: query
+          description: Hanout seulement
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Depuis'
+        - $ref: '#/components/parameters/Jusqua'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
+      responses:
+        '200':
+          description: Page de documents, du plus récent au plus ancien
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/documents/{documentId}:
+    get:
+      tags: [ventes]
+      operationId: lireDocument
+      summary: Détail d'un document de vente
+      x-roles: [AMBULANT, HANOUT]
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/documents/{documentId}/pdf:
+    get:
+      tags: [ventes]
+      operationId: telechargerDocumentPdf
+      summary: PDF du document, dans la langue demandée
+      x-roles: [AMBULANT, HANOUT]
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+        - name: langue
+          in: query
+          schema:
+            $ref: '#/components/schemas/Langue'
+      responses:
+        '200':
+          description: PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                contentMediaType: application/pdf
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/karni/synthese:
+    get:
+      tags: [ventes]
+      operationId: lireSyntheseCreances
+      summary: Vue globale des créances de l'ambulant (total, ancienneté, top débiteurs, §3.5)
+      x-roles: [AMBULANT]
+      parameters:
+        - name: top
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        '200':
+          description: Synthèse
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyntheseCreances'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/karni/comptes:
+    get:
+      tags: [ventes]
+      operationId: listerComptesCredit
+      summary: Comptes de crédit ambulant ↔ hanout
+      description: L'ambulant voit un compte par hanout, le hanout un compte par ambulant.
+      x-roles: [AMBULANT, HANOUT]
+      parameters:
+        - name: debiteurSeulement
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
+      responses:
+        '200':
+          description: Page de comptes, par solde décroissant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompteCreditPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/karni/comptes/{compteId}/releve:
+    get:
+      tags: [ventes]
+      operationId: lireReleveCompte
+      summary: Relevé chronologique d'un compte (achats à crédit, versements, avoirs, RG-C1)
+      x-roles: [AMBULANT, HANOUT]
+      parameters:
+        - name: compteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Depuis'
+        - $ref: '#/components/parameters/Jusqua'
+      responses:
+        '200':
+          description: Relevé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Releve'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------- promos
+  /v1/campagnes:
+    post:
+      tags: [promos]
+      operationId: creerCampagne
+      summary: Crée une campagne à l'état BROUILLON
+      x-roles: [GRAND_CLIENT]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampagneSaisie'
+      responses:
+        '201':
+          description: Campagne créée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campagne'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+    get:
+      tags: [promos]
+      operationId: listerCampagnes
+      summary: Campagnes du grand client connecté
+      x-roles: [GRAND_CLIENT]
+      parameters:
+        - name: statut
+          in: query
+          schema:
+            $ref: '#/components/schemas/StatutCampagne'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
+      responses:
+        '200':
+          description: Page de campagnes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampagnePage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/campagnes/{campagneId}:
+    get:
+      tags: [promos]
+      operationId: lireCampagne
+      summary: Détail d'une campagne
+      x-roles: [GRAND_CLIENT]
+      parameters:
+        - $ref: '#/components/parameters/CampagneId'
+      responses:
+        '200':
+          description: Campagne
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campagne'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [promos]
+      operationId: modifierCampagne
+      summary: Modifie une campagne, seulement à l'état BROUILLON
+      x-roles: [GRAND_CLIENT]
+      parameters:
+        - $ref: '#/components/parameters/CampagneId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampagneSaisie'
+      responses:
+        '200':
+          description: Campagne modifiée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campagne'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+    delete:
+      tags: [promos]
+      operationId: supprimerCampagne
+      summary: Supprime une campagne, seulement à l'état BROUILLON
+      x-roles: [GRAND_CLIENT]
+      parameters:
+        - $ref: '#/components/parameters/CampagneId'
+      responses:
+        '204':
+          description: Brouillon supprimé
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /v1/campagnes/{campagneId}/depots:
+    post:
+      tags: [promos]
+      operationId: proposerDepot
+      summary: Propose un dépôt à un grossiste (répartition des quantités, §5.2)
+      description: |
+        Passe la campagne de BROUILLON à PROPOSEE au premier appel. Possible tant que la campagne
+        n'est ni expirée ni clôturée. La somme des quantités proposées ne dépasse pas la quantité
+        totale de chaque ligne (422). Le grossiste reçoit une notification push + e-mail.
+      x-roles: [GRAND_CLIENT]
+      parameters:
+        - $ref: '#/components/parameters/CampagneId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropositionDepot'
+      responses:
+        '201':
+          description: Dépôt proposé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Depot'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+    get:
+      tags: [promos]
+      operationId: listerDepotsCampagne
+      summary: Suivi des acceptations et réceptions par grossiste
+      x-roles: [GRAND_CLIENT]
+      parameters:
+        - $ref: '#/components/parameters/CampagneId'
+      responses:
+        '200':
+          description: Dépôts de la campagne
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Depot'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/campagnes/{campagneId}/entonnoir:
+    get:
+      tags: [promos]
+      operationId: lireEntonnoir
+      summary: Entonnoir déposé → réservé → retiré → revendu au hanout
+      description: Quantités agrégées ; aucune donnée nominative sur les ambulants ni les hanouts (§5.4).
+      x-roles: [GRAND_CLIENT]
+      parameters:
+        - $ref: '#/components/parameters/CampagneId'
+      responses:
+        '200':
+          description: Entonnoir
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entonnoir'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/depots:
+    get:
+      tags: [promos]
+      operationId: listerDepots
+      summary: Dépôts proposés au grossiste connecté et son stock promo
+      x-roles: [GROSSISTE]
+      parameters:
+        - name: statut
+          in: query
+          schema:
+            $ref: '#/components/schemas/StatutDepot'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
+      responses:
+        '200':
+          description: Page de dépôts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepotPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/depots/{depotId}:
+    get:
+      tags: [promos]
+      operationId: lireDepot
+      summary: Détail d'un dépôt (déposé, réservé, retiré, restant)
+      x-roles: [GROSSISTE, GRAND_CLIENT]
+      parameters:
+        - $ref: '#/components/parameters/DepotId'
+      responses:
+        '200':
+          description: Dépôt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Depot'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/depots/{depotId}/reponse:
+    post:
+      tags: [promos]
+      operationId: repondreDepot
+      summary: Le grossiste accepte, refuse ou contre-propose une quantité
+      description: Seulement à l'état PROPOSE (sinon 409).
+      x-roles: [GROSSISTE]
+      parameters:
+        - $ref: '#/components/parameters/DepotId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReponseGrossiste'
+      responses:
+        '200':
+          description: Dépôt mis à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Depot'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /v1/depots/{depotId}/reponse-marque:
+    post:
+      tags: [promos]
+      operationId: repondreContreProposition
+      summary: La marque accepte ou refuse la contre-proposition du grossiste
+      description: Seulement à l'état CONTRE_PROPOSE (sinon 409).
+      x-roles: [GRAND_CLIENT]
+      parameters:
+        - $ref: '#/components/parameters/DepotId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReponseMarque'
+      responses:
+        '200':
+          description: Dépôt mis à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Depot'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  /v1/depots/{depotId}/reception:
+    post:
+      tags: [promos]
+      operationId: confirmerReception
+      summary: Le grossiste confirme la réception physique (quantités reçues, photo du bon de livraison)
+      description: |
+        Pivot du flux promo (§7.2, RG-P1) : le dépôt passe à RECU, la campagne à ACTIVE si c'est
+        le premier dépôt confirmé, et les ambulants ciblés sont notifiés (moins de 2 minutes, §10).
+        Seulement à l'état ACCEPTE (sinon 409).
+      x-roles: [GROSSISTE]
+      parameters:
+        - $ref: '#/components/parameters/DepotId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [reception, photoBonLivraison]
+              properties:
+                reception:
+                  $ref: '#/components/schemas/ReceptionDepot'
+                photoBonLivraison:
+                  type: string
+                  contentMediaType: image/jpeg
+            encoding:
+              reception:
+                contentType: application/json
+              photoBonLivraison:
+                contentType: image/jpeg, image/png, image/webp
+      responses:
+        '200':
+          description: Réception confirmée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Depot'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/Problem'
+
+  /v1/depots/{depotId}/cloture:
+    post:
+      tags: [promos]
+      operationId: cloturerDepot
+      summary: Le grossiste clôture son dépôt et déclare le sort du reliquat (retourné ou racheté)
+      description: |
+        Seulement quand la campagne est EPUISEE ou EXPIREE (sinon 409). La campagne passe
+        à CLOTUREE quand tous ses dépôts reçus sont clôturés.
+      x-roles: [GROSSISTE]
+      parameters:
+        - $ref: '#/components/parameters/DepotId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClotureDepot'
+      responses:
+        '200':
+          description: Dépôt clôturé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Depot'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /v1/promos:
+    get:
+      tags: [promos]
+      operationId: listerPromos
+      summary: Fil des promotions disponibles pour l'ambulant connecté (§3.6)
+      description: |
+        Une offre = un produit d'une campagne ACTIVE dans un dépôt RECU (RG-P1), ciblée sur les
+        zones et catégories de l'ambulant. Aussi livrée hors ligne par `GET /v1/sync/changements`
+        (entité PROMO), pour consultation ; la réservation exige le réseau.
+        CNDP : aucune position n'est envoyée ; l'app calcule la distance à partir de `grossiste.position`.
+      x-roles: [AMBULANT]
+      parameters:
+        - name: categorie
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
+      responses:
+        '200':
+          description: Page d'offres, triées par date de fin
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OffrePromoPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/reservations:
+    post:
+      tags: [promos]
+      operationId: reserverPromo
+      summary: Réserve une quantité d'une offre promo (en ligne uniquement)
+      description: |
+        Contrôle la quantité restante du dépôt (409) et le plafond par ambulant défini par la
+        marque (422, RG-P3). L'`id` vient de l'appareil : renvoyer la même requête rend la
+        réservation existante (200) sans en créer une seconde. Expire si elle n'est pas retirée
+        dans le délai de la campagne (24 h par défaut, RG-P2) ; la quantité revient au disponible.
+      x-roles: [AMBULANT]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationSaisie'
+      responses:
+        '200':
+          description: Réservation déjà créée par une requête précédente au même id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '201':
+          description: Réservation créée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+    get:
+      tags: [promos]
+      operationId: listerReservations
+      summary: Réservations de l'ambulant connecté, ou faites sur les dépôts du grossiste connecté
+      x-roles: [AMBULANT, GROSSISTE]
+      parameters:
+        - name: statut
+          in: query
+          schema:
+            $ref: '#/components/schemas/StatutReservation'
+        - name: depotId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
+      responses:
+        '200':
+          description: Page de réservations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/reservations/{reservationId}:
+    get:
+      tags: [promos]
+      operationId: lireReservation
+      summary: Détail d'une réservation (avec son QR code pour l'ambulant)
+      x-roles: [AMBULANT, GROSSISTE]
+      parameters:
+        - name: reservationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Réservation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/retraits/apercu:
+    post:
+      tags: [promos]
+      operationId: apercuRetrait
+      summary: Le grossiste scanne le QR code et voit la réservation avant de remettre la marchandise
+      x-roles: [GROSSISTE]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScanQr'
+      responses:
+        '200':
+          description: Réservation retirable chez ce grossiste
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  /v1/retraits:
+    post:
+      tags: [promos]
+      operationId: validerRetrait
+      summary: Valide le retrait par scan du QR code de réservation (RG-P4)
+      description: |
+        Le QR doit désigner une réservation RESERVEE sur un dépôt du grossiste connecté (422 sinon,
+        RG-P4) ; une réservation expirée ou déjà retirée répond 409. Le plafond par ambulant est
+        recontrôlé (422, RG-P3). Une quantité remise inférieure à la réservée rend la différence
+        au disponible. Le retrait crée un mouvement PROMO dans le stock embarqué de l'ambulant,
+        rattaché à la campagne (RG-S3), livré par synchronisation.
+      x-roles: [GROSSISTE]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetraitSaisie'
+      responses:
+        '201':
+          description: Retrait validé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  # ---------------------------------------------------------------- depannage
+  /v1/ambulant/disponibilite:
+    get:
+      tags: [depannage]
+      operationId: lireDisponibilite
+      summary: État du bouton « disponible » de l'ambulant connecté
+      x-roles: [AMBULANT]
+      responses:
+        '200':
+          description: Disponibilité
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Disponibilite'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [depannage]
+      operationId: changerDisponibilite
+      summary: Active ou coupe la disponibilité, et met à jour la position tant qu'elle est active
+      description: |
+        CNDP (loi 09-08) : la position n'est acceptée qu'avec `disponible = true` et un consentement
+        `geolocalisation` enregistré (`PUT /v1/moi/consentement`, sinon 422) ; passer à `false`
+        efface la dernière position connue côté serveur.
+        L'app renvoie la même requête pour mettre à jour la position pendant la tournée.
+      x-roles: [AMBULANT]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisponibiliteSaisie'
+      responses:
+        '200':
+          description: Disponibilité mise à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Disponibilite'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  /v1/demandes-depannage:
+    post:
+      tags: [depannage]
+      operationId: signalerRupture
+      summary: Le hanout signale une rupture (produit choisi dans ses achats habituels, ou photo)
+      description: |
+        Envoyée seulement aux ambulants disponibles, dans le rayon, ayant le produit en stock
+        déclaré (RG-D1). Sans acceptation dans le délai, le rayon s'élargit une fois, puis le
+        hanout est prévenu (RG-D3). L'`id` vient de l'appareil : renvoyer la même requête rend
+        la demande existante (200).
+      x-roles: [HANOUT]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuptureSaisie'
+          multipart/form-data:
+            schema:
+              type: object
+              required: [rupture, photo]
+              properties:
+                rupture:
+                  $ref: '#/components/schemas/RuptureSaisie'
+                photo:
+                  type: string
+                  contentMediaType: image/jpeg
+            encoding:
+              rupture:
+                contentType: application/json
+              photo:
+                contentType: image/jpeg, image/png, image/webp
+      responses:
+        '200':
+          description: Demande déjà créée par une requête précédente au même id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemandeDepannage'
+        '201':
+          description: Demande créée et dispatchée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemandeDepannage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/Problem'
+    get:
+      tags: [depannage]
+      operationId: listerDemandesDepannage
+      summary: Demandes du hanout connecté, ou demandes proposées à l'ambulant connecté et celles qu'il a prises
+      description: |
+        Pour l'ambulant, une demande prise par un autre ou qu'il a refusée disparaît de la liste (RG-D2).
+      x-roles: [HANOUT, AMBULANT]
+      parameters:
+        - name: statut
+          in: query
+          schema:
+            $ref: '#/components/schemas/StatutDemande'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
+      responses:
+        '200':
+          description: Page de demandes, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemandeDepannagePage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/demandes-depannage/{demandeId}:
+    get:
+      tags: [depannage]
+      operationId: lireDemandeDepannage
+      summary: Suivi d'une demande (acceptée par tel ambulant, en route, livrée)
+      x-roles: [HANOUT, AMBULANT]
+      parameters:
+        - $ref: '#/components/parameters/DemandeId'
+      responses:
+        '200':
+          description: Demande
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemandeDepannage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/demandes-depannage/{demandeId}/acceptation:
+    post:
+      tags: [depannage]
+      operationId: accepterDemandeDepannage
+      summary: L'ambulant accepte la demande ; le premier qui accepte la prend (RG-D2)
+      description: |
+        Les suivants reçoivent 409 et la demande disparaît de leur liste. Rejouer l'acceptation
+        par le même ambulant renvoie 200.
+      x-roles: [AMBULANT]
+      parameters:
+        - $ref: '#/components/parameters/DemandeId'
+      responses:
+        '200':
+          description: Demande attribuée à l'ambulant connecté
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemandeDepannage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /v1/demandes-depannage/{demandeId}/refus:
+    post:
+      tags: [depannage]
+      operationId: refuserDemandeDepannage
+      summary: L'ambulant refuse la demande ; elle disparaît de sa liste
+      x-roles: [AMBULANT]
+      parameters:
+        - $ref: '#/components/parameters/DemandeId'
+      responses:
+        '204':
+          description: Refus enregistré
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /v1/demandes-depannage/{demandeId}/en-route:
+    post:
+      tags: [depannage]
+      operationId: signalerEnRoute
+      summary: L'ambulant qui a pris la demande signale qu'il est en route
+      description: |
+        La livraison, elle, est enregistrée hors ligne par l'opération `EMISSION_DOCUMENT` portant
+        `demandeDepannageId` (RG-D4) ; la demande passe alors à LIVREE.
+      x-roles: [AMBULANT]
+      parameters:
+        - $ref: '#/components/parameters/DemandeId'
+      responses:
+        '200':
+          description: Demande en route
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemandeDepannage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  # ---------------------------------------------------------------- analytique
+  /v1/analytique/ruptures:
+    get:
+      tags: [analytique]
+      operationId: lireCarteRuptures
+      summary: Carte des ruptures agrégée et anonymisée, sur les produits du grand client connecté (§5.3, §5.4)
+      description: |
+        Agrégation par cellule geohash. Aucune donnée nominative ni identifiant de hanout ou
+        d'ambulant : une cellule qui compte moins de `seuilAnonymat` hanouts distincts n'est
+        pas renvoyée. Un `produitId` hors des produits du grand client répond 404.
+      x-roles: [GRAND_CLIENT]
+      parameters:
+        - name: produitId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: ville
+          in: query
+          schema:
+            type: string
+        - name: precision
+          in: query
+          description: Précision geohash (5 ≈ 4,9 km, 6 ≈ 1,2 km)
+          schema:
+            type: integer
+            enum: [5, 6]
+            default: 6
+        - $ref: '#/components/parameters/Depuis'
+        - $ref: '#/components/parameters/Jusqua'
+      responses:
+        '200':
+          description: Cellules agrégées
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CarteRuptures'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
 components:
   securitySchemes:
@@ -130,6 +1637,97 @@ components:
       scheme: bearer
       bearerFormat: JWT
 
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    Taille:
+      name: taille
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Lat:
+      name: lat
+      in: query
+      schema:
+        type: number
+        format: double
+        minimum: -90
+        maximum: 90
+    Lon:
+      name: lon
+      in: query
+      schema:
+        type: number
+        format: double
+        minimum: -180
+        maximum: 180
+    RayonM:
+      name: rayonM
+      in: query
+      description: Rayon en mètres, utilisé seulement avec lat et lon
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50000
+        default: 2000
+    Depuis:
+      name: depuis
+      in: query
+      description: Borne inférieure incluse
+      schema:
+        type: string
+        format: date-time
+    Jusqua:
+      name: jusqua
+      in: query
+      description: Borne supérieure exclue
+      schema:
+        type: string
+        format: date-time
+    AppareilId:
+      name: appareilId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DocumentId:
+      name: documentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CampagneId:
+      name: campagneId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DepotId:
+      name: depotId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DemandeId:
+      name: demandeId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
   responses:
     Problem:
       description: Erreur (RFC 9457)
@@ -137,8 +1735,51 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: Jeton absent, invalide ou expiré
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: Rôle non autorisé pour cette opération, ou consentement CNDP manquant (`type` …/consentement-requis)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    AppareilRevoque:
+      description: Rôle non autorisé, ou appareil déconnecté à distance (§10, appareil perdu)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Ressource inexistante ou hors de l'organisation de l'appelant (cloisonnement multi-tenant)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: État incompatible avec l'action (transition interdite, quantité plus disponible, demande déjà prise par un autre ambulant…)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unprocessable:
+      description: Règle de gestion violée ; `regle` la nomme (ex. RG-P3)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    LienExpire:
+      description: Lien signé expiré
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
 
   schemas:
+    # ------------------------------------------------------------ communs
     Telephone:
       type: string
       description: Numéro marocain au format E.164
@@ -150,12 +1791,125 @@ components:
       enum: [fr, ar, ary-Arab, ary-Latn]
       description: fr, arabe (RTL), darija en caractères arabes ou latins
 
+    LibelleI18n:
+      type: object
+      description: Libellé dans chaque langue de l'interface ; `fr` toujours présent, les autres retombent sur `fr`
+      required: [fr]
+      properties:
+        fr:
+          type: string
+        ar:
+          type: string
+        ary-Arab:
+          type: string
+        ary-Latn:
+          type: string
+
+    Montant:
+      type: integer
+      format: int64
+      description: Montant en centimes de dirham (MAD)
+      examples: [12550]
+
+    Ean:
+      type: string
+      pattern: '^[0-9]{8}$|^[0-9]{13}$'
+
+    Position:
+      type: object
+      required: [lat, lon]
+      properties:
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+
+    ZoneGeo:
+      type: object
+      description: Polygone GeoJSON (RFC 7946), coordonnées [lon, lat]
+      required: [type, coordinates]
+      properties:
+        type:
+          const: Polygon
+        coordinates:
+          type: array
+          items:
+            type: array
+            minItems: 4
+            items:
+              type: array
+              minItems: 2
+              maxItems: 2
+              items:
+                type: number
+
+    PageMeta:
+      type: object
+      required: [page, taille, total]
+      properties:
+        page:
+          type: integer
+        taille:
+          type: integer
+        total:
+          type: integer
+          format: int64
+
+    Reference:
+      type: object
+      description: Référence courte vers un acteur, pour l'affichage
+      required: [id, nom]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nom:
+          type: string
+
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        regle:
+          type: string
+          description: Règle de gestion du cahier des charges en cause
+          examples: [RG-P3]
+        erreurs:
+          type: array
+          description: Erreurs de validation champ par champ
+          items:
+            type: object
+            required: [champ, message]
+            properties:
+              champ:
+                type: string
+              message:
+                type: string
+
+    # ------------------------------------------------------------ comptes
     OtpRequest:
       type: object
-      required: [telephone]
+      description: Un numéro, ou le jeton d'un lien hanout signé (le code part alors au numéro du lien)
+      anyOf:
+        - required: [telephone]
+        - required: [lienJeton]
       properties:
         telephone:
           $ref: '#/components/schemas/Telephone'
+        lienJeton:
+          type: string
         langue:
           $ref: '#/components/schemas/Langue'
 
@@ -170,17 +1924,22 @@ components:
 
     OtpVerify:
       type: object
-      required: [telephone, code, appareilId]
+      required: [code, appareilId]
+      anyOf:
+        - required: [telephone]
+        - required: [lienJeton]
       properties:
         telephone:
           $ref: '#/components/schemas/Telephone'
+        lienJeton:
+          type: string
         code:
           type: string
           pattern: '^[0-9]{6}$'
         appareilId:
           type: string
           format: uuid
-          description: UUID généré par l'appareil ; sert aussi de préfixe de numérotation hors ligne (RG-F1)
+          description: UUID généré par l'appareil ; identifie l'appareil dans les mouvements (RG-S2) et la synchronisation
 
     Session:
       type: object
@@ -195,6 +1954,16 @@ components:
           description: Durée de validité de l'accessToken, en secondes
         utilisateur:
           $ref: '#/components/schemas/Utilisateur'
+        prefixeNumerotation:
+          $ref: '#/components/schemas/PrefixeNumerotation'
+
+    PrefixeNumerotation:
+      type: string
+      description: |
+        Préfixe court attribué par le serveur à l'appareil d'un ambulant (RG-F1). Présent
+        seulement pour le rôle AMBULANT ; stable pour un même appareilId.
+      pattern: '^[A-Z0-9]{3,6}$'
+      examples: [K7Q2]
 
     Utilisateur:
       type: object
@@ -215,10 +1984,69 @@ components:
         organisationId:
           type: string
           format: uuid
+        hanoutId:
+          type: string
+          format: uuid
+          description: Présent pour le rôle HANOUT
         nouveau:
           type: boolean
           description: Vrai à la première connexion (profil à compléter, consentement CNDP à recueillir)
 
+    LienCible:
+      type: object
+      required: [cible, cibleId, telephoneMasque, expireLe]
+      properties:
+        cible:
+          type: string
+          enum: [DOCUMENT, RELEVE, DEMANDE_DEPANNAGE]
+        cibleId:
+          type: string
+          format: uuid
+        telephoneMasque:
+          type: string
+          examples: ['+2126•••••678']
+        expireLe:
+          type: string
+          format: date-time
+
+    ConsentementSaisie:
+      type: object
+      required: [versionTexte, traitementDonnees]
+      properties:
+        versionTexte:
+          type: string
+          description: Version du texte d'information CNDP affiché, dans la langue de l'utilisateur
+        traitementDonnees:
+          type: boolean
+        geolocalisation:
+          type: boolean
+          description: Ambulant seulement — position collectée uniquement quand il est disponible
+        langue:
+          $ref: '#/components/schemas/Langue'
+
+    Consentement:
+      allOf:
+        - $ref: '#/components/schemas/ConsentementSaisie'
+        - type: object
+          required: [enregistreLe]
+          properties:
+            enregistreLe:
+              type: string
+              format: date-time
+
+    JetonPush:
+      type: object
+      required: [jeton, plateforme]
+      properties:
+        jeton:
+          type: string
+        plateforme:
+          type: string
+          enum: [ANDROID, IOS]
+        langue:
+          $ref: '#/components/schemas/Langue'
+
+    # ------------------------------------------------------------ referentiel
     Hanout:
       type: object
       required: [id, nom, position]
@@ -251,44 +2079,2024 @@ components:
           type: integer
           description: Présente seulement si lat et lon sont fournis
 
-    Position:
-      type: object
-      required: [lat, lon]
-      properties:
-        lat:
-          type: number
-          format: double
-        lon:
-          type: number
-          format: double
-
     HanoutPage:
-      type: object
-      required: [contenu, page, taille, total]
-      properties:
-        contenu:
-          type: array
-          items:
-            $ref: '#/components/schemas/Hanout'
-        page:
-          type: integer
-        taille:
-          type: integer
-        total:
-          type: integer
-          format: int64
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/Hanout'
 
-    Problem:
+    Categorie:
       type: object
+      required: [code, libelle]
       properties:
-        type:
+        code:
+          type: string
+        libelle:
+          $ref: '#/components/schemas/LibelleI18n'
+
+    Produit:
+      type: object
+      required: [id, ean, libelle, marque, categorie, conditionnement, unitesParConditionnement]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ean:
+          $ref: '#/components/schemas/Ean'
+        libelle:
+          $ref: '#/components/schemas/LibelleI18n'
+        marque:
+          type: string
+        categorie:
+          $ref: '#/components/schemas/Categorie'
+        conditionnement:
+          type: string
+          enum: [UNITE, PACK, CARTON]
+        unitesParConditionnement:
+          type: integer
+          minimum: 1
+        photoUrl:
           type: string
           format: uri
-        title:
+          description: Image compressée (faible consommation de données)
+
+    ProduitPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/Produit'
+
+    Grossiste:
+      type: object
+      required: [id, nom, position]
+      properties:
+        id:
           type: string
-        status:
+          format: uuid
+        nom:
+          type: string
+        position:
+          $ref: '#/components/schemas/Position'
+        adresse:
+          type: string
+        ville:
+          type: string
+        distanceM:
           type: integer
+          description: Présente seulement si une position est fournie
+
+    GrossistePage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/Grossiste'
+
+    # ------------------------------------------------------------ sync : opérations
+    LotOperations:
+      type: object
+      required: [appareilId, operations]
+      properties:
+        appareilId:
+          type: string
+          format: uuid
+          description: Doit être l'appareil de la session (403 sinon)
+        operations:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/Operation'
+
+    OperationBase:
+      type: object
+      required: [id, type, creeLe]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Généré par l'appareil ; clé d'idempotence
+        type:
+          type: string
+        creeLe:
+          type: string
+          format: date-time
+          description: Horodatage de l'appareil au moment du geste (RG-S2) ; le serveur garde aussi son heure de réception
+
+    Operation:
+      oneOf:
+        - $ref: '#/components/schemas/OperationChargement'
+        - $ref: '#/components/schemas/OperationRetour'
+        - $ref: '#/components/schemas/OperationInventaire'
+        - $ref: '#/components/schemas/OperationEmissionDocument'
+        - $ref: '#/components/schemas/OperationAvoir'
+        - $ref: '#/components/schemas/OperationVersement'
+        - $ref: '#/components/schemas/OperationTarif'
+        - $ref: '#/components/schemas/OperationHanout'
+        - $ref: '#/components/schemas/OperationCreditHanout'
+        - $ref: '#/components/schemas/OperationParametresAmbulant'
+      discriminator:
+        propertyName: type
+        mapping:
+          CHARGEMENT: '#/components/schemas/OperationChargement'
+          RETOUR: '#/components/schemas/OperationRetour'
+          INVENTAIRE: '#/components/schemas/OperationInventaire'
+          EMISSION_DOCUMENT: '#/components/schemas/OperationEmissionDocument'
+          AVOIR: '#/components/schemas/OperationAvoir'
+          VERSEMENT: '#/components/schemas/OperationVersement'
+          TARIF: '#/components/schemas/OperationTarif'
+          HANOUT: '#/components/schemas/OperationHanout'
+          CREDIT_HANOUT: '#/components/schemas/OperationCreditHanout'
+          PARAMETRES_AMBULANT: '#/components/schemas/OperationParametresAmbulant'
+
+    OperationChargement:
+      allOf:
+        - $ref: '#/components/schemas/OperationBase'
+        - type: object
+          required: [type, donnees]
+          properties:
+            type:
+              const: CHARGEMENT
+            donnees:
+              $ref: '#/components/schemas/Chargement'
+
+    OperationRetour:
+      allOf:
+        - $ref: '#/components/schemas/OperationBase'
+        - type: object
+          required: [type, donnees]
+          properties:
+            type:
+              const: RETOUR
+            donnees:
+              $ref: '#/components/schemas/Retour'
+
+    OperationInventaire:
+      allOf:
+        - $ref: '#/components/schemas/OperationBase'
+        - type: object
+          required: [type, donnees]
+          properties:
+            type:
+              const: INVENTAIRE
+            donnees:
+              $ref: '#/components/schemas/Inventaire'
+
+    OperationEmissionDocument:
+      allOf:
+        - $ref: '#/components/schemas/OperationBase'
+        - type: object
+          required: [type, donnees]
+          properties:
+            type:
+              const: EMISSION_DOCUMENT
+            donnees:
+              $ref: '#/components/schemas/EmissionDocument'
+
+    OperationAvoir:
+      allOf:
+        - $ref: '#/components/schemas/OperationBase'
+        - type: object
+          required: [type, donnees]
+          properties:
+            type:
+              const: AVOIR
+            donnees:
+              $ref: '#/components/schemas/AvoirSaisie'
+
+    OperationVersement:
+      allOf:
+        - $ref: '#/components/schemas/OperationBase'
+        - type: object
+          required: [type, donnees]
+          properties:
+            type:
+              const: VERSEMENT
+            donnees:
+              $ref: '#/components/schemas/VersementSaisie'
+
+    OperationTarif:
+      allOf:
+        - $ref: '#/components/schemas/OperationBase'
+        - type: object
+          required: [type, donnees]
+          properties:
+            type:
+              const: TARIF
+            donnees:
+              $ref: '#/components/schemas/Tarif'
+
+    OperationHanout:
+      allOf:
+        - $ref: '#/components/schemas/OperationBase'
+        - type: object
+          required: [type, donnees]
+          properties:
+            type:
+              const: HANOUT
+            donnees:
+              $ref: '#/components/schemas/NouveauHanout'
+
+    NouveauHanout:
+      type: object
+      description: |
+        Hanout absent de la base POS, créé sur le terrain (UUID de l'appareil) pour qu'une vente
+        hors ligne ne soit jamais perdue. Envoyé avant les opérations qui le référencent ;
+        rapproché ensuite de la base POS par l'administrateur.
+      required: [hanoutId, nom]
+      properties:
+        hanoutId:
+          type: string
+          format: uuid
+        nom:
+          type: string
+        gerant:
+          type: string
+        telephone:
+          $ref: '#/components/schemas/Telephone'
+        position:
+          $ref: '#/components/schemas/Position'
+        adresse:
+          type: string
+        ville:
+          type: string
+        ice:
+          type: string
+          pattern: '^[0-9]{15}$'
+
+    OperationCreditHanout:
+      allOf:
+        - $ref: '#/components/schemas/OperationBase'
+        - type: object
+          required: [type, donnees]
+          properties:
+            type:
+              const: CREDIT_HANOUT
+            donnees:
+              $ref: '#/components/schemas/CreditHanoutSaisie'
+
+    OperationParametresAmbulant:
+      allOf:
+        - $ref: '#/components/schemas/OperationBase'
+        - type: object
+          required: [type, donnees]
+          properties:
+            type:
+              const: PARAMETRES_AMBULANT
+            donnees:
+              $ref: '#/components/schemas/ParametresAmbulantSaisie'
+
+    LigneQuantite:
+      type: object
+      required: [produitId, quantite]
+      properties:
+        produitId:
+          type: string
+          format: uuid
+        quantite:
+          type: integer
+          minimum: 1
+
+    Chargement:
+      type: object
+      description: |
+        Chargement du stock embarqué : scan du QR d'un bon de sortie (`qrJeton`, les lignes sont
+        lues dans le QR) ou saisie manuelle (`lignes`). Un bon déjà chargé est signalé en anomalie
+        CHARGEMENT_EN_DOUBLE et n'ajoute rien ; un bon adressé à un autre ambulant est REJETE.
+      oneOf:
+        - required: [qrJeton]
+        - required: [lignes]
+      properties:
+        qrJeton:
+          type: string
+          description: Contenu du QR du bon de sortie, transmis tel quel (vérifié par le serveur)
+        grossisteId:
+          type: string
+          format: uuid
+          description: Saisie manuelle seulement, facultatif
+        lignes:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/LigneQuantite'
+
+    Retour:
+      type: object
+      description: |
+        RETOUR d'un hanout vers l'ambulant (entrée en stock) ou de l'ambulant vers le grossiste
+        (sortie). Le remboursement ou la baisse du solde passe par un avoir distinct.
+      required: [sens, motif, lignes]
+      properties:
+        sens:
+          type: string
+          enum: [HANOUT_VERS_AMBULANT, AMBULANT_VERS_GROSSISTE]
+        hanoutId:
+          type: string
+          format: uuid
+          description: Requis pour HANOUT_VERS_AMBULANT
+        grossisteId:
+          type: string
+          format: uuid
+          description: Requis pour AMBULANT_VERS_GROSSISTE
+        motif:
+          type: string
+          enum: [ABIME, PERIME, INVENDU, AUTRE]
+        remisEnVente:
+          type: boolean
+          default: false
+          description: HANOUT_VERS_AMBULANT seulement — faux si le produit abîmé ou périmé ne rentre pas dans le stock vendable
+        lignes:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/LigneQuantite'
+
+    Inventaire:
+      type: object
+      description: |
+        Inventaire de fin de journée. Le serveur compare au stock théorique, crée les mouvements
+        d'AJUSTEMENT et signale ECART_SANS_MOTIF quand un écart dépasse le seuil paramétré sans
+        motif (RG-S4).
+      required: [lignes]
+      properties:
+        lignes:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [produitId, quantiteComptee]
+            properties:
+              produitId:
+                type: string
+                format: uuid
+              quantiteComptee:
+                type: integer
+                minimum: 0
+              motifEcart:
+                type: string
+                maxLength: 500
+
+    EmissionDocument:
+      type: object
+      description: |
+        Vente : bon de livraison par défaut. L'app ne propose FACTURE que si
+        `ParametresAmbulant.mentionsLegales` est présent (RG-F2) et copie ces mentions, telles
+        qu'elle les connaît au moment de l'émission, dans `mentionsLegales` : une facture émise
+        hors ligne reste valable même si le profil change avant la synchronisation (RG-F1, RG-C4).
+        Un document rejeté (référence inconnue) laisse un trou qui remonte en NUMEROTATION_TROU.
+        Une FACTURE sans `mentionsLegales` ne peut venir que d'une app non conforme : REJETEE.
+        Le reste à payer (total − règlements) passe au crédit du hanout. Avec `demandeDepannageId`,
+        la vente est liée à la demande, qui passe à LIVREE (RG-D4).
+      required: [documentId, type, numero, sequence, hanoutId, lignes]
+      if:
+        properties:
+          type:
+            const: FACTURE
+      then:
+        required: [mentionsLegales]
+        properties:
+          mentionsLegales:
+            $ref: '#/components/schemas/MentionsLegales'
+      properties:
+        mentionsLegales:
+          $ref: '#/components/schemas/MentionsLegales'
+        documentId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [BON_LIVRAISON, FACTURE]
+        numero:
+          $ref: '#/components/schemas/NumeroDocument'
+        sequence:
+          $ref: '#/components/schemas/SequenceDocument'
+        hanoutId:
+          type: string
+          format: uuid
+        lignes:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/LigneDocumentSaisie'
+        reglements:
+          type: array
+          description: Paiements reçus à la livraison ; vide ou absent = tout à crédit
+          items:
+            $ref: '#/components/schemas/Reglement'
+        demandeDepannageId:
+          type: string
+          format: uuid
+        confirmationHanout:
+          $ref: '#/components/schemas/ConfirmationHanout'
+        avertissementCreditAccepte:
+          type: boolean
+          description: Vrai si l'ambulant a passé outre l'avertissement de plafond ou de délai (RG-C3)
+
+    NumeroDocument:
+      type: string
+      description: |
+        `{prefixe appareil}-{BL|FA|AV}-{séquence sur 6 chiffres}`. Numérotation continue et sans
+        trou par émetteur, appareil et type (RG-F1) ; un trou ou un doublon est signalé en anomalie.
+      pattern: '^[A-Z0-9]{3,6}-(BL|FA|AV)-[0-9]{6,}$'
+      examples: [K7Q2-BL-000123]
+
+    SequenceDocument:
+      type: integer
+      format: int64
+      minimum: 1
+      description: Rang du document dans la série de l'appareil (même valeur que la fin du numéro)
+
+    LigneDocumentSaisie:
+      type: object
+      description: |
+        ARTICLE : produit vendu ; `campagneId` et `reservationId` quand il vient du stock promo
+        (traçabilité RG-S3). REMISE_PONCTUELLE et REMISE_PROMO : lignes séparées de montant
+        négatif (RG-F3), REMISE_PROMO avec la référence de la campagne.
+      required: [nature, produitId]
+      allOf:
+        - if:
+            properties:
+              nature:
+                const: ARTICLE
+          then:
+            required: [quantite, prixUnitaire]
+            properties:
+              quantite:
+                minimum: 1
+              prixUnitaire:
+                minimum: 0
+          else:
+            required: [montant]
+            properties:
+              montant:
+                exclusiveMaximum: 0
+        - if:
+            properties:
+              nature:
+                const: REMISE_PROMO
+          then:
+            required: [campagneId]
+            properties:
+              campagneId:
+                format: uuid
+      properties:
+        nature:
+          type: string
+          enum: [ARTICLE, REMISE_PONCTUELLE, REMISE_PROMO]
+        produitId:
+          type: string
+          format: uuid
+        quantite:
+          type: integer
+          minimum: 1
+          description: ARTICLE seulement
+        prixUnitaire:
+          $ref: '#/components/schemas/Montant'
+        tarif:
+          type: string
+          enum: [STANDARD, NEGOCIE]
+          description: ARTICLE seulement
+        montant:
+          $ref: '#/components/schemas/Montant'
+        campagneId:
+          type: string
+          format: uuid
+        reservationId:
+          type: string
+          format: uuid
+
+    Reglement:
+      type: object
+      required: [mode, montant]
+      properties:
+        mode:
+          type: string
+          enum: [ESPECES, CHEQUE]
+        montant:
+          $ref: '#/components/schemas/Montant'
+        chequeNumero:
+          type: string
+        chequeBanque:
+          type: string
+
+    ConfirmationHanout:
+      type: object
+      required: [mode, le]
+      properties:
+        mode:
+          type: string
+          enum: [SIGNATURE, CONFIRMATION_ECRAN]
+        signaturePng:
+          type: string
+          contentEncoding: base64
+          contentMediaType: image/png
+        le:
+          type: string
+          format: date-time
+
+    AvoirSaisie:
+      type: object
+      description: |
+        Seul moyen d'annuler tout ou partie d'un document (RG-C4). Sans `lignes`, annule le
+        document entier. Numéroté dans la série AV de l'appareil (RG-F1).
+      required: [documentId, documentOrigineId, numero, sequence, motif]
+      properties:
+        documentId:
+          type: string
+          format: uuid
+        documentOrigineId:
+          type: string
+          format: uuid
+        numero:
+          $ref: '#/components/schemas/NumeroDocument'
+        sequence:
+          $ref: '#/components/schemas/SequenceDocument'
+        motif:
+          type: string
+          enum: [ERREUR_SAISIE, RETOUR_PRODUIT, GESTE_COMMERCIAL, AUTRE]
+        commentaire:
+          type: string
+          maxLength: 500
+        lignes:
+          type: array
+          items:
+            $ref: '#/components/schemas/LigneDocumentSaisie'
+
+    VersementSaisie:
+      type: object
+      description: |
+        Versement d'un hanout. Sans `imputations`, le serveur l'impute sur les documents à crédit
+        les plus anciens (FIFO, RG-C2) ; avec, il respecte la répartition choisie.
+      required: [versementId, hanoutId, mode, montant]
+      properties:
+        versementId:
+          type: string
+          format: uuid
+        hanoutId:
+          type: string
+          format: uuid
+        mode:
+          type: string
+          enum: [ESPECES, CHEQUE]
+        montant:
+          $ref: '#/components/schemas/Montant'
+        chequeNumero:
+          type: string
+        chequeBanque:
+          type: string
+        imputations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Imputation'
+
+    Imputation:
+      type: object
+      required: [documentId, montant]
+      properties:
+        documentId:
+          type: string
+          format: uuid
+        montant:
+          $ref: '#/components/schemas/Montant'
+
+    Tarif:
+      type: object
+      description: Tarif standard de l'ambulant (sans hanoutId) ou tarif négocié avec un hanout
+      required: [produitId, prixUnitaire]
+      properties:
+        produitId:
+          type: string
+          format: uuid
+        hanoutId:
+          type: string
+          format: uuid
+        prixUnitaire:
+          $ref: '#/components/schemas/Montant'
+
+    CreditHanoutSaisie:
+      type: object
+      description: Plafond et délai maximal de crédit pour un hanout (§3.5)
+      required: [hanoutId]
+      properties:
+        hanoutId:
+          type: string
+          format: uuid
+        plafond:
+          $ref: '#/components/schemas/Montant'
+        delaiMaxJours:
+          type: integer
+          minimum: 1
+
+    ParametresAmbulantSaisie:
+      type: object
+      properties:
+        politiqueDepassementCredit:
+          $ref: '#/components/schemas/PolitiqueDepassementCredit'
+        plafondRemisePonctuellePourcent:
+          type: number
+          minimum: 0
+          maximum: 100
+
+    PolitiqueDepassementCredit:
+      type: string
+      enum: [BLOQUER, AVERTIR]
+      description: Comportement à la vente quand le plafond ou le délai d'un hanout est dépassé (RG-C3)
+
+    # ------------------------------------------------------------ sync : résultats
+    ResultatLot:
+      type: object
+      required: [resultats]
+      properties:
+        resultats:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResultatOperation'
+
+    ResultatOperation:
+      type: object
+      required: [operationId, statut]
+      properties:
+        operationId:
+          type: string
+          format: uuid
+        statut:
+          type: string
+          enum: [APPLIQUEE, DEJA_APPLIQUEE, EN_CONFLIT, REJETEE]
+          description: |
+            APPLIQUEE (éventuellement avec anomalies) ; DEJA_APPLIQUEE : rejeu, aucun nouvel effet ;
+            EN_CONFLIT : résolue côté serveur, voir `conflit` ; REJETEE : mal formée (dont FACTURE
+            sans mentions légales, RG-F2) ou référence inconnue, rien n'est appliqué, voir `erreur`.
+        anomalies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Anomalie'
+        conflit:
+          $ref: '#/components/schemas/Conflit'
+        erreur:
+          $ref: '#/components/schemas/Problem'
+
+    Conflit:
+      type: object
+      description: Conflit entre l'opération et l'état serveur (ex. plafond modifié depuis un autre appareil), résolu et journalisé
+      required: [code, resolution]
+      properties:
+        code:
+          type: string
+          enum: [MODIFIE_AILLEURS, ETAT_CHANGE]
+        resolution:
+          type: string
+          enum: [OPERATION_APPLIQUEE, VERSION_SERVEUR_CONSERVEE]
         detail:
           type: string
-        instance:
+        versionServeur:
+          type: object
+          description: Valeur conservée côté serveur quand l'opération n'a pas été retenue
+
+    Anomalie:
+      type: object
+      required: [id, type, regle, statut, detecteeLe]
+      properties:
+        id:
           type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+            - STOCK_NEGATIF
+            - ECART_SANS_MOTIF
+            - NUMEROTATION_TROU
+            - NUMERO_EN_DOUBLE
+            - PLAFOND_CREDIT_DEPASSE
+            - DELAI_CREDIT_DEPASSE
+            - CHARGEMENT_EN_DOUBLE
+            - PROMO_SANS_RETRAIT
+            - DEMANDE_NON_ATTRIBUEE
+            - REMISE_PLAFOND_DEPASSE
+          description: |
+            STOCK_NEGATIF (RG-S1), ECART_SANS_MOTIF (RG-S4), NUMEROTATION_TROU et NUMERO_EN_DOUBLE
+            (RG-F1), PLAFOND_CREDIT_DEPASSE et DELAI_CREDIT_DEPASSE (RG-C3),
+            CHARGEMENT_EN_DOUBLE (bon de sortie déjà chargé),
+            PROMO_SANS_RETRAIT (RG-S3, vente promo au-delà de la quantité retirée),
+            DEMANDE_NON_ATTRIBUEE (RG-D4, livraison d'une demande prise par un autre),
+            REMISE_PLAFOND_DEPASSE (§3.4, remise ponctuelle au-delà du plafond de l'ambulant).
+        regle:
+          type: string
+          examples: [RG-S1]
+        operationId:
+          type: string
+          format: uuid
+        produitId:
+          type: string
+          format: uuid
+        detail:
+          type: string
+        statut:
+          type: string
+          enum: [OUVERTE, RESOLUE]
+        detecteeLe:
+          type: string
+          format: date-time
+
+    # ------------------------------------------------------------ sync : changements
+    LotChangements:
+      type: object
+      required: [curseur, plusDeChangements, changements]
+      properties:
+        curseur:
+          type: string
+        plusDeChangements:
+          type: boolean
+        changements:
+          type: array
+          items:
+            $ref: '#/components/schemas/Changement'
+
+    ChangementBase:
+      type: object
+      required: [entite, id, action]
+      properties:
+        entite:
+          type: string
+        id:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [UPSERT, SUPPRESSION]
+          description: SUPPRESSION retire l'objet de l'appareil (promo terminée, hanout sorti du périmètre…) ; jamais utilisée pour un document de vente
+
+    Changement:
+      oneOf:
+        - $ref: '#/components/schemas/ChangementProduit'
+        - $ref: '#/components/schemas/ChangementHanout'
+        - $ref: '#/components/schemas/ChangementStock'
+        - $ref: '#/components/schemas/ChangementMouvement'
+        - $ref: '#/components/schemas/ChangementDocument'
+        - $ref: '#/components/schemas/ChangementVersement'
+        - $ref: '#/components/schemas/ChangementCompteCredit'
+        - $ref: '#/components/schemas/ChangementTarif'
+        - $ref: '#/components/schemas/ChangementPromo'
+        - $ref: '#/components/schemas/ChangementReservation'
+        - $ref: '#/components/schemas/ChangementAnomalie'
+        - $ref: '#/components/schemas/ChangementParametres'
+        - $ref: '#/components/schemas/ChangementBonSortie'
+      discriminator:
+        propertyName: entite
+        mapping:
+          PRODUIT: '#/components/schemas/ChangementProduit'
+          HANOUT: '#/components/schemas/ChangementHanout'
+          STOCK: '#/components/schemas/ChangementStock'
+          MOUVEMENT: '#/components/schemas/ChangementMouvement'
+          DOCUMENT: '#/components/schemas/ChangementDocument'
+          VERSEMENT: '#/components/schemas/ChangementVersement'
+          COMPTE_CREDIT: '#/components/schemas/ChangementCompteCredit'
+          TARIF: '#/components/schemas/ChangementTarif'
+          PROMO: '#/components/schemas/ChangementPromo'
+          RESERVATION: '#/components/schemas/ChangementReservation'
+          ANOMALIE: '#/components/schemas/ChangementAnomalie'
+          PARAMETRES: '#/components/schemas/ChangementParametres'
+          BON_SORTIE: '#/components/schemas/ChangementBonSortie'
+
+    ChangementProduit:
+      allOf:
+        - $ref: '#/components/schemas/ChangementBase'
+        - type: object
+          properties:
+            entite:
+              const: PRODUIT
+            donnees:
+              $ref: '#/components/schemas/Produit'
+
+    ChangementHanout:
+      allOf:
+        - $ref: '#/components/schemas/ChangementBase'
+        - type: object
+          properties:
+            entite:
+              const: HANOUT
+            donnees:
+              $ref: '#/components/schemas/Hanout'
+
+    ChangementStock:
+      allOf:
+        - $ref: '#/components/schemas/ChangementBase'
+        - type: object
+          properties:
+            entite:
+              const: STOCK
+            donnees:
+              $ref: '#/components/schemas/LigneStock'
+
+    ChangementMouvement:
+      allOf:
+        - $ref: '#/components/schemas/ChangementBase'
+        - type: object
+          properties:
+            entite:
+              const: MOUVEMENT
+            donnees:
+              $ref: '#/components/schemas/Mouvement'
+
+    ChangementDocument:
+      allOf:
+        - $ref: '#/components/schemas/ChangementBase'
+        - type: object
+          properties:
+            entite:
+              const: DOCUMENT
+            donnees:
+              $ref: '#/components/schemas/Document'
+
+    ChangementVersement:
+      allOf:
+        - $ref: '#/components/schemas/ChangementBase'
+        - type: object
+          properties:
+            entite:
+              const: VERSEMENT
+            donnees:
+              $ref: '#/components/schemas/Versement'
+
+    ChangementCompteCredit:
+      allOf:
+        - $ref: '#/components/schemas/ChangementBase'
+        - type: object
+          properties:
+            entite:
+              const: COMPTE_CREDIT
+            donnees:
+              $ref: '#/components/schemas/CompteCredit'
+
+    ChangementTarif:
+      allOf:
+        - $ref: '#/components/schemas/ChangementBase'
+        - type: object
+          properties:
+            entite:
+              const: TARIF
+            donnees:
+              $ref: '#/components/schemas/Tarif'
+
+    ChangementPromo:
+      allOf:
+        - $ref: '#/components/schemas/ChangementBase'
+        - type: object
+          properties:
+            entite:
+              const: PROMO
+            donnees:
+              $ref: '#/components/schemas/OffrePromo'
+
+    ChangementReservation:
+      allOf:
+        - $ref: '#/components/schemas/ChangementBase'
+        - type: object
+          properties:
+            entite:
+              const: RESERVATION
+            donnees:
+              $ref: '#/components/schemas/Reservation'
+
+    ChangementAnomalie:
+      allOf:
+        - $ref: '#/components/schemas/ChangementBase'
+        - type: object
+          properties:
+            entite:
+              const: ANOMALIE
+            donnees:
+              $ref: '#/components/schemas/Anomalie'
+
+    ChangementParametres:
+      allOf:
+        - $ref: '#/components/schemas/ChangementBase'
+        - type: object
+          properties:
+            entite:
+              const: PARAMETRES
+            donnees:
+              $ref: '#/components/schemas/ParametresAmbulant'
+
+    ChangementBonSortie:
+      allOf:
+        - $ref: '#/components/schemas/ChangementBase'
+        - type: object
+          properties:
+            entite:
+              const: BON_SORTIE
+            donnees:
+              $ref: '#/components/schemas/BonSortie'
+
+    ParametresAmbulant:
+      type: object
+      required: [politiqueDepassementCredit, seuilEcartInventairePourcent]
+      properties:
+        politiqueDepassementCredit:
+          $ref: '#/components/schemas/PolitiqueDepassementCredit'
+        plafondRemisePonctuellePourcent:
+          type: number
+        seuilEcartInventairePourcent:
+          type: number
+          description: Écart d'inventaire au-delà duquel un motif est exigé (RG-S4), fixé par l'administrateur
+        mentionsLegales:
+          $ref: '#/components/schemas/MentionsLegales'
+          description: Présentes si l'ambulant peut émettre des factures (RG-F2), déclarées dans son profil
+
+    # ------------------------------------------------------------ stock
+    TypeMouvement:
+      type: string
+      enum: [CHARGEMENT, VENTE, RETOUR, AJUSTEMENT, PROMO]
+      description: Types de mouvement de RG-S2 ; PROMO = entrée de stock promo au retrait chez le grossiste
+
+    Mouvement:
+      type: object
+      description: Mouvement de stock (RG-S2) — type, auteur, horodatage et appareil toujours présents
+      required: [id, type, produitId, quantite, auteurId, appareilId, horodatage, recuLe]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/TypeMouvement'
+        produitId:
+          type: string
+          format: uuid
+        quantite:
+          type: integer
+          description: Positive en entrée, négative en sortie
+        auteurId:
+          type: string
+          format: uuid
+        appareilId:
+          type: string
+          format: uuid
+          description: Appareil du geste ; pour un mouvement PROMO, l'appareil du grossiste qui a scanné le QR (auteurId est alors le grossiste)
+        horodatage:
+          type: string
+          format: date-time
+          description: Heure du geste (appareil)
+        recuLe:
+          type: string
+          format: date-time
+          description: Heure de réception par le serveur
+        operationId:
+          type: string
+          format: uuid
+        documentId:
+          type: string
+          format: uuid
+        bonSortieId:
+          type: string
+          format: uuid
+        campagneId:
+          type: string
+          format: uuid
+        reservationId:
+          type: string
+          format: uuid
+        motif:
+          type: string
+
+    MouvementPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/Mouvement'
+
+    LigneStock:
+      type: object
+      required: [produitId, quantite]
+      properties:
+        produitId:
+          type: string
+          format: uuid
+        quantite:
+          type: integer
+          description: Stock normal ; peut être négatif seulement si une anomalie STOCK_NEGATIF est ouverte (RG-S1)
+        promo:
+          type: array
+          description: Stock promo isolé, par campagne (RG-S3)
+          items:
+            type: object
+            required: [campagneId, reservationId, quantite]
+            properties:
+              campagneId:
+                type: string
+                format: uuid
+              reservationId:
+                type: string
+                format: uuid
+              quantite:
+                type: integer
+
+    StockEmbarque:
+      type: object
+      required: [lignes, calculeLe]
+      properties:
+        lignes:
+          type: array
+          items:
+            $ref: '#/components/schemas/LigneStock'
+        calculeLe:
+          type: string
+          format: date-time
+
+    BonSortieSaisie:
+      type: object
+      required: [id, ambulantTelephone, lignes]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Généré par le client ; renvoyer la même requête ne crée pas un second bon
+        ambulantTelephone:
+          $ref: '#/components/schemas/Telephone'
+          description: Ambulant destinataire (422 si ce numéro n'est pas un ambulant inscrit)
+        lignes:
+          type: array
+          minItems: 1
+          maxItems: 30
+          items:
+            $ref: '#/components/schemas/LigneQuantite'
+
+    BonSortie:
+      type: object
+      required: [id, numero, grossisteId, ambulant, lignes, emisLe, qrJeton]
+      properties:
+        id:
+          type: string
+          format: uuid
+        numero:
+          type: string
+        grossisteId:
+          type: string
+          format: uuid
+        ambulant:
+          $ref: '#/components/schemas/Reference'
+        lignes:
+          type: array
+          items:
+            $ref: '#/components/schemas/LigneQuantite'
+        emisLe:
+          type: string
+          format: date-time
+        qrJeton:
+          type: string
+          contentMediaType: application/jwt
+          contentSchema:
+            $ref: '#/components/schemas/BonSortieQr'
+          description: |
+            JWS compact signé par le serveur. Sa charge utile (`BonSortieQr`) se lit sans
+            vérifier la signature, ce qui permet à l'app ambulant de charger le stock hors ligne.
+        chargeLe:
+          type: string
+          format: date-time
+          description: Présent une fois le bon chargé par un ambulant
+
+    BonSortieQr:
+      type: object
+      description: Charge utile du QR d'un bon de sortie
+      required: [bonSortieId, grossisteId, ambulantId, lignes, emisLe]
+      properties:
+        bonSortieId:
+          type: string
+          format: uuid
+        grossisteId:
+          type: string
+          format: uuid
+        ambulantId:
+          type: string
+          format: uuid
+          description: Seul cet ambulant peut charger le bon ; l'app refuse un QR adressé à un autre
+        lignes:
+          type: array
+          items:
+            $ref: '#/components/schemas/LigneQuantite'
+        emisLe:
+          type: string
+          format: date-time
+
+    BonSortiePage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/BonSortie'
+
+    # ------------------------------------------------------------ ventes
+    TypeDocument:
+      type: string
+      enum: [BON_LIVRAISON, FACTURE, AVOIR]
+
+    Document:
+      type: object
+      description: Document de vente émis par un ambulant ; jamais modifié ni supprimé, seulement annulé par avoir (RG-C4)
+      required: [id, type, numero, sequence, appareilId, ambulant, hanout, emisLe, lignes, total, montantRegle, montantCredit, statut]
+      if:
+        properties:
+          type:
+            const: FACTURE
+      then:
+        required: [mentionsLegales]
+        properties:
+          mentionsLegales:
+            $ref: '#/components/schemas/MentionsLegales'
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/TypeDocument'
+        numero:
+          $ref: '#/components/schemas/NumeroDocument'
+        sequence:
+          $ref: '#/components/schemas/SequenceDocument'
+        appareilId:
+          type: string
+          format: uuid
+        ambulant:
+          $ref: '#/components/schemas/Reference'
+        hanout:
+          $ref: '#/components/schemas/Reference'
+        emisLe:
+          type: string
+          format: date-time
+        lignes:
+          type: array
+          items:
+            $ref: '#/components/schemas/LigneDocument'
+        total:
+          $ref: '#/components/schemas/Montant'
+        tva:
+          $ref: '#/components/schemas/Montant'
+        montantRegle:
+          $ref: '#/components/schemas/Montant'
+        montantCredit:
+          $ref: '#/components/schemas/Montant'
+        statut:
+          type: string
+          enum: [EMIS, PARTIELLEMENT_ANNULE, ANNULE]
+          description: Pour BON_LIVRAISON et FACTURE ; un avoir est toujours EMIS
+        documentOrigineId:
+          type: string
+          format: uuid
+          description: AVOIR seulement
+        avoirIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        motifAvoir:
+          type: string
+        demandeDepannageId:
+          type: string
+          format: uuid
+        mentionsLegales:
+          $ref: '#/components/schemas/MentionsLegales'
+        confirmationHanout:
+          $ref: '#/components/schemas/ConfirmationHanout'
+
+    LigneDocument:
+      allOf:
+        - $ref: '#/components/schemas/LigneDocumentSaisie'
+        - type: object
+          required: [libelle, montant]
+          properties:
+            libelle:
+              $ref: '#/components/schemas/LibelleI18n'
+            campagneNom:
+              $ref: '#/components/schemas/LibelleI18n'
+              description: Référence de la campagne imprimée sur la ligne (RG-F3)
+
+    MentionsLegales:
+      type: object
+      description: Mentions obligatoires d'une FACTURE (RG-F2)
+      required: [ice, identifiantFiscal, registreCommerce, assujettiTva]
+      properties:
+        ice:
+          type: string
+          pattern: '^[0-9]{15}$'
+        identifiantFiscal:
+          type: string
+        registreCommerce:
+          type: string
+        assujettiTva:
+          type: boolean
+
+    DocumentPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/Document'
+
+    Versement:
+      allOf:
+        - $ref: '#/components/schemas/VersementSaisie'
+        - type: object
+          required: [imputations, recuLe, ambulantId]
+          properties:
+            ambulantId:
+              type: string
+              format: uuid
+            documentId:
+              type: string
+              format: uuid
+              description: Présent si le versement est un règlement saisi à la livraison
+            recuLe:
+              type: string
+              format: date-time
+
+    CompteCredit:
+      type: object
+      description: Crédit d'un hanout chez un ambulant (karni). solde = factures à crédit − versements − avoirs (RG-C1)
+      required: [id, ambulant, hanout, solde]
+      properties:
+        id:
+          type: string
+          format: uuid
+        ambulant:
+          $ref: '#/components/schemas/Reference'
+        hanout:
+          $ref: '#/components/schemas/Reference'
+        solde:
+          $ref: '#/components/schemas/Montant'
+        plafond:
+          $ref: '#/components/schemas/Montant'
+        delaiMaxJours:
+          type: integer
+        plusAncienImpayeLe:
+          type: string
+          format: date-time
+        depassement:
+          type: string
+          enum: [AUCUN, PLAFOND, DELAI, PLAFOND_ET_DELAI]
+
+    CompteCreditPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/CompteCredit'
+
+    Releve:
+      type: object
+      required: [compte, ecritures]
+      properties:
+        compte:
+          $ref: '#/components/schemas/CompteCredit'
+        soldeInitial:
+          $ref: '#/components/schemas/Montant'
+        ecritures:
+          type: array
+          description: Ordre chronologique
+          items:
+            type: object
+            required: [le, nature, montant, soldeApres]
+            properties:
+              le:
+                type: string
+                format: date-time
+              nature:
+                type: string
+                enum: [ACHAT_CREDIT, VERSEMENT, AVOIR]
+              montant:
+                $ref: '#/components/schemas/Montant'
+              soldeApres:
+                $ref: '#/components/schemas/Montant'
+              documentId:
+                type: string
+                format: uuid
+              numero:
+                type: string
+              versementId:
+                type: string
+                format: uuid
+
+    SyntheseCreances:
+      type: object
+      required: [total, anciennete, topDebiteurs]
+      properties:
+        total:
+          $ref: '#/components/schemas/Montant'
+        anciennete:
+          type: object
+          required: [de0a15Jours, de15a30Jours, plusDe30Jours]
+          properties:
+            de0a15Jours:
+              $ref: '#/components/schemas/Montant'
+            de15a30Jours:
+              $ref: '#/components/schemas/Montant'
+            plusDe30Jours:
+              $ref: '#/components/schemas/Montant'
+        topDebiteurs:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompteCredit'
+
+    # ------------------------------------------------------------ promos
+    StatutCampagne:
+      type: string
+      enum: [BROUILLON, PROPOSEE, ACTIVE, EPUISEE, EXPIREE, CLOTUREE]
+      description: |
+        BROUILLON → PROPOSEE (premier dépôt proposé) → ACTIVE (au moins un dépôt confirmé) →
+        EPUISEE ou EXPIREE → CLOTUREE (reliquats retournés ou rachetés). §7.2
+
+    Remise:
+      oneOf:
+        - $ref: '#/components/schemas/RemisePourcentage'
+        - $ref: '#/components/schemas/RemisePrixNet'
+        - $ref: '#/components/schemas/RemiseProduitOffert'
+        - $ref: '#/components/schemas/RemisePalier'
+      discriminator:
+        propertyName: type
+        mapping:
+          POURCENTAGE: '#/components/schemas/RemisePourcentage'
+          PRIX_NET: '#/components/schemas/RemisePrixNet'
+          PRODUIT_OFFERT: '#/components/schemas/RemiseProduitOffert'
+          PALIER: '#/components/schemas/RemisePalier'
+
+    RemisePourcentage:
+      type: object
+      required: [type, pourcentage]
+      properties:
+        type:
+          const: POURCENTAGE
+        pourcentage:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 100
+
+    RemisePrixNet:
+      type: object
+      required: [type, prixNet]
+      properties:
+        type:
+          const: PRIX_NET
+        prixNet:
+          $ref: '#/components/schemas/Montant'
+
+    RemiseProduitOffert:
+      type: object
+      required: [type, quantiteAchetee, produitOffertId, quantiteOfferte]
+      properties:
+        type:
+          const: PRODUIT_OFFERT
+        quantiteAchetee:
+          type: integer
+          minimum: 1
+        produitOffertId:
+          type: string
+          format: uuid
+        quantiteOfferte:
+          type: integer
+          minimum: 1
+
+    RemisePalier:
+      type: object
+      required: [type, paliers]
+      properties:
+        type:
+          const: PALIER
+        paliers:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [quantiteMin, pourcentage]
+            properties:
+              quantiteMin:
+                type: integer
+                minimum: 1
+              pourcentage:
+                type: number
+                exclusiveMinimum: 0
+                maximum: 100
+
+    LigneCampagne:
+      type: object
+      required: [produitId, remise, quantiteTotale, quantiteMaxParAmbulant]
+      properties:
+        produitId:
+          type: string
+          format: uuid
+        remise:
+          $ref: '#/components/schemas/Remise'
+        quantiteTotale:
+          type: integer
+          minimum: 1
+        quantiteMaxParAmbulant:
+          type: integer
+          minimum: 1
+          description: Plafond par ambulant, contrôlé à la réservation et au retrait (RG-P3)
+        prixReventeConseille:
+          $ref: '#/components/schemas/Montant'
+          description: Indicatif seulement ; l'ambulant garde la marge
+
+    Ciblage:
+      type: object
+      description: Ciblage des ambulants (§5.1, §9) ; vide = toute la zone des dépositaires
+      properties:
+        regions:
+          type: array
+          items:
+            type: string
+        villes:
+          type: array
+          items:
+            type: string
+        zones:
+          type: array
+          items:
+            $ref: '#/components/schemas/ZoneGeo'
+        categories:
+          type: array
+          description: Codes des catégories vendues par les ambulants visés
+          items:
+            type: string
+        rayonM:
+          type: integer
+          minimum: 500
+          maximum: 50000
+          description: Distance maximale entre le grossiste dépositaire et la zone de tournée de l'ambulant
+
+    CampagneSaisie:
+      type: object
+      required: [nom, debut, fin, lignes]
+      properties:
+        nom:
+          $ref: '#/components/schemas/LibelleI18n'
+        description:
+          $ref: '#/components/schemas/LibelleI18n'
+        debut:
+          type: string
+          format: date-time
+        fin:
+          type: string
+          format: date-time
+        lignes:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/LigneCampagne'
+        ciblage:
+          $ref: '#/components/schemas/Ciblage'
+        delaiRetraitHeures:
+          type: integer
+          minimum: 1
+          maximum: 168
+          default: 24
+          description: Délai de retrait d'une réservation avant expiration (RG-P2)
+
+    Campagne:
+      allOf:
+        - $ref: '#/components/schemas/CampagneSaisie'
+        - type: object
+          required: [id, statut, creeLe, entonnoir]
+          properties:
+            id:
+              type: string
+              format: uuid
+            statut:
+              $ref: '#/components/schemas/StatutCampagne'
+            creeLe:
+              type: string
+              format: date-time
+            entonnoir:
+              $ref: '#/components/schemas/EtapesEntonnoir'
+
+    CampagnePage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/Campagne'
+
+    StatutDepot:
+      type: string
+      enum: [PROPOSE, CONTRE_PROPOSE, ACCEPTE, REFUSE, RECU, CLOTURE]
+
+    PropositionDepot:
+      type: object
+      required: [grossisteId, lignes]
+      properties:
+        grossisteId:
+          type: string
+          format: uuid
+        lignes:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/LigneQuantite'
+
+    LigneDepot:
+      type: object
+      required: [produitId, quantiteProposee, quantiteDeposee, quantiteReservee, quantiteRetiree, quantiteRestante]
+      properties:
+        produitId:
+          type: string
+          format: uuid
+        quantiteProposee:
+          type: integer
+        quantiteContreProposee:
+          type: integer
+        quantiteDeposee:
+          type: integer
+          description: Quantité réellement reçue ; 0 avant confirmation de réception
+        quantiteReservee:
+          type: integer
+        quantiteRetiree:
+          type: integer
+        quantiteRestante:
+          type: integer
+          description: Déposée − réservée − retirée ; une réservation expirée revient ici (RG-P2)
+
+    Depot:
+      type: object
+      required: [id, campagne, grossiste, statut, lignes]
+      properties:
+        id:
+          type: string
+          format: uuid
+        campagne:
+          $ref: '#/components/schemas/Reference'
+        marque:
+          $ref: '#/components/schemas/Reference'
+        grossiste:
+          $ref: '#/components/schemas/Grossiste'
+        statut:
+          $ref: '#/components/schemas/StatutDepot'
+        lignes:
+          type: array
+          items:
+            $ref: '#/components/schemas/LigneDepot'
+        finCampagne:
+          type: string
+          format: date-time
+        recuLe:
+          type: string
+          format: date-time
+        photoBonLivraisonUrl:
+          type: string
+          format: uri
+        cloture:
+          $ref: '#/components/schemas/ClotureDepot'
+
+    ReponseGrossiste:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [ACCEPTER, REFUSER, CONTRE_PROPOSER]
+        lignes:
+          type: array
+          description: Requis pour CONTRE_PROPOSER
+          items:
+            $ref: '#/components/schemas/LigneQuantite'
+        commentaire:
+          type: string
+          maxLength: 500
+
+    ReponseMarque:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [ACCEPTER, REFUSER]
+
+    ReceptionDepot:
+      type: object
+      required: [lignes]
+      properties:
+        lignes:
+          type: array
+          minItems: 1
+          description: Au moins une quantité reçue positive (rien reçu = pas de confirmation, RG-P1)
+          contains:
+            type: object
+            properties:
+              quantiteRecue:
+                minimum: 1
+          items:
+            type: object
+            required: [produitId, quantiteRecue]
+            properties:
+              produitId:
+                type: string
+                format: uuid
+              quantiteRecue:
+                type: integer
+                minimum: 0
+        commentaire:
+          type: string
+          maxLength: 500
+
+    ClotureDepot:
+      type: object
+      required: [issueReliquat]
+      properties:
+        issueReliquat:
+          type: string
+          enum: [RETOURNE, RACHETE]
+        commentaire:
+          type: string
+          maxLength: 500
+
+    DepotPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/Depot'
+
+    EtapesEntonnoir:
+      type: object
+      required: [depose, reserve, retire, revendu]
+      properties:
+        depose:
+          type: integer
+          format: int64
+        reserve:
+          type: integer
+          format: int64
+        retire:
+          type: integer
+          format: int64
+        revendu:
+          type: integer
+          format: int64
+          description: Unités promo revendues aux hanouts (lignes de documents liées à la campagne, avoirs déduits)
+
+    Entonnoir:
+      type: object
+      required: [campagneId, total, parGrossiste, parProduit]
+      properties:
+        campagneId:
+          type: string
+          format: uuid
+        total:
+          $ref: '#/components/schemas/EtapesEntonnoir'
+        parGrossiste:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/EtapesEntonnoir'
+              - type: object
+                required: [grossiste]
+                properties:
+                  grossiste:
+                    $ref: '#/components/schemas/Reference'
+        parProduit:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/EtapesEntonnoir'
+              - type: object
+                required: [produitId]
+                properties:
+                  produitId:
+                    type: string
+                    format: uuid
+
+    OffrePromo:
+      type: object
+      required: [id, campagneId, depotId, produit, remise, grossiste, quantiteDisponible, quantiteMaxParAmbulant, quantiteDejaReservee, fin, delaiRetraitHeures]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identifiant de l'offre (campagne × dépôt × produit)
+        campagneId:
+          type: string
+          format: uuid
+        campagneNom:
+          $ref: '#/components/schemas/LibelleI18n'
+        depotId:
+          type: string
+          format: uuid
+        produit:
+          $ref: '#/components/schemas/Produit'
+        remise:
+          $ref: '#/components/schemas/Remise'
+        prixReventeConseille:
+          $ref: '#/components/schemas/Montant'
+        grossiste:
+          $ref: '#/components/schemas/Grossiste'
+        quantiteDisponible:
+          type: integer
+        quantiteMaxParAmbulant:
+          type: integer
+        quantiteDejaReservee:
+          type: integer
+          description: Déjà réservé ou retiré par l'ambulant connecté sur cette campagne et ce produit
+        fin:
+          type: string
+          format: date-time
+        delaiRetraitHeures:
+          type: integer
+
+    OffrePromoPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/OffrePromo'
+
+    StatutReservation:
+      type: string
+      enum: [RESERVEE, RETIREE, EXPIREE, REVENDUE]
+      description: RESERVEE → RETIREE (scan QR) ou EXPIREE → REVENDUE (liée à une vente au hanout). §7.2
+
+    ReservationSaisie:
+      type: object
+      required: [id, offreId, quantite]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Généré par l'appareil ; clé d'idempotence
+        offreId:
+          type: string
+          format: uuid
+        quantite:
+          type: integer
+          minimum: 1
+
+    Reservation:
+      type: object
+      required: [id, statut, campagneId, depotId, produitId, grossiste, quantiteReservee, reserveeLe, expireLe]
+      properties:
+        id:
+          type: string
+          format: uuid
+        statut:
+          $ref: '#/components/schemas/StatutReservation'
+        campagneId:
+          type: string
+          format: uuid
+        depotId:
+          type: string
+          format: uuid
+        produitId:
+          type: string
+          format: uuid
+        grossiste:
+          $ref: '#/components/schemas/Grossiste'
+        ambulant:
+          $ref: '#/components/schemas/Reference'
+        quantiteReservee:
+          type: integer
+        quantiteRetiree:
+          type: integer
+        quantiteRevendue:
+          type: integer
+        reserveeLe:
+          type: string
+          format: date-time
+        expireLe:
+          type: string
+          format: date-time
+        retireeLe:
+          type: string
+          format: date-time
+        qrJeton:
+          type: string
+          description: Contenu du QR code à présenter au grossiste ; renvoyé à l'ambulant seulement, tant que la réservation est RESERVEE
+
+    ReservationPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/Reservation'
+
+    ScanQr:
+      type: object
+      required: [qrJeton]
+      properties:
+        qrJeton:
+          type: string
+
+    RetraitSaisie:
+      allOf:
+        - $ref: '#/components/schemas/ScanQr'
+        - type: object
+          required: [quantiteRemise, appareilId]
+          properties:
+            appareilId:
+              type: string
+              format: uuid
+              description: Appareil (ou navigateur) du grossiste qui scanne ; porté par le mouvement PROMO (RG-S2)
+            quantiteRemise:
+              type: integer
+              minimum: 1
+              description: Au plus la quantité réservée
+
+    # ------------------------------------------------------------ depannage
+    DisponibiliteSaisie:
+      type: object
+      required: [disponible]
+      properties:
+        disponible:
+          type: boolean
+        position:
+          $ref: '#/components/schemas/Position'
+          description: Requise avec disponible = true, refusée (400) sinon
+
+    Disponibilite:
+      type: object
+      required: [disponible]
+      properties:
+        disponible:
+          type: boolean
+        depuis:
+          type: string
+          format: date-time
+        positionMiseAJourLe:
+          type: string
+          format: date-time
+
+    StatutDemande:
+      type: string
+      enum: [EN_ATTENTE, ACCEPTEE, EN_ROUTE, LIVREE, SANS_REPONSE]
+      description: SANS_REPONSE quand personne n'a accepté après l'élargissement du rayon (RG-D3)
+
+    RuptureSaisie:
+      type: object
+      description: Produit choisi dans la liste (`produitId`) ; avec une photo (multipart), `produitId` peut manquer
+      required: [id, quantite]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Généré par l'appareil ; clé d'idempotence
+        produitId:
+          type: string
+          format: uuid
+        quantite:
+          type: integer
+          minimum: 1
+
+    DemandeDepannage:
+      type: object
+      required: [id, statut, quantite, creeLe, historique]
+      properties:
+        id:
+          type: string
+          format: uuid
+        statut:
+          $ref: '#/components/schemas/StatutDemande'
+        produit:
+          $ref: '#/components/schemas/Produit'
+        photoUrl:
+          type: string
+          format: uri
+        quantite:
+          type: integer
+        creeLe:
+          type: string
+          format: date-time
+        rayonElargi:
+          type: boolean
+        expireLe:
+          type: string
+          format: date-time
+          description: Fin du délai d'acceptation en cours
+        hanout:
+          type: object
+          description: Vue ambulant seulement
+          required: [id, nom, position]
+          properties:
+            id:
+              type: string
+              format: uuid
+            nom:
+              type: string
+            position:
+              $ref: '#/components/schemas/Position'
+            distanceM:
+              type: integer
+            solde:
+              $ref: '#/components/schemas/Montant'
+              description: Solde du hanout chez l'ambulant connecté
+            derniereVenteLe:
+              type: string
+              format: date-time
+        ambulant:
+          type: object
+          description: Vue hanout seulement, une fois la demande acceptée
+          required: [nom, telephone]
+          properties:
+            nom:
+              type: string
+            telephone:
+              $ref: '#/components/schemas/Telephone'
+        documentId:
+          type: string
+          format: uuid
+          description: Vente liée, une fois livrée (RG-D4)
+        historique:
+          type: array
+          items:
+            type: object
+            required: [statut, le]
+            properties:
+              statut:
+                $ref: '#/components/schemas/StatutDemande'
+              le:
+                type: string
+                format: date-time
+
+    DemandeDepannagePage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/DemandeDepannage'
+
+    # ------------------------------------------------------------ analytique
+    CarteRuptures:
+      type: object
+      required: [seuilAnonymat, genereLe, cellules]
+      properties:
+        seuilAnonymat:
+          type: integer
+          description: Nombre minimal de hanouts distincts pour qu'une cellule soit renvoyée
+          examples: [3]
+        genereLe:
+          type: string
+          format: date-time
+        cellules:
+          type: array
+          items:
+            type: object
+            required: [geohash, centre, produitId, signalements, resolues, enCours]
+            properties:
+              geohash:
+                type: string
+              centre:
+                $ref: '#/components/schemas/Position'
+              produitId:
+                type: string
+                format: uuid
+              signalements:
+                type: integer
+              resolues:
+                type: integer
+              enCours:
+                type: integer
+              delaiMoyenResolutionMinutes:
+                type: integer
