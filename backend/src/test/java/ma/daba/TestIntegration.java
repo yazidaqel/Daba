@@ -44,6 +44,8 @@ public abstract class TestIntegration {
 	@MockitoSpyBean(name = "sms")
 	protected Canaux.Fournisseur sms;
 
+	private static final java.util.concurrent.atomic.AtomicLong PREFIXES = new java.util.concurrent.atomic.AtomicLong();
+
 	public record Compte(UUID id, UUID organisationId, UUID appareilId, String telephone, String jeton, String prefixe,
 			UUID hanoutId) {
 	}
@@ -86,7 +88,7 @@ public abstract class TestIntegration {
 		jdbc.sql("INSERT INTO utilisateur (id, organisation_id, telephone, nom, role, hanout_id) VALUES (:id, :org, :tel, :nom, :role, :h)")
 			.param("id", id).param("org", org).param("tel", tel).param("nom", role.toLowerCase() + " " + tel.substring(8))
 			.param("role", role).param("h", hanoutId).update();
-		var prefixe = "AMBULANT".equals(role) ? "T" + appareil.toString().substring(0, 4).toUpperCase() : null;
+		var prefixe = "AMBULANT".equals(role) ? "T" + "%5s".formatted(Long.toString(PREFIXES.incrementAndGet(), 36).toUpperCase()).replace(' ', '0') : null;
 		jdbc.sql("INSERT INTO appareil (id, utilisateur_id, prefixe) VALUES (:id, :u, :p)")
 			.param("id", appareil).param("u", id).param("p", prefixe).update();
 		jdbc.sql("INSERT INTO consentement (utilisateur_id, version_texte, traitement_donnees, geolocalisation) VALUES (:u, 'v1', true, true)")

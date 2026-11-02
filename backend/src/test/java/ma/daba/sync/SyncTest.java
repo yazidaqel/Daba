@@ -352,6 +352,25 @@ class SyncTest extends TestIntegration {
 	}
 
 	@Test
+	void pdfDuDocumentEnArabeEtEnFrancais() throws Exception {
+		var ambulant = ambulant();
+		var produit = produit();
+		var hanout = hanout(33.57, -7.59);
+		var v = vente(ambulant, 1, hanout, produit, 2, 1250, 0);
+		pousser(ambulant, chargement(produit, 5), v);
+		var docId = ((Map<?, ?>) v.get("donnees")).get("documentId");
+		for (var langue : List.of("ar", "fr", "ary-Latn")) {
+			var r = get(ambulant, "/v1/documents/" + docId + "/pdf?langue=" + langue);
+			assertThat(r).hasStatusOk().hasContentType("application/pdf");
+			try (var pdf = org.apache.pdfbox.Loader.loadPDF(r.getResponse().getContentAsByteArray())) {
+				var texte = new org.apache.pdfbox.text.PDFTextStripper().getText(pdf);
+				assertThat(texte).contains(ambulant.prefixe() + "-BL-000001").contains("25,00 DH");
+			}
+		}
+		assertThat(get(ambulant(), "/v1/documents/" + docId + "/pdf")).hasStatus(404);
+	}
+
+	@Test
 	void syntheseDesCreancesParAnciennete() {
 		var ambulant = ambulant();
 		var produit = produit();

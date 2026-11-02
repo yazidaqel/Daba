@@ -13,12 +13,15 @@
 	<version>0.0.1-SNAPSHOT</version>
 	<name>daba</name>
 
-	<!-- Versions vérifiées le 29 oct. 2026. Flyway reste sur la version gérée par Spring Boot (12.x) :
+	<!-- Versions vérifiées le 29 oct. 2026 (PDFBox, ICU4J, polices DejaVu : 2 nov. 2026). Flyway reste sur la version gérée par Spring Boot (12.x) :
 	     la 13.x existe mais n'est gérée ni par Boot 4.1 ni par Boot 4.2. -->
 	<properties>
 		<java.version>25</java.version>
 		<spring-modulith.version>2.1.2</spring-modulith.version>
 		<springdoc.version>3.2.0</springdoc.version>
+		<pdfbox.version>3.0.8</pdfbox.version>
+		<icu4j.version>79.1</icu4j.version>
+		<dejavu.version>7.1.1</dejavu.version>
 	</properties>
 
 	<dependencies>
@@ -50,6 +53,23 @@
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
 			<version>${springdoc.version}</version>
+		</dependency>
+		<!-- PDF des pièces de vente : arabe mis en forme (ICU4J) avec la police DejaVu Sans. -->
+		<dependency>
+			<groupId>org.apache.pdfbox</groupId>
+			<artifactId>pdfbox</artifactId>
+			<version>${pdfbox.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.ibm.icu</groupId>
+			<artifactId>icu4j</artifactId>
+			<version>${icu4j.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>net.sf.jasperreports</groupId>
+			<artifactId>jasperreports-fonts</artifactId>
+			<version>${dejavu.version}</version>
+			<scope>runtime</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.postgresql</groupId>

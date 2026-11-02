@@ -8,10 +8,14 @@ import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -42,10 +46,12 @@ class VentesController {
 
 	private final JdbcClient jdbc;
 	private final Ventes ventes;
+	private final PdfDocuments pdfs;
 
-	VentesController(JdbcClient jdbc, Ventes ventes) {
+	VentesController(JdbcClient jdbc, Ventes ventes, PdfDocuments pdfs) {
 		this.jdbc = jdbc;
 		this.ventes = ventes;
+		this.pdfs = pdfs;
 	}
 
 	/** Cloisonnement : l'ambulant voit les pièces de son organisation, le hanout celles qui lui sont adressées. */
@@ -91,6 +97,21 @@ class VentesController {
 		return jdbc.sql("SELECT * FROM document WHERE id = :id AND " + perimetre(appelant))
 			.param("id", documentId).param("moi", moi(appelant))
 			.query(ventes::ligneDocument).optional().orElseThrow(Probleme::introuvable);
+	}
+
+	@GetMapping("/v1/documents/{documentId}/pdf")
+	@Roles({ Role.AMBULANT, Role.HANOUT })
+	ResponseEntity<byte[]> pdf(Appelant appelant, @PathVariable UUID documentId,
+			@RequestParam(required = false) @Pattern(regexp = "^(fr|ar|ary-Arab|ary-Latn)$") String langue,
+			@RequestHeader(name = "Accept-Language", required = false) String acceptLanguage) {
+		var document = document(appelant, documentId);
+		var choisie = langue != null ? langue
+				: acceptLanguage == null ? "fr"
+						: java.util.stream.Stream.of("ary-Arab", "ary-Latn", "ar", "fr").filter(acceptLanguage::startsWith).findFirst().orElse("fr");
+		return ResponseEntity.ok()
+			.contentType(MediaType.APPLICATION_PDF)
+			.header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + document.numero() + ".pdf\"")
+			.body(pdfs.generer(document, choisie));
 	}
 
 	@GetMapping("/v1/karni/comptes")

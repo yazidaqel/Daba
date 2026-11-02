@@ -84,7 +84,8 @@ public class Canaux {
 
 	Canaux(List<Fournisseur> fournisseurs, @Value("${daba.canaux.actifs}") Set<Canal> actifs, Environment env,
 			JdbcClient jdbc) {
-		this.fournisseurs = new EnumMap<>(fournisseurs.stream().collect(Collectors.toMap(Fournisseur::canal, Function.identity())));
+		this.fournisseurs = new EnumMap<>(Canal.class);
+		fournisseurs.forEach(f -> this.fournisseurs.put(f.canal(), f));
 		this.actifs = actifs;
 		this.env = env;
 		this.jdbc = jdbc;
