@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { $api, appareilId, ecrireSession } from '@/api/client'
+import { $api, appareilId, codeProbleme, ecrireSession, lireMotifFin, type Problem } from '@/api/client'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,12 +13,22 @@ export default function Login() {
   const [saisie, setSaisie] = useState('')
   const [telephone, setTelephone] = useState<string | null>(null)
   const [code, setCode] = useState('')
-  const [erreur, setErreur] = useState<string | null>(null)
+  const [erreur, setErreur] = useState<string | null>(() => {
+    const motif = lireMotifFin()
+    return motif === 'appareilRevoque' ? t('erreur.appareilRevoque') : motif === 'sessionExpiree' ? t('login.sessionExpiree') : null
+  })
   const demander = $api.useMutation('post', '/v1/auth/otp')
   const verifier = $api.useMutation('post', '/v1/auth/otp/verify')
 
-  function messageStatut(status: number | undefined, invalide: 'login.telephoneInvalide' | 'login.codeInvalide') {
-    return status === 429 ? t('login.tropDEssais') : status === 400 || status === 401 ? t(invalide) : t('app.erreur')
+  // Décision sur le `type` du Problem (liste fixe du contrat), jamais sur `detail`.
+  function messageStatut(p: Problem, invalide: 'login.telephoneInvalide' | 'login.codeInvalide') {
+    switch (codeProbleme(p)) {
+      case 'trop-de-demandes': return t('login.tropDEssais')
+      case 'requete-invalide': return t(invalide)
+      case 'code-invalide': return t('login.codeInvalide')
+      case 'appareil-revoque': return t('erreur.appareilRevoque')
+      default: return t('app.erreur')
+    }
   }
 
   function envoyer(e: FormEvent) {
@@ -28,7 +38,7 @@ export default function Login() {
     setErreur(null)
     demander.mutate(
       { body: { telephone: tel, langue } },
-      { onSuccess: () => setTelephone(tel), onError: (p) => setErreur(messageStatut(p.status, 'login.telephoneInvalide')) },
+      { onSuccess: () => setTelephone(tel), onError: (p) => setErreur(messageStatut(p, 'login.telephoneInvalide')) },
     )
   }
 
@@ -37,7 +47,7 @@ export default function Login() {
     setErreur(null)
     verifier.mutate(
       { body: { telephone: telephone!, code, appareilId: appareilId() } },
-      { onSuccess: ecrireSession, onError: (p) => setErreur(messageStatut(p.status, 'login.codeInvalide')) },
+      { onSuccess: (s) => ecrireSession(s), onError: (p) => setErreur(messageStatut(p, 'login.codeInvalide')) },
     )
   }
 

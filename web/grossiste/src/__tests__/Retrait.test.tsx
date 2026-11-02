@@ -7,6 +7,7 @@ import { expect, test, vi } from 'vitest'
 const appels = vi.hoisted(() => {
   const appels: { url: string; corps: Record<string, unknown> }[] = []
   globalThis.fetch = (async (req: Request) => {
+    if (req.url.endsWith('/v1/depots/d')) return Response.json({ lignes: [{ produitId: 'p', quantiteMaxParAmbulant: 4 }] })
     if (req.method === 'GET') return Response.json({ contenu: [], page: 0, taille: 200, total: 0 })
     const corps = await req.json()
     appels.push({ url: new URL(req.url).pathname, corps })
@@ -28,7 +29,7 @@ const { queryClient } = await import('@/api/client')
 const { I18nProvider } = await import('@/i18n')
 const { default: Retrait } = await import('@/pages/Retrait')
 
-test('retrait par douchette : aperçu, quantité bornée à la réservée, validation avec appareilId', async () => {
+test('retrait par douchette : aperçu, quantité bornée à la réservée et au plafond, validation avec appareilId', async () => {
   vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue()
   const u = userEvent.setup()
   render(
@@ -40,11 +41,12 @@ test('retrait par douchette : aperçu, quantité bornée à la réservée, valid
   )
   await u.type(screen.getByLabelText('Lecture par douchette'), 'jws.qr.jeton{Enter}')
   const quantite = await screen.findByLabelText('Quantité remise')
-  expect(quantite).toHaveValue(5)
+  // Réservée 5, plafond par ambulant 4 : on propose 4 et on refuse 5.
+  await vi.waitFor(() => expect(quantite).toHaveValue(4))
   expect(screen.getByText('Hamid')).toBeInTheDocument()
 
   await u.clear(quantite)
-  await u.type(quantite, '6')
+  await u.type(quantite, '5')
   expect(screen.getByRole('button', { name: 'Valider le retrait' })).toBeDisabled()
 
   await u.clear(quantite)

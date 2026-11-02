@@ -11,9 +11,9 @@ const COLONNES = ['quantiteDeposee', 'quantiteReservee', 'quantiteRetiree', 'qua
 // Stock promo isolé du stock normal (§4.1) : un tableau par campagne, à partir des dépôts reçus.
 export default function StockPromo() {
   const { t, nombre } = useI18n()
-  const nom = useNomProduit()
   // ponytail: une page de 200 dépôts reçus, assez pour un grossiste du pilote ; paginer au-delà.
   const requete = $api.useQuery('get', '/v1/depots', { params: { query: { statut: 'RECU', taille: 200 } } }, { refetchInterval: 15_000 })
+  const nom = useNomProduit(requete.data?.contenu.flatMap((d) => d.lignes.map((l) => l.produitId)) ?? [])
   const titres = { quantiteDeposee: 'depot.depose', quantiteReservee: 'depot.reserve', quantiteRetiree: 'depot.retire', quantiteRestante: 'depot.restant' } as const
 
   return (

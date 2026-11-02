@@ -35,6 +35,7 @@ export default function Depot() {
               <h1 className="text-2xl font-semibold">{d.campagne.nom}</h1>
               <StatutDepot statut={d.statut} />
               {d.marque && <span className="text-muted-foreground">{d.marque.nom}</span>}
+              <Badge variant="outline">{t('depot.campagne', { statut: t(`campagne.${d.statutCampagne}`) })}</Badge>
               {d.finCampagne && <span className="text-muted-foreground text-sm">{t('depot.finLe', { date: date(d.finCampagne) })}</span>}
               {d.statut === 'RECU' && <Badge variant="outline">{t('depot.miseAJour')}</Badge>}
             </header>
@@ -50,7 +51,7 @@ export default function Depot() {
             {d.statut === 'ACCEPTE' && <Reception depot={d} />}
             {d.statut === 'RECU' && (
               <>
-                <Reservations depotId={d.id} />
+                <Reservations depot={d} />
                 {cloturePossible(d) && <Cloture depot={d} />}
               </>
             )}
@@ -64,7 +65,7 @@ export default function Depot() {
 
 function Lignes({ depot }: { depot: S['Depot'] }) {
   const { t, nombre } = useI18n()
-  const nom = useNomProduit()
+  const nom = useNomProduit(idsProduits(depot))
   const recu = depot.statut === 'RECU' || depot.statut === 'CLOTURE'
   return (
     <Table>
@@ -73,6 +74,7 @@ function Lignes({ depot }: { depot: S['Depot'] }) {
           <TableHead>{t('depot.produit')}</TableHead>
           <TableHead className="text-end">{t('depot.propose')}</TableHead>
           <TableHead className="text-end">{t('depot.contrePropose')}</TableHead>
+          <TableHead className="text-end">{t('depot.plafond')}</TableHead>
           {recu && (
             <>
               <TableHead className="text-end">{t('depot.depose')}</TableHead>
@@ -89,6 +91,7 @@ function Lignes({ depot }: { depot: S['Depot'] }) {
             <TableCell>{nom(l.produitId)}</TableCell>
             <TableCell className="text-end">{nombre(l.quantiteProposee)}</TableCell>
             <TableCell className="text-end">{l.quantiteContreProposee == null ? '—' : nombre(l.quantiteContreProposee)}</TableCell>
+            <TableCell className="text-end">{nombre(l.quantiteMaxParAmbulant)}</TableCell>
             {recu && (
               <>
                 <TableCell className="text-end">{nombre(l.quantiteDeposee)}</TableCell>
@@ -104,10 +107,10 @@ function Lignes({ depot }: { depot: S['Depot'] }) {
   )
 }
 
-// Le contrat répond 409 tant que la campagne n'est ni épuisée ni expirée ; le Depot ne porte pas son statut,
-// on s'en approche par la date de fin ou un dépôt vidé.
-const cloturePossible = (d: S['Depot']) =>
-  (d.finCampagne != null && new Date(d.finCampagne) < new Date()) || d.lignes.every((l) => l.quantiteRestante + l.quantiteReservee === 0)
+// Clôture : dépôt RECU et campagne épuisée ou expirée (sinon 409).
+const cloturePossible = (d: S['Depot']) => d.statutCampagne === 'EPUISEE' || d.statutCampagne === 'EXPIREE'
+
+const idsProduits = (d: S['Depot']) => d.lignes.map((l) => l.produitId)
 
 const invaliderTout = () => queryClient.invalidateQueries()
 
@@ -119,7 +122,7 @@ function useQuantites(depot: S['Depot'], init: (l: S['LigneDepot']) => number) {
 
 function Reponse({ depot }: { depot: S['Depot'] }) {
   const { t } = useI18n()
-  const nom = useNomProduit()
+  const nom = useNomProduit(idsProduits(depot))
   const [contre, setContre] = useState(false)
   const [commentaire, setCommentaire] = useState('')
   const [quantites, setQuantite] = useQuantites(depot, (l) => l.quantiteProposee)
@@ -191,7 +194,7 @@ function Reponse({ depot }: { depot: S['Depot'] }) {
 
 function Reception({ depot }: { depot: S['Depot'] }) {
   const { t, nombre } = useI18n()
-  const nom = useNomProduit()
+  const nom = useNomProduit(idsProduits(depot))
   const attendu = (l: S['LigneDepot']) => l.quantiteContreProposee ?? l.quantiteProposee
   const [quantites, setQuantite] = useQuantites(depot, attendu)
   const [photo, setPhoto] = useState<File | null>(null)
@@ -268,10 +271,10 @@ function Reception({ depot }: { depot: S['Depot'] }) {
   )
 }
 
-function Reservations({ depotId }: { depotId: string }) {
+function Reservations({ depot }: { depot: S['Depot'] }) {
   const { t, date, nombre } = useI18n()
-  const nom = useNomProduit()
-  const requete = $api.useQuery('get', '/v1/reservations', { params: { query: { depotId, taille: 200 } } }, { refetchInterval: 10_000 })
+  const nom = useNomProduit(idsProduits(depot))
+  const requete = $api.useQuery('get', '/v1/reservations', { params: { query: { depotId: depot.id, taille: 200 } } }, { refetchInterval: 10_000 })
   return (
     <Card>
       <CardHeader>
