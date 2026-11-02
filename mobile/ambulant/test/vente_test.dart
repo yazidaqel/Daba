@@ -63,6 +63,8 @@ void main() {
       final lignes = (d['lignes'] as List).cast<Map>();
       expect(lignes.map((l) => (l['quantite'], l['reservationId'])), [(5, resa), (3, null)]);
       expect(lignes.first['campagneId'], campagne);
+      expect(lignes.first['campagneNom'], isNotNull, reason: 'référence de la campagne sur la ligne (RG-F3)');
+      expect(m.s.enAttente().single['donnees']['lignes'].first, isNot(contains('campagneNom')), reason: 'champ hors LigneDocumentSaisie');
       expect(m.stock(coca), 97);
       expect(m.stockPromo(coca).single.quantite, 0);
     });

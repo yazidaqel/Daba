@@ -386,5 +386,10 @@
   "anoCHARGEMENT_EN_DOUBLE": "Bon de sortie chargé deux fois",
   "anoPROMO_SANS_RETRAIT": "Vente promo au-delà de la quantité retirée",
   "anoDEMANDE_NON_ATTRIBUEE": "Livraison d'une demande prise par un autre",
-  "anoREMISE_PLAFOND_DEPASSE": "Remise au-delà du plafond"
+  "anoREMISE_PLAFOND_DEPASSE": "Remise au-delà du plafond",
+  "erreurAutreAmbulant": "Un autre vendeur a des ventes pas encore envoyées sur ce téléphone. Il doit se reconnecter et synchroniser d'abord.",
+  "docRejete": "Refusé par le serveur : voir Synchronisation",
+  "tva": "TVA",
+  "tvaAssujetti": "Assujetti à la TVA",
+  "tvaNonAssujetti": "Non assujetti à la TVA"
 }

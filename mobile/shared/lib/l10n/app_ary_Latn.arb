@@ -209,5 +209,10 @@
   "anoCHARGEMENT_EN_DOUBLE": "L bon tcharja jouj marrat",
   "anoPROMO_SANS_RETRAIT": "Be3ti promo kter men li jebti",
   "anoDEMANDE_NON_ATTRIBUEE": "Wsselti talab khdah bya3 akher",
-  "anoREMISE_PLAFOND_DEPASSE": "Takhfid fat l7ed"
+  "anoREMISE_PLAFOND_DEPASSE": "Takhfid fat l7ed",
+  "erreurAutreAmbulant": "Kayn bya3 akher 3ando bi3at ba9i ma tsiftou f had tilifoun. Khasso ydkhel w ydir synchro howa lowel.",
+  "docRejete": "Serveur rfdo: chouf synchro",
+  "tva": "TVA",
+  "tvaAssujetti": "Khade3 l TVA",
+  "tvaNonAssujetti": "Machi khade3 l TVA"
 }

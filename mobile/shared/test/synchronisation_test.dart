@@ -13,6 +13,7 @@ class FauxServeur {
   final lots = <Map<String, dynamic>>[];
   bool coupe = false;
   int? statutForce;
+  String? typeForce;
   String? curseurDemande;
 
   String _appliquer(String id) {
@@ -23,7 +24,9 @@ class FauxServeur {
 
   late final client = MockClient((req) async {
     if (coupe) throw const SocketException('réseau coupé');
-    if (statutForce != null) return http.Response(jsonEncode({'status': statutForce}), statutForce!);
+    if (statutForce != null) {
+      return http.Response(jsonEncode({'status': statutForce, 'type': ?typeForce}), statutForce!);
+    }
     if (req.url.path == '/v1/sync/operations') {
       final ops = (jsonDecode(req.body)['operations'] as List).cast<Map>();
       recus.add([for (final o in ops) o['id'] as String]);
@@ -107,10 +110,44 @@ void main() {
       expect(s.operationsSignalees().single['statut'], 'REJETEE');
     });
 
-    test('403 hors consentement = appareil révoqué', () async {
+    test('un serveur qui n\'acquitte aucune opération envoyée ne fait pas boucler', () async {
+      var appels = 0;
+      final client = MockClient((req) async {
+        if (req.url.path != '/v1/sync/operations') {
+          return http.Response(jsonEncode({'curseur': 'c', 'plusDeChangements': false, 'changements': []}), 200);
+        }
+        appels++;
+        return http.Response(jsonEncode({'resultats': [{'operationId': 'inconnue', 'statut': 'APPLIQUEE'}]}), 200);
+      });
+      s.enfiler('VERSEMENT', {});
+      await Synchronisation(s, Api('http://serveur', client: client), appareilId: appareil).synchroniser();
+      expect(appels, 1);
+      expect(s.nombreEnAttente, 1);
+    });
+
+    test('seul un 403 « appareil-revoque » révoque l\'appareil ; un autre 403 ne touche à rien', () async {
       s.enfiler('VERSEMENT', {});
       serveur.statutForce = 403;
+      await expectLater(sync.synchroniser(), throwsA(isA<ProblemeApi>()));
+      expect(s.nombreEnAttente, 1);
+      serveur.typeForce = 'https://daba.ma/problemes/appareil-revoque';
       await expectLater(sync.synchroniser(), throwsA(isA<AppareilRevoque>()));
+    });
+
+    test('un document rejeté reste visible, marqué refusé', () async {
+      final client = MockClient((req) async => http.Response(
+          jsonEncode(req.url.path == '/v1/sync/operations'
+              ? {
+                  'resultats': [
+                    {'operationId': (jsonDecode(req.body)['operations'] as List).single['id'], 'statut': 'REJETEE'}
+                  ]
+                }
+              : {'curseur': 'c', 'plusDeChangements': false, 'changements': []}),
+          200));
+      s.enregistrer('DOCUMENT', 'd1', {'id': 'd1', 'statut': 'EMIS'}, local: true);
+      s.enfiler('EMISSION_DOCUMENT', {'documentId': 'd1'});
+      await Synchronisation(s, Api('http://serveur', client: client), appareilId: appareil).synchroniser();
+      expect(s.objet('DOCUMENT', 'd1')!['rejete'], isTrue);
     });
   });
 
@@ -150,6 +187,25 @@ void main() {
       await sync.synchroniser();
       expect(serveur.curseurDemande, isNull);
       expect(s.objets('HANOUT').map((h) => h['id']).toSet(), {'terrain', 'h9'});
+    });
+
+    test('410 puis coupure : la copie locale n\'est pas purgée', () async {
+      s.ecrire('curseur', 'vieux');
+      s.enregistrer('PRODUIT', 'p1', {'id': 'p1'});
+      serveur.lots.add({'_statut': 410});
+      serveur.lots.add({'_statut': 503});
+      await expectLater(sync.synchroniser(), throwsA(isA<ProblemeApi>()));
+      expect(s.objet('PRODUIT', 'p1'), isNotNull);
+      expect(s.lire('curseur'), 'vieux');
+    });
+
+    test('les paramètres du serveur remplacent la copie locale', () async {
+      s.enregistrer('PARAMETRES', 'local', {'politiqueDepassementCredit': 'BLOQUER', 'mentionsLegales': {'ice': '1'}}, local: true);
+      serveur.lots.add(lot('c', false, [
+        {'entite': 'PARAMETRES', 'id': 'srv', 'action': 'UPSERT', 'donnees': {'politiqueDepassementCredit': 'AVERTIR', 'seuilEcartInventairePourcent': 5}}
+      ]));
+      await sync.synchroniser();
+      expect(s.objets('PARAMETRES').single['mentionsLegales'], isNull);
     });
 
     test('rattrape la numérotation sur les documents de l\'appareil', () async {

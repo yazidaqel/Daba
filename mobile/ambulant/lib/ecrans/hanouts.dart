@@ -95,7 +95,7 @@ class _Carte extends StatelessWidget {
           MarkerLayer(markers: [
             if (centre != null) Marker(point: centre!, child: const Icon(Icons.my_location, color: Colors.blue)),
             for (final h in hanouts)
-              if (h['position'] case {'lat': final num lat, 'lon': final num lon})
+              if (h['position'] case {'lat': final num lat, 'lon': final num lon} when lat.abs() <= 90 && lon.abs() <= 180)
                 Marker(
                   point: LatLng(lat.toDouble(), lon.toDouble()),
                   width: 44,

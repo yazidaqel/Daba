@@ -103,7 +103,11 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
     }
     final ancien = stockage.lire('session');
     if (ancien != null && (jsonDecode(ancien) as Map)['utilisateur']['id'] != session['utilisateur']['id']) {
-      stockage.effacerTout(); // autre ambulant sur ce téléphone : rien de l'ancien ne doit rester
+      // Autre ambulant sur ce téléphone : les pièces du précédent doivent d'abord remonter (RG-C4).
+      if (stockage.nombreEnAttente > 0) throw const AutreAmbulantEnAttente();
+      final id = appareilId; // le préfixe reçu est lié à cet appareilId (RG-F1)
+      stockage.effacerTout();
+      stockage.ecrire('appareilId', id);
     }
     await _coffre.write(key: 'jeton', value: session['accessToken'] as String);
     api.jeton = session['accessToken'] as String;
@@ -196,6 +200,8 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
 
   // ------------------------------------------------------------------ synchronisation
   void _demarrerSync() {
+    // L'app démarre indisponible : le serveur doit l'être aussi (et oublier la dernière position, CNDP).
+    if (!disponible) stockage.ecrire('couperDisponibilite', '1');
     _minuteurSync?.cancel();
     _minuteurSync = Timer.periodic(const Duration(minutes: 1), (_) => synchroniser());
     synchroniser();
@@ -209,6 +215,10 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
       await sync.synchroniser();
       horsLigne = false;
       derniereSync = DateTime.now();
+      if (!disponible && stockage.lire('couperDisponibilite') != null) {
+        await api.put('/v1/ambulant/disponibilite', {'disponible': false});
+        stockage.ecrire('couperDisponibilite', null);
+      }
     } on HorsLigne {
       horsLigne = true;
     } on AppareilRevoque {
@@ -247,6 +257,7 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
       await api.put('/v1/ambulant/disponibilite',
           {'disponible': true, 'position': {'lat': position!.latitude, 'lon': position!.longitude}});
       disponible = true;
+      stockage.ecrire('couperDisponibilite', null);
       _minuteurDispo?.cancel();
       var tour = 0;
       _minuteurDispo = Timer.periodic(const Duration(seconds: 30), (_) async {
@@ -258,8 +269,11 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
       _minuteurDispo?.cancel();
       disponible = false;
       position = null;
+      // Sans réseau, la coupure côté serveur sera renvoyée à la prochaine synchronisation.
+      stockage.ecrire('couperDisponibilite', '1');
       notifyListeners();
       await api.put('/v1/ambulant/disponibilite', {'disponible': false});
+      stockage.ecrire('couperDisponibilite', null);
     }
     notifyListeners();
   }
@@ -275,7 +289,9 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _envoyerPosition() async {
     if (!disponible) return;
-    position = await _lirePosition();
+    final lue = await _lirePosition();
+    if (!disponible) return; // coupé pendant la lecture : rien ne doit partir (CNDP)
+    position = lue;
     await api.put('/v1/ambulant/disponibilite',
         {'disponible': true, 'position': {'lat': position!.latitude, 'lon': position!.longitude}});
   }
@@ -327,4 +343,8 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
 
 class PermissionRefusee implements Exception {
   const PermissionRefusee();
+}
+
+class AutreAmbulantEnAttente implements Exception {
+  const AutreAmbulantEnAttente();
 }

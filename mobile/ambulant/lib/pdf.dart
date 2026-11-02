@@ -25,20 +25,31 @@ Future<File> documentPdf(Map<String, dynamic> doc, T t, Locale locale) async {
       pw.Text(date(doc['emisLe'] as String)),
       pw.SizedBox(height: 8),
       pw.Text('${t.vendeur} : ${doc['ambulant']['nom']}'),
-      if (mentions != null)
+      if (mentions != null) ...[
         pw.Text('ICE ${mentions['ice']} · IF ${mentions['identifiantFiscal']} · RC ${mentions['registreCommerce']}'),
+        pw.Text(mentions['assujettiTva'] == true ? t.tvaAssujetti : t.tvaNonAssujetti),
+      ],
       pw.Text('${t.client} : ${doc['hanout']['nom']}'),
       pw.SizedBox(height: 12),
       pw.TableHelper.fromTextArray(
         headers: [t.produit, t.quantite, t.prixUnitaire, t.montant],
         data: [
           for (final l in (doc['lignes'] as List).cast<Map>())
-            l['nature'] == 'ARTICLE'
-                ? [lib(l['libelle']), '${l['quantite']}', dh(l['prixUnitaire'] as int), dh(l['montant'] as int)]
-                : ['${nomNature(t, l['nature'] as String)} · ${lib(l['libelle'])}', '', '', dh(l['montant'] as int)],
+            [
+              [
+                if (l['nature'] != 'ARTICLE') nomNature(t, l['nature'] as String),
+                lib(l['libelle']),
+                // RG-F3 : référence de la campagne sur la ligne promo
+                if (l['campagneNom'] != null) '${t.promo} ${lib(l['campagneNom'])}',
+              ].join(' · '),
+              l['nature'] == 'ARTICLE' ? '${l['quantite']}' : '',
+              l['nature'] == 'ARTICLE' ? dh(l['prixUnitaire'] as int) : '',
+              dh(l['montant'] as int),
+            ],
         ],
       ),
       pw.SizedBox(height: 12),
+      if (doc['tva'] != null) pw.Text('${t.tva} : ${dh(doc['tva'] as int)}'),
       pw.Text('${t.total} : ${dh(doc['total'] as int)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
       pw.Text('${t.regle} : ${dh(doc['montantRegle'] as int)}'),
       pw.Text('${t.resteACredit} : ${dh(doc['montantCredit'] as int)}'),

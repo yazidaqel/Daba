@@ -699,6 +699,22 @@ class TAry extends T {
 
   @override
   String get anoREMISE_PLAFOND_DEPASSE => 'التخفيض فات الحد';
+
+  @override
+  String get erreurAutreAmbulant =>
+      'كاين بياع آخر عندو بيعات باقي ما تصيفطو ف هاد التيليفون. خاصو يدخل ويدير سانكرو هو الأول.';
+
+  @override
+  String get docRejete => 'السيرفور رفضو: شوف السانكرو';
+
+  @override
+  String get tva => 'TVA';
+
+  @override
+  String get tvaAssujetti => 'خاضع ل TVA';
+
+  @override
+  String get tvaNonAssujetti => 'ماشي خاضع ل TVA';
 }
 
 /// The translations for Moroccan Arabic, using the Latin script (`ary_Latn`).
@@ -1399,4 +1415,20 @@ class TAryLatn extends TAry {
 
   @override
   String get anoREMISE_PLAFOND_DEPASSE => 'Takhfid fat l7ed';
+
+  @override
+  String get erreurAutreAmbulant =>
+      'Kayn bya3 akher 3ando bi3at ba9i ma tsiftou f had tilifoun. Khasso ydkhel w ydir synchro howa lowel.';
+
+  @override
+  String get docRejete => 'Serveur rfdo: chouf synchro';
+
+  @override
+  String get tva => 'TVA';
+
+  @override
+  String get tvaAssujetti => 'Khade3 l TVA';
+
+  @override
+  String get tvaNonAssujetti => 'Machi khade3 l TVA';
 }

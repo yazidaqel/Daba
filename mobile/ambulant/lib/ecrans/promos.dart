@@ -190,6 +190,9 @@ class EcranReservation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.t;
+    // Hors ligne, l'heure du téléphone suffit pour ne plus présenter un QR expiré (RG-P2).
+    final expiree = this.r['statut'] == 'RESERVEE' && DateTime.parse(this.r['expireLe'] as String).isBefore(DateTime.now());
+    final r = expiree ? {...this.r, 'statut': 'EXPIREE'} : this.r;
     final qr = r['qrJeton'] as String?;
     return Scaffold(
       appBar: AppBar(title: Text(t.reservation)),

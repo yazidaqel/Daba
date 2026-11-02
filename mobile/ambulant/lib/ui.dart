@@ -38,6 +38,7 @@ extension Contexte on BuildContext {
 String messageErreur(T t, Object e) => switch (e) {
       HorsLigne() => t.erreurHorsLigne,
       PermissionRefusee() => t.erreurPermissionPosition,
+      AutreAmbulantEnAttente() => t.erreurAutreAmbulant,
       VenteRefusee(:final motif) => switch (motif) {
           RefusVente.factureSansMentions => t.erreurFactureSansMentions,
           RefusVente.creditBloque => t.erreurCreditBloque,

@@ -20,6 +20,10 @@ class ProblemeApi implements Exception {
   String? get detail => corps['detail'] as String?;
   bool get consentementRequis => status == 403 && (type ?? '').endsWith('consentement-requis');
 
+  /// Appareil déconnecté à distance (§10). Le contrat ne fixe pas encore ce `type` :
+  /// demandé au back-end, d'ici là aucun 403 n'efface l'appareil.
+  bool get appareilRevoque => status == 403 && (type ?? '').endsWith('appareil-revoque');
+
   @override
   String toString() => 'ProblemeApi($status, $corps)';
 }

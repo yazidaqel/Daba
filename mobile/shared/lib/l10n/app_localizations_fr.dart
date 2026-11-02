@@ -713,4 +713,20 @@ class TFr extends T {
 
   @override
   String get anoREMISE_PLAFOND_DEPASSE => 'Remise au-delà du plafond';
+
+  @override
+  String get erreurAutreAmbulant =>
+      'Un autre vendeur a des ventes pas encore envoyées sur ce téléphone. Il doit se reconnecter et synchroniser d\'abord.';
+
+  @override
+  String get docRejete => 'Refusé par le serveur : voir Synchronisation';
+
+  @override
+  String get tva => 'TVA';
+
+  @override
+  String get tvaAssujetti => 'Assujetti à la TVA';
+
+  @override
+  String get tvaNonAssujetti => 'Non assujetti à la TVA';
 }

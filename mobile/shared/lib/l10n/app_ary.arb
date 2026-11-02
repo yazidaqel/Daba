@@ -209,5 +209,10 @@
   "anoCHARGEMENT_EN_DOUBLE": "البون تشارجا جوج مرات",
   "anoPROMO_SANS_RETRAIT": "بعتي برومو كثر من اللي جبتي",
   "anoDEMANDE_NON_ATTRIBUEE": "وصلتي طلب خداه بياع آخر",
-  "anoREMISE_PLAFOND_DEPASSE": "التخفيض فات الحد"
+  "anoREMISE_PLAFOND_DEPASSE": "التخفيض فات الحد",
+  "erreurAutreAmbulant": "كاين بياع آخر عندو بيعات باقي ما تصيفطو ف هاد التيليفون. خاصو يدخل ويدير سانكرو هو الأول.",
+  "docRejete": "السيرفور رفضو: شوف السانكرو",
+  "tva": "TVA",
+  "tvaAssujetti": "خاضع ل TVA",
+  "tvaNonAssujetti": "ماشي خاضع ل TVA"
 }

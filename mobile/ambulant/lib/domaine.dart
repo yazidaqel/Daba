@@ -255,7 +255,13 @@ class Ambulant {
         }
         if (l.remise > 0) saisies.add({'nature': 'REMISE_PONCTUELLE', 'produitId': l.produitId, 'montant': -l.remise});
         for (final sa in saisies.skip(affichees.length)) {
-          affichees.add({...sa, 'libelle': libelle, 'montant': sa['montant'] ?? sa['quantite'] * sa['prixUnitaire']});
+          affichees.add({
+            ...sa,
+            'libelle': libelle,
+            'montant': sa['montant'] ?? sa['quantite'] * sa['prixUnitaire'],
+            // Référence de la campagne imprimée sur la ligne (RG-F3)
+            if (sa['campagneId'] case final String c) 'campagneNom': _nomCampagne(c),
+          });
         }
       }
       if (credit != 0) deltas[('SOLDE', hanoutId)] = credit;
@@ -302,6 +308,10 @@ class Ambulant {
     });
   }
 
+  Object _nomCampagne(String campagneId) =>
+      s.objets('PROMO', where: '${_j}campagneId\') = ?', args: [campagneId]).firstOrNull?['campagneNom'] ??
+      {'fr': campagneId.substring(0, 8)};
+
   // ------------------------------------------------------------------ versements, crédit, paramètres
   void versement(String hanoutId, int montant, {String mode = 'ESPECES', String? chequeNumero, String? chequeBanque}) {
     s.transaction(() {
@@ -328,7 +338,9 @@ class Ambulant {
   void definirPolitique(String politique) {
     s.transaction(() {
       s.enfiler('PARAMETRES_AMBULANT', {'politiqueDepassementCredit': politique});
-      s.enregistrer('PARAMETRES', 'local', {...parametres, 'politiqueDepassementCredit': politique}, local: true);
+      // Même ligne que celle du serveur, qui la remplacera au prochain tirage.
+      final id = s.db.select("SELECT id FROM objet WHERE entite = 'PARAMETRES'").firstOrNull?['id'] as String? ?? 'local';
+      s.enregistrer('PARAMETRES', id, {...parametres, 'politiqueDepassementCredit': politique}, local: true);
     });
   }
 

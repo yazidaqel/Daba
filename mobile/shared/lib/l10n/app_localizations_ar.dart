@@ -700,4 +700,20 @@ class TAr extends T {
 
   @override
   String get anoREMISE_PLAFOND_DEPASSE => 'تخفيض يتجاوز السقف';
+
+  @override
+  String get erreurAutreAmbulant =>
+      'لدى بائع آخر مبيعات لم تُرسل بعد على هذا الهاتف. يجب أن يعيد الاتصال ويزامن أولاً.';
+
+  @override
+  String get docRejete => 'رفضه الخادم: انظر المزامنة';
+
+  @override
+  String get tva => 'الضريبة على القيمة المضافة';
+
+  @override
+  String get tvaAssujetti => 'خاضع للضريبة على القيمة المضافة';
+
+  @override
+  String get tvaNonAssujetti => 'غير خاضع للضريبة على القيمة المضافة';
 }

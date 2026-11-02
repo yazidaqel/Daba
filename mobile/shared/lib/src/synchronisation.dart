@@ -27,7 +27,9 @@ class Synchronisation {
       await pousser();
       await tirer();
     } on ProblemeApi catch (e) {
-      if (e.status == 403 && !e.consentementRequis) throw const AppareilRevoque();
+      // Seule une révocation explicite efface l'appareil : un autre 403 (rôle) ne doit jamais
+      // détruire des pièces de vente pas encore remontées (RG-C4).
+      if (e.appareilRevoque) throw const AppareilRevoque();
       rethrow;
     }
     stockage.oublierDeltasAcquittes();
@@ -39,19 +41,31 @@ class Synchronisation {
       if (ops.isEmpty) return;
       final rep = await api.post('/v1/sync/operations', {'appareilId': appareilId, 'operations': ops})
           as Map<String, dynamic>;
-      final resultats = (rep['resultats'] as List).cast<Map<String, dynamic>>();
+      final envoyes = {for (final o in ops) o['id']};
+      final resultats = [
+        for (final r in (rep['resultats'] as List).cast<Map<String, dynamic>>())
+          if (envoyes.contains(r['operationId'])) r
+      ];
       stockage.transaction(() {
         for (final r in resultats) {
           stockage.marquer(r['operationId'] as String, r['statut'] as String, r);
+          final op = ops.firstWhere((o) => o['id'] == r['operationId']);
+          if (r['statut'] == 'REJETEE' && op['type'] == 'EMISSION_DOCUMENT') {
+            // Le document reste visible (jamais supprimé) mais marqué refusé par le serveur.
+            final id = op['donnees']['documentId'] as String?;
+            final doc = id == null ? null : stockage.objet('DOCUMENT', id);
+            if (doc != null) stockage.enregistrer('DOCUMENT', id!, {...doc, 'rejete': true}, local: true);
+          }
         }
       });
       // Un serveur qui n'acquitte rien ferait boucler : on retentera à la prochaine synchro.
-      if (stockage.nombreEnAttente >= ops.length && resultats.isEmpty) return;
+      if (resultats.isEmpty) return;
     }
   }
 
   Future<void> tirer() async {
     var curseur = stockage.lire('curseur');
+    var purger = false;
     while (true) {
       final Map<String, dynamic> lot;
       try {
@@ -59,13 +73,17 @@ class Synchronisation {
             as Map<String, dynamic>;
       } on ProblemeApi catch (e) {
         if (e.status != 410 || curseur == null) rethrow;
-        // Curseur trop ancien : resynchronisation complète, en gardant ce qui n'est pas encore remonté.
-        stockage.db.execute('DELETE FROM objet WHERE local = 0');
-        stockage.ecrire('curseur', null);
+        // Curseur trop ancien : resynchronisation complète. La copie locale n'est purgée qu'avec
+        // la première page reçue, pour ne jamais laisser l'appareil vide si le réseau retombe.
+        purger = true;
         curseur = null;
         continue;
       }
       stockage.transaction(() {
+        if (purger) {
+          stockage.db.execute('DELETE FROM objet WHERE local = 0');
+          purger = false;
+        }
         for (final c in (lot['changements'] as List).cast<Map<String, dynamic>>()) {
           appliquer(c);
         }
@@ -93,6 +111,9 @@ class Synchronisation {
         stockage.db.execute(
             "DELETE FROM objet WHERE entite = 'MOUVEMENT' AND local = 1 AND json_extract(donnees, '\$.operationId') = ?",
             [donnees['operationId']]);
+      case 'PARAMETRES':
+        // Les paramètres du serveur (mentions légales, politique) remplacent toute copie locale.
+        stockage.db.execute("DELETE FROM objet WHERE entite = 'PARAMETRES' AND id <> ?", [id]);
       case 'COMPTE_CREDIT':
         // Un compte créé sur l'appareil (plafond saisi hors ligne) est remplacé par celui du serveur.
         stockage.db.execute(

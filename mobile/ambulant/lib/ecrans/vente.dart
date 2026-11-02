@@ -269,14 +269,16 @@ class EcranDocument extends StatelessWidget {
         Text('${doc['hanout']['nom']} · ${date(doc['emisLe'] as String)}'),
         if (doc['statut'] != 'EMIS')
           Text(doc['statut'] == 'ANNULE' ? t.docAnnule : t.docPartiellementAnnule, style: TextStyle(color: Colors.red.shade700)),
+        if (doc['rejete'] == true) Text(t.docRejete, style: TextStyle(color: Colors.red.shade700)),
         const Divider(),
         for (final l in (doc['lignes'] as List).cast<Map>())
           ListTile(
             dense: true,
             title: Text(context.lib(l['libelle'])),
-            subtitle: Text(l['nature'] == 'ARTICLE'
-                ? '${l['quantite']} × ${dh(l['prixUnitaire'] as int)}${l['campagneId'] != null ? ' · ${t.promo}' : ''}'
-                : nomNature(t, l['nature'] as String)),
+            subtitle: Text([
+              if (l['nature'] == 'ARTICLE') '${l['quantite']} × ${dh(l['prixUnitaire'] as int)}' else nomNature(t, l['nature'] as String),
+              if (l['campagneNom'] != null) '${t.promo} ${context.lib(l['campagneNom'])}',
+            ].join(' · ')),
             trailing: Text(dh(l['montant'] as int)),
           ),
         const Divider(),

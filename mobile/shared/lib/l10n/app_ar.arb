@@ -209,5 +209,10 @@
   "anoCHARGEMENT_EN_DOUBLE": "وصل خروج مشحون مرتين",
   "anoPROMO_SANS_RETRAIT": "بيع عرض يتجاوز الكمية المسحوبة",
   "anoDEMANDE_NON_ATTRIBUEE": "تسليم طلب أخذه بائع آخر",
-  "anoREMISE_PLAFOND_DEPASSE": "تخفيض يتجاوز السقف"
+  "anoREMISE_PLAFOND_DEPASSE": "تخفيض يتجاوز السقف",
+  "erreurAutreAmbulant": "لدى بائع آخر مبيعات لم تُرسل بعد على هذا الهاتف. يجب أن يعيد الاتصال ويزامن أولاً.",
+  "docRejete": "رفضه الخادم: انظر المزامنة",
+  "tva": "الضريبة على القيمة المضافة",
+  "tvaAssujetti": "خاضع للضريبة على القيمة المضافة",
+  "tvaNonAssujetti": "غير خاضع للضريبة على القيمة المضافة"
 }

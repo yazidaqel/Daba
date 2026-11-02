@@ -1359,6 +1359,36 @@ abstract class T {
   /// In fr, this message translates to:
   /// **'Remise au-delà du plafond'**
   String get anoREMISE_PLAFOND_DEPASSE;
+
+  /// No description provided for @erreurAutreAmbulant.
+  ///
+  /// In fr, this message translates to:
+  /// **'Un autre vendeur a des ventes pas encore envoyées sur ce téléphone. Il doit se reconnecter et synchroniser d\'abord.'**
+  String get erreurAutreAmbulant;
+
+  /// No description provided for @docRejete.
+  ///
+  /// In fr, this message translates to:
+  /// **'Refusé par le serveur : voir Synchronisation'**
+  String get docRejete;
+
+  /// No description provided for @tva.
+  ///
+  /// In fr, this message translates to:
+  /// **'TVA'**
+  String get tva;
+
+  /// No description provided for @tvaAssujetti.
+  ///
+  /// In fr, this message translates to:
+  /// **'Assujetti à la TVA'**
+  String get tvaAssujetti;
+
+  /// No description provided for @tvaNonAssujetti.
+  ///
+  /// In fr, this message translates to:
+  /// **'Non assujetti à la TVA'**
+  String get tvaNonAssujetti;
 }
 
 class _TDelegate extends LocalizationsDelegate<T> {
