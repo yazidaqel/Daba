@@ -1,0 +1,330 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:daba_shared/daba_shared.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:path_provider/path_provider.dart';
+
+import 'domaine.dart';
+
+enum Etape { connexion, consentement, pinCreation, verrouille, pret }
+
+/// Version du texte d'information CNDP affiché (journalisée avec le consentement).
+const versionTexteCndp = '2026-11-v1';
+
+/// État de l'app : session, synchronisation, disponibilité (dépannage).
+class Daba extends ChangeNotifier with WidgetsBindingObserver {
+  Daba(this.stockage, this.api, this._coffre) {
+    final session = stockage.lire('session');
+    if (session != null) _ouvrir(jsonDecode(session) as Map<String, dynamic>);
+    locale = localeDuCode(stockage.lire('langue'));
+    api.langue = codeLangue(locale);
+  }
+
+  static Future<Daba> demarrer() async {
+    final dossier = await getApplicationSupportDirectory();
+    final daba = Daba(
+      Stockage.ouvrir('${dossier.path}/daba.db'),
+      Api(const String.fromEnvironment('DABA_API', defaultValue: 'http://10.0.2.2:4010')),
+      const FlutterSecureStorage(),
+    );
+    await daba._chargerSecrets();
+    return daba;
+  }
+
+  final Stockage stockage;
+  final Api api;
+  final FlutterSecureStorage _coffre;
+
+  Etape etape = Etape.connexion;
+  late Locale locale;
+  Ambulant? metier;
+  Synchronisation? _sync;
+  Timer? _minuteurSync;
+
+  bool horsLigne = false;
+  bool reconnexionRequise = false;
+  DateTime? derniereSync;
+
+  Ambulant get m => metier!;
+  int get enAttente => stockage.nombreEnAttente;
+
+  /// Identifiant stable de l'appareil (RG-S2), généré une fois sur le téléphone.
+  String get appareilId {
+    final id = stockage.lire('appareilId') ?? Stockage.nouvelId();
+    stockage.ecrire('appareilId', id);
+    return id;
+  }
+
+  void choisirLangue(Locale l) {
+    locale = l;
+    api.langue = codeLangue(l);
+    stockage.ecrire('langue', codeLangue(l));
+    notifyListeners();
+  }
+
+  // ------------------------------------------------------------------ session
+  Future<void> _chargerSecrets() async {
+    api.jeton = await _coffre.read(key: 'jeton');
+    if (metier != null && api.jeton != null) {
+      etape = stockage.lire('consentement') == null
+          ? Etape.consentement
+          : (await _coffre.read(key: 'pin') == null ? Etape.pinCreation : Etape.verrouille);
+    } else {
+      etape = Etape.connexion;
+    }
+    WidgetsBinding.instance.addObserver(this);
+    notifyListeners();
+  }
+
+  void _ouvrir(Map<String, dynamic> session) {
+    final u = session['utilisateur'] as Map<String, dynamic>;
+    metier = Ambulant(stockage,
+        appareilId: appareilId,
+        prefixe: session['prefixeNumerotation'] as String,
+        utilisateurId: u['id'] as String,
+        nom: (u['nom'] ?? '') as String);
+    _sync = Synchronisation(stockage, api, appareilId: appareilId);
+  }
+
+  Future<int> demanderOtp(String telephone) async {
+    final r = await api.post('/v1/auth/otp', {'telephone': telephone, 'langue': codeLangue(locale)});
+    return (r as Map)['expireDans'] as int;
+  }
+
+  /// Vérifie l'OTP. Une reconnexion (jeton expiré) garde l'appareil et ses données locales.
+  Future<void> verifierOtp(String telephone, String code) async {
+    final session = await api.post('/v1/auth/otp/verify', {'telephone': telephone, 'code': code, 'appareilId': appareilId})
+        as Map<String, dynamic>;
+    if (!(session['utilisateur']['roles'] as List).contains('AMBULANT') || session['prefixeNumerotation'] == null) {
+      throw ProblemeApi(403, {'type': 'role'});
+    }
+    final ancien = stockage.lire('session');
+    if (ancien != null && (jsonDecode(ancien) as Map)['utilisateur']['id'] != session['utilisateur']['id']) {
+      stockage.effacerTout(); // autre ambulant sur ce téléphone : rien de l'ancien ne doit rester
+    }
+    await _coffre.write(key: 'jeton', value: session['accessToken'] as String);
+    api.jeton = session['accessToken'] as String;
+    stockage.ecrire('session', jsonEncode({...session}..remove('accessToken')..remove('refreshToken')));
+    _ouvrir(session);
+    reconnexionRequise = false;
+    if (stockage.lire('consentement') == null) {
+      try {
+        final c = await api.get('/v1/moi/consentement') as Map<String, dynamic>;
+        if (c['traitementDonnees'] == true) stockage.ecrire('consentement', jsonEncode(c));
+      } on ProblemeApi catch (_) {
+        // 404 : aucun consentement enregistré
+      }
+    }
+    etape = stockage.lire('consentement') == null
+        ? Etape.consentement
+        : (await _coffre.read(key: 'pin') == null ? Etape.pinCreation : Etape.pret);
+    if (etape == Etape.pret) _demarrerSync();
+    notifyListeners();
+  }
+
+  bool get consentGeolocalisation =>
+      (jsonDecode(stockage.lire('consentement') ?? '{}') as Map)['geolocalisation'] == true;
+
+  /// Consentement CNDP (loi 09-08), exigé par le serveur avant toute opération.
+  Future<void> consentir({required bool geolocalisation}) async {
+    final c = await api.put('/v1/moi/consentement', {
+      'versionTexte': versionTexteCndp,
+      'traitementDonnees': true,
+      'geolocalisation': geolocalisation,
+      'langue': codeLangue(locale),
+    });
+    stockage.ecrire('consentement', jsonEncode(c));
+    if (!geolocalisation && disponible) await changerDisponibilite(false);
+    if (etape == Etape.consentement) {
+      etape = await _coffre.read(key: 'pin') == null ? Etape.pinCreation : Etape.pret;
+      if (etape == Etape.pret) _demarrerSync();
+    }
+    notifyListeners();
+  }
+
+  // ------------------------------------------------------------------ PIN local (§10)
+  int _essais = 0;
+
+  Future<void> definirPin(String pin) async {
+    await _coffre.write(key: 'pin', value: pin);
+    etape = Etape.pret;
+    _demarrerSync();
+    notifyListeners();
+  }
+
+  /// Cinq erreurs ferment la session : il faut repasser par l'OTP.
+  Future<bool> deverrouiller(String pin) async {
+    if (pin == await _coffre.read(key: 'pin')) {
+      _essais = 0;
+      etape = Etape.pret;
+      _demarrerSync();
+      notifyListeners();
+      return true;
+    }
+    if (++_essais >= 5) await deconnecter();
+    return false;
+  }
+
+  DateTime? _misEnFond;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) _misEnFond = DateTime.now();
+    if (state == AppLifecycleState.resumed && etape == Etape.pret && _misEnFond != null &&
+        DateTime.now().difference(_misEnFond!) > const Duration(minutes: 2)) {
+      etape = Etape.verrouille;
+      notifyListeners();
+    }
+  }
+
+  /// Ferme la session. Les opérations non remontées restent sur l'appareil, sauf `effacer`
+  /// (appareil déconnecté à distance).
+  Future<void> deconnecter({bool effacer = false}) async {
+    _minuteurSync?.cancel();
+    if (disponible) await changerDisponibilite(false).catchError((_) {});
+    await _coffre.delete(key: 'jeton');
+    await _coffre.delete(key: 'pin');
+    api.jeton = null;
+    if (effacer) stockage.effacerTout();
+    _essais = 0;
+    etape = Etape.connexion;
+    notifyListeners();
+  }
+
+  // ------------------------------------------------------------------ synchronisation
+  void _demarrerSync() {
+    _minuteurSync?.cancel();
+    _minuteurSync = Timer.periodic(const Duration(minutes: 1), (_) => synchroniser());
+    synchroniser();
+  }
+
+  /// Sans réseau, ne fait rien de plus que noter l'état : la file attend le prochain essai.
+  Future<void> synchroniser() async {
+    final sync = _sync;
+    if (sync == null || reconnexionRequise) return;
+    try {
+      await sync.synchroniser();
+      horsLigne = false;
+      derniereSync = DateTime.now();
+    } on HorsLigne {
+      horsLigne = true;
+    } on AppareilRevoque {
+      await deconnecter(effacer: true);
+    } on ProblemeApi catch (e) {
+      if (e.status == 401) reconnexionRequise = true;
+      if (e.consentementRequis) {
+        stockage.ecrire('consentement', null);
+        etape = Etape.consentement;
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Après un geste local : rafraîchit l'écran et tente de remonter tout de suite.
+  void apresGeste() {
+    notifyListeners();
+    synchroniser();
+  }
+
+  // ------------------------------------------------------------------ dépannage (en ligne, §3.7)
+  bool disponible = false;
+  Position? position;
+  List<Map<String, dynamic>> demandes = [];
+  Timer? _minuteurDispo;
+  final _nouvelles = StreamController<Map<String, dynamic>>.broadcast();
+
+  /// Nouvelle demande proposée (alerte).
+  Stream<Map<String, dynamic>> get nouvellesDemandes => _nouvelles.stream;
+
+  /// Active ou coupe la disponibilité. La position n'est lue et envoyée que si l'ambulant
+  /// est disponible et a consenti à la géolocalisation (CNDP).
+  Future<void> changerDisponibilite(bool actif) async {
+    if (actif) {
+      position = await _lirePosition();
+      await api.put('/v1/ambulant/disponibilite',
+          {'disponible': true, 'position': {'lat': position!.latitude, 'lon': position!.longitude}});
+      disponible = true;
+      _minuteurDispo?.cancel();
+      var tour = 0;
+      _minuteurDispo = Timer.periodic(const Duration(seconds: 30), (_) async {
+        if (++tour % 4 == 0) await _envoyerPosition().catchError((_) {});
+        await chargerDemandes().catchError((_) {});
+      });
+      await chargerDemandes();
+    } else {
+      _minuteurDispo?.cancel();
+      disponible = false;
+      position = null;
+      notifyListeners();
+      await api.put('/v1/ambulant/disponibilite', {'disponible': false});
+    }
+    notifyListeners();
+  }
+
+  Future<Position> _lirePosition() async {
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
+    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+      throw const PermissionRefusee();
+    }
+    return Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium));
+  }
+
+  Future<void> _envoyerPosition() async {
+    if (!disponible) return;
+    position = await _lirePosition();
+    await api.put('/v1/ambulant/disponibilite',
+        {'disponible': true, 'position': {'lat': position!.latitude, 'lon': position!.longitude}});
+  }
+
+  Future<void> chargerDemandes() async {
+    final page = await api.get('/v1/demandes-depannage') as Map<String, dynamic>;
+    final connues = {for (final d in demandes) d['id']};
+    demandes = (page['contenu'] as List).cast<Map<String, dynamic>>();
+    for (final d in demandes) {
+      // Le hanout de la demande doit exister localement pour y rattacher la vente (RG-D4).
+      final h = d['hanout'] as Map<String, dynamic>?;
+      if (h != null && stockage.objet('HANOUT', h['id'] as String) == null) {
+        stockage.enregistrer('HANOUT', h['id'] as String, {'id': h['id'], 'nom': h['nom'], 'position': h['position']});
+      }
+      if (d['statut'] == 'EN_ATTENTE' && !connues.contains(d['id'])) _nouvelles.add(d);
+    }
+    notifyListeners();
+  }
+
+  Future<void> agirDemande(String id, String action) async {
+    if (action == 'refus') {
+      await api.post('/v1/demandes-depannage/$id/refus');
+      demandes.removeWhere((d) => d['id'] == id);
+    } else {
+      final d = await api.post('/v1/demandes-depannage/$id/$action') as Map<String, dynamic>;
+      demandes = [for (final x in demandes) x['id'] == id ? d : x];
+    }
+    notifyListeners();
+  }
+
+  // ------------------------------------------------------------------ promos (réservation en ligne, §3.6)
+  /// L'`id` est créé avant l'envoi : un nouvel essai après coupure ne crée pas de seconde réservation.
+  Future<Map<String, dynamic>> reserver(String offreId, int quantite, {String? id}) async {
+    final r = await api.post('/v1/reservations', {'id': id ?? Stockage.nouvelId(), 'offreId': offreId, 'quantite': quantite})
+        as Map<String, dynamic>;
+    stockage.enregistrer('RESERVATION', r['id'] as String, r);
+    notifyListeners();
+    return r;
+  }
+
+  @override
+  void dispose() {
+    _minuteurSync?.cancel();
+    _minuteurDispo?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+}
+
+class PermissionRefusee implements Exception {
+  const PermissionRefusee();
+}

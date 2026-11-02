@@ -11,6 +11,22 @@ Référence : cahier des charges §3 (app ambulant), §6 (app hanout), §10 (hor
 - Code PIN local, déconnexion à distance d'un appareil perdu.
 - Le contrat d'API `../api/openapi.yaml` se lit, il ne se modifie pas ici : demander le changement côté back-end.
 
+## Structure
+
+- `shared/` (package `daba_shared`) : client HTTP du contrat (`lib/src/api.dart`, corps JSON au format du contrat), base SQLite et file d'opérations (`lib/src/stockage.dart`), synchronisation (`lib/src/synchronisation.dart`), langues et traductions (`lib/src/langues.dart`, `lib/l10n/*.arb`).
+- `ambulant/` : app du vendeur ambulant (lot 1). Logique métier hors ligne dans `lib/domaine.dart`, état et appels en ligne dans `lib/etat.dart`, écrans dans `lib/ecrans/`.
+- Pas de client généré par openapi-generator : le générateur Dart (7.27) aplatit les `oneOf` à discriminant (`Operation`, `Changement`, `Remise`) sur une seule branche et perdrait des données. Le test `ambulant/test/vente_test.dart` vérifie à la place les opérations produites contre `../api/openapi.yaml`.
+- Stock et solde affichés = dernier état serveur + `delta_local` des opérations non encore reflétées ; ces deltas sont effacés après une poussée suivie d'un tirage complet.
+
 ## Commandes
 
-À compléter dès que le squelette existe.
+Prérequis : Flutter 3.47.9 (Dart 3.13.7), Android SDK, Node (pour le mock).
+
+- Dépendances : `cd mobile/shared && flutter pub get`, puis `cd mobile/ambulant && flutter pub get`
+- Traductions (après modification d'un `.arb`) : `cd mobile/shared && flutter gen-l10n` (fichiers générés commités)
+- Analyse : `cd mobile && dart analyze shared ambulant`
+- Tests : `cd mobile/shared && flutter test`, puis `cd mobile/ambulant && flutter test`
+- Mock du contrat (port 4010, à la racine du dépôt) : `npx @stoplight/prism-cli@5 mock -h 0.0.0.0 api/openapi.yaml`
+- Émulateur Android 8 à 2 Go de RAM : AVD `daba_api26` (`system-images;android-26;google_apis;x86_64`, `hw.ramSize=2048`), puis `emulator -avd daba_api26`
+- Lancer sur l'émulateur contre le mock : `cd mobile/ambulant && flutter run -d emulator-5554` (API par défaut `http://10.0.2.2:4010`)
+- Autre serveur : `flutter run --dart-define=DABA_API=http://10.0.2.2:8080` (back-end local)
