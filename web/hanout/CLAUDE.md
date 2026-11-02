@@ -17,7 +17,7 @@ Depuis `web/hanout/` :
 - Icônes PWA : générées au build depuis `public/logo.svg` (`pwa-assets.config.ts`)
 
 Ouvrir un lien SMS en local : http://localhost:5173/l/abcdefghijklmnopqrst (jeton de 16 caractères ou plus), code au choix sur 6 chiffres.
-Le mock tire les rôles au hasard : si la connexion répond « pas une boutique », recommencer. On peut aussi ouvrir une session à la main dans la console :
+Avec le mock, le proxy de `dev` et `preview` ajoute `Prefer: example=hanout` à `POST /v1/auth/otp/verify` : la connexion rend toujours une session hanout. On peut aussi ouvrir une session à la main dans la console :
 `localStorage.setItem('daba.session', JSON.stringify({ accessToken: 'x' }))`.
 
 Vérifications faites le 2 novembre 2026 (machine chargée, indice CPU Lighthouse ≈ 450–570) :
@@ -28,7 +28,8 @@ Vérifications faites le 2 novembre 2026 (machine chargée, indice CPU Lighthous
 ## Repères
 
 - Textes : `src/textes.ts`, une entrée par langue (fr, ar, ary-Arab, ary-Latn) ; le type impose chaque clé partout. Aucun texte en dur, propriétés CSS logiques (`ms-`, `me-`, `text-end`).
-- Client API typé : `src/api/client.ts` (openapi-fetch). Les endpoints absents du contrat (réception / écart, contestation) sont typés à la main dans `src/api/a-venir.ts`, à remplacer dès qu'ils arrivent dans `api/openapi.yaml`.
-- Session : jeton dans `localStorage`, pas d'expiration locale ; un 401 renvoie à la connexion OTP, un 403 `consentement-requis` à l'écran de consentement CNDP.
+- Client API typé : `src/api/client.ts` (openapi-fetch, types générés depuis le contrat v0.4.0). Les décisions se prennent sur le code de `Problem.type`, jamais sur `detail`.
+- Session : jetons dans `localStorage`, pas d'expiration locale. Sur 401, `POST /v1/auth/refresh` puis la requête est rejouée une fois ; si le renouvellement échoue, retour à l'OTP. Un 403 `appareil-revoque` efface les données locales, un 403 `consentement-requis` mène à l'écran CNDP. La déconnexion appelle `POST /v1/auth/deconnexion`.
+- Réception : `Document.receptionHanout` (distincte de `confirmationHanout`, signée chez l'ambulant). Un 409 veut dire réception déjà acquise : la PWA propose la contestation. Une seule contestation ouverte par cible (`GET /v1/contestations?cibleId=&statut=OUVERTE`).
 - Hors ligne : le service worker garde l'appli et les dernières réponses GET (`api`, vidé à la déconnexion). Le signalement de rupture exige le réseau (même id rejoué : idempotent).
 - Suivi d'une demande : sondage toutes les 15 s (la PWA ne reçoit pas de push, §6).

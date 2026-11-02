@@ -37,6 +37,63 @@ describe('outils', () => {
 const json = (corps: unknown, status = 200) =>
   new Response(JSON.stringify(corps), { status, headers: { 'Content-Type': 'application/json' } })
 
+describe('session', () => {
+  it('renouvelle un jeton expiré sans nouvel OTP, puis rejoue la requête', async () => {
+    localStorage.setItem('daba.session', JSON.stringify({ accessToken: 'vieux', refreshToken: 'r1' }))
+    const compte = { id: 'c1', ambulant: { id: 'a1', nom: 'Hamid' }, solde: 5000 }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (req: Request | string, init?: RequestInit) => {
+        if (typeof req === 'string') {
+          expect(JSON.parse(String(init?.body))).toEqual({ refreshToken: 'r1' })
+          return json({ accessToken: 'neuf', refreshToken: 'r2' })
+        }
+        if (req.headers.get('Authorization') !== 'Bearer neuf') return json({ type: 'https://daba.ma/problemes/non-authentifie' }, 401)
+        return json({ page: 0, taille: 200, total: 1, contenu: [compte] })
+      }),
+    )
+    history.replaceState(null, '', '/comptes')
+    render(<App />)
+
+    expect(await screen.findByText('Hamid')).toBeTruthy()
+    expect(location.pathname).toBe('/comptes')
+    expect(JSON.parse(localStorage.getItem('daba.session')!).accessToken).toBe('neuf')
+  })
+
+  it('garde la session si le renouvellement tombe sur une panne du serveur', async () => {
+    localStorage.setItem('daba.session', JSON.stringify({ accessToken: 'vieux', refreshToken: 'r1' }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (req: Request | string) => (typeof req === 'string' ? json({}, 503) : json({}, 401))),
+    )
+    history.replaceState(null, '', '/comptes')
+    render(<App />)
+
+    expect(await screen.findByRole('button', { name: 'Réessayer' })).toBeTruthy()
+    expect(location.pathname).toBe('/comptes')
+    expect(JSON.parse(localStorage.getItem('daba.session')!).refreshToken).toBe('r1')
+  })
+
+  it('efface la session sur un appareil révoqué, mais pas sur un autre 403', async () => {
+    localStorage.setItem('daba.session', JSON.stringify({ accessToken: 'x' }))
+    let type = 'role-non-autorise'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json({ type: `https://daba.ma/problemes/${type}`, status: 403 }, 403)),
+    )
+    history.replaceState(null, '', '/comptes')
+    const { unmount } = render(<App />)
+    expect(await screen.findByRole('button', { name: 'Réessayer' })).toBeTruthy()
+    expect(localStorage.getItem('daba.session')).not.toBeNull()
+    unmount()
+
+    type = 'appareil-revoque'
+    render(<App />)
+    expect(await screen.findByText(/déconnecté à distance/)).toBeTruthy()
+    expect(localStorage.getItem('daba.session')).toBeNull()
+  })
+})
+
 describe('rupture', () => {
   it('signale une rupture en deux gestes : produit puis quantité', async () => {
     localStorage.setItem('daba.session', JSON.stringify({ accessToken: 'jeton' }))

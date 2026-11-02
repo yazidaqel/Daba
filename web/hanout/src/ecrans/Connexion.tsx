@@ -1,6 +1,6 @@
 import { MessageSquare } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { api, type S } from '@/api/client'
+import { api, codeProbleme, type S } from '@/api/client'
 import { Alerte, champ } from '@/components/commun'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
@@ -20,13 +20,13 @@ async function apresConnexion(suite: string) {
 const ERREURS: Record<number, Cle> = { 401: 'erreur.code', 410: 'erreur.lienExpire', 429: 'erreur.tropTentatives' }
 
 /** Connexion OTP sans mot de passe, depuis un lien SMS signé (`jeton`) ou par numéro. */
-export function Connexion({ jeton, suite = '/' }: { jeton?: string; suite?: string }) {
+export function Connexion({ jeton, suite = '/', revoque }: { jeton?: string; suite?: string; revoque?: boolean }) {
   const { t, langue } = useI18n()
   const [lien, setLien] = useState<S['LienCible']>()
   const [etape, setEtape] = useState<'telephone' | 'code'>('telephone')
   const [saisie, setSaisie] = useState('')
   const [code, setCode] = useState('')
-  const [erreur, setErreur] = useState<Cle>()
+  const [erreur, setErreur] = useState<Cle | undefined>(revoque ? 'erreur.appareilRevoque' : undefined)
   const [occupe, setOccupe] = useState(false)
 
   useEffect(() => {
@@ -52,6 +52,7 @@ export function Connexion({ jeton, suite = '/' }: { jeton?: string; suite?: stri
       if (response.ok) await suiteOk()
       else {
         if (response.status === 410) setLien(undefined)
+        if ((await codeProbleme(response)) === 'appareil-revoque') return setErreur('erreur.appareilRevoque')
         setErreur(ERREURS[response.status] ?? (response.status === 400 ? 'erreur.telephone' : 'erreur.generique'))
       }
     } catch {

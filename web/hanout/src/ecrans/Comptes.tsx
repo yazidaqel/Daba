@@ -1,4 +1,4 @@
-import { Banknote, CircleCheck, FileText, Scale, ShoppingCart, Undo2 } from 'lucide-react'
+import { Banknote, FileText, Scale, ShoppingCart, Undo2 } from 'lucide-react'
 import { useState } from 'react'
 import { api, type S } from '@/api/client'
 import { carte, Etat, Vide } from '@/components/commun'
@@ -7,7 +7,7 @@ import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useApi } from '@/outils'
 import { Lien } from '@/router'
-import { Contestation } from './Contestation'
+import { Contestation, ContestationEnCours, useContestationOuverte } from './Contestation'
 
 /** Solde dû à chaque ambulant (karni vu du hanout). */
 export function Comptes() {
@@ -46,8 +46,8 @@ type Ecriture = S['Releve']['ecritures'][number]
 export function Releve({ id }: { id: string }) {
   const { t, montant, date } = useI18n()
   const r = useApi(() => api.GET('/v1/karni/comptes/{compteId}/releve', { params: { path: { compteId: id } } }), [id])
+  const contestation = useContestationOuverte(id)
   const [contester, setContester] = useState(false)
-  const [envoye, setEnvoye] = useState(false)
   if (!r.data) return <Etat {...r} />
   const { compte, ecritures } = r.data
   const signe = (e: Ecriture) => (e.nature === 'ACHAT_CREDIT' ? '+' : '−')
@@ -59,19 +59,14 @@ export function Releve({ id }: { id: string }) {
         <p className="text-3xl font-bold">{montant(compte.solde)}</p>
       </header>
 
-      {envoye && (
-        <output className="flex items-center gap-2 font-semibold text-succes">
-          <CircleCheck />
-          {t('envoye')}
-        </output>
-      )}
+      {contestation.ouverte && <ContestationEnCours c={contestation.ouverte} />}
       {contester ? (
         <Contestation
           cible="COMPTE_CREDIT"
           cibleId={compte.id}
-          onFini={(ok) => {
+          onFini={() => {
             setContester(false)
-            setEnvoye(ok)
+            contestation.recharger()
           }}
         />
       ) : (
@@ -82,7 +77,7 @@ export function Releve({ id }: { id: string }) {
               {t('solde.documents')}
             </Lien>
           </Button>
-          {!envoye && (
+          {!contestation.ouverte && !contestation.chargement && (
             <Button variant="outline" onClick={() => setContester(true)}>
               <Scale />
               {t('solde.contester')}

@@ -1,5 +1,6 @@
 import { FileText, LogOut, PackageSearch, ShieldCheck, Wallet } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { deconnecter } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Comptes, Releve } from '@/ecrans/Comptes'
 import { Connexion } from '@/ecrans/Connexion'
@@ -11,7 +12,7 @@ import { Rupture } from '@/ecrans/Rupture'
 import { changerLangue, LANGUES, useI18n, type Langue } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { correspond, Lien, naviguer, useUrl } from '@/router'
-import { fermerSession, lireSession } from '@/session'
+import { lireSession } from '@/session'
 
 type Rendu = (p: Record<string, string>, q: URLSearchParams) => ReactNode
 
@@ -43,7 +44,9 @@ export function App() {
   let contenu: ReactNode
   if (lien) contenu = <Connexion key={lien.jeton} jeton={lien.jeton} />
   else if (!connecte || chemin === '/connexion')
-    contenu = <Connexion suite={chemin === '/connexion' ? (q.get('suite') ?? '/') : url} />
+    contenu = (
+      <Connexion suite={chemin === '/connexion' ? (q.get('suite') ?? '/') : url} revoque={q.has('revoque')} />
+    )
   else {
     const route = ROUTES.map(([motif, rendu]) => [correspond(motif, chemin), rendu] as const).find(([p]) => p)
     contenu = route?.[0] ? route[1](route[0], q) : <Rupture />
@@ -81,7 +84,7 @@ export function App() {
             size="icon"
             aria-label={t('deconnexion')}
             onClick={() => {
-              fermerSession()
+              deconnecter()
               naviguer('/connexion')
             }}
           >

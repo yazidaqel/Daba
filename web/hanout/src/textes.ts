@@ -14,7 +14,6 @@ const fr = {
   vide: 'Rien pour le moment',
   annuler: 'Annuler',
   envoyer: 'Envoyer',
-  envoye: 'Envoyé. Le vendeur est prévenu.',
   retour: 'Retour',
 
   'connexion.titre': 'Connexion',
@@ -31,6 +30,7 @@ const fr = {
   'erreur.lienExpire': 'Ce lien a expiré. Entrez votre numéro.',
   'erreur.lienInvalide': 'Ce lien ne marche pas. Entrez votre numéro.',
   'erreur.pasHanout': "Ce numéro n'est pas celui d'une boutique Daba.",
+  'erreur.appareilRevoque': 'Ce téléphone a été déconnecté à distance. Appelez le support Daba.',
   'erreur.photo': 'Photo illisible ou trop lourde. Reprenez la photo.',
   'donnees.telecharger': 'Télécharger mes données',
   'donnees.retirer': 'Retirer mon accord et me déconnecter',
@@ -80,6 +80,8 @@ const fr = {
   'doc.ecart': "Ce n'est pas la bonne quantité",
   'doc.quantiteRecue': 'Quantité reçue',
   'doc.confirmeLe': 'Réception confirmée le {date}',
+  'doc.ecartLe': 'Écart signalé le {date}. Le vendeur est prévenu.',
+  'doc.receptionAcquise': 'La réception est déjà enregistrée. Si quelque chose ne va pas, contestez.',
   'doc.contester': 'Contester ce bon',
   'docs.titre': 'Mes bons et factures',
   'docs.plus': 'Voir plus',
@@ -102,6 +104,7 @@ const fr = {
   'motif.DEJA_PAYE': "J'ai déjà payé",
   'motif.AUTRE': 'Autre chose',
   'contestation.commentaire': 'Expliquez (facultatif)',
+  'contestation.enCours': 'Contestation envoyée le {date} : {motif}. Le vendeur doit répondre.',
 }
 
 export type Cle = keyof typeof fr
@@ -119,7 +122,6 @@ const ar: Record<Cle, string> = {
   vide: 'لا شيء حاليا',
   annuler: 'إلغاء',
   envoyer: 'إرسال',
-  envoye: 'تم الإرسال. تم إخبار البائع.',
   retour: 'رجوع',
 
   'connexion.titre': 'تسجيل الدخول',
@@ -136,6 +138,7 @@ const ar: Record<Cle, string> = {
   'erreur.lienExpire': 'انتهت صلاحية هذا الرابط. أدخل رقمك.',
   'erreur.lienInvalide': 'هذا الرابط لا يعمل. أدخل رقمك.',
   'erreur.pasHanout': 'هذا الرقم ليس رقم متجر مسجل في Daba.',
+  'erreur.appareilRevoque': 'تم فصل هذا الهاتف عن بعد. اتصل بدعم Daba.',
   'erreur.photo': 'الصورة غير واضحة أو ثقيلة جدا. التقط صورة أخرى.',
   'donnees.telecharger': 'تحميل بياناتي',
   'donnees.retirer': 'سحب موافقتي وتسجيل الخروج',
@@ -185,6 +188,8 @@ const ar: Record<Cle, string> = {
   'doc.ecart': 'الكمية غير مطابقة',
   'doc.quantiteRecue': 'الكمية المستلمة',
   'doc.confirmeLe': 'تم تأكيد الاستلام في {date}',
+  'doc.ecartLe': 'تم الإبلاغ عن فرق في {date}. تم إخبار البائع.',
+  'doc.receptionAcquise': 'الاستلام مسجل مسبقا. إذا كان هناك خطأ، قدّم اعتراضا.',
   'doc.contester': 'الاعتراض على الوثيقة',
   'docs.titre': 'وثائقي',
   'docs.plus': 'عرض المزيد',
@@ -207,6 +212,7 @@ const ar: Record<Cle, string> = {
   'motif.DEJA_PAYE': 'دفعت من قبل',
   'motif.AUTRE': 'سبب آخر',
   'contestation.commentaire': 'اشرح (اختياري)',
+  'contestation.enCours': 'تم إرسال الاعتراض في {date}: {motif}. على البائع أن يرد.',
 }
 
 const aryArab: Record<Cle, string> = {
@@ -222,7 +228,6 @@ const aryArab: Record<Cle, string> = {
   vide: 'والو دابا',
   annuler: 'رجع',
   envoyer: 'صيفط',
-  envoye: 'تصيفط. الموزّع عرف.',
   retour: 'رجع',
 
   'connexion.titre': 'دخول',
@@ -239,6 +244,7 @@ const aryArab: Record<Cle, string> = {
   'erreur.lienExpire': 'هاد الليان سالا. دخّل النمرة ديالك.',
   'erreur.lienInvalide': 'هاد الليان ماخدامش. دخّل النمرة ديالك.',
   'erreur.pasHanout': 'هاد النمرة ماشي ديال شي حانوت ف Daba.',
+  'erreur.appareilRevoque': 'هاد التيليفون تقطع عليه الحساب من بعيد. عيّط لـ Daba.',
   'erreur.photo': 'التصويرة ماباناتش ولا تقيلة بزاف. عاود صوّر.',
   'donnees.telecharger': 'نزّل المعلومات ديالي',
   'donnees.retirer': 'حيّد الموافقة ديالي وخرج',
@@ -288,6 +294,8 @@ const aryArab: Record<Cle, string> = {
   'doc.ecart': 'العدد ماشي مضبوط',
   'doc.quantiteRecue': 'شحال وصلك',
   'doc.confirmeLe': 'أكّدتي الوصول نهار {date}',
+  'doc.ecartLe': 'صيفطتي بلي العدد ماشي مضبوط نهار {date}. الموزّع عرف.',
+  'doc.receptionAcquise': 'الوصول ديجا مسجّل. إلا كان شي مشكل، دير اعتراض.',
   'doc.contester': 'عندي اعتراض',
   'docs.titre': 'البونات والفاكتورات',
   'docs.plus': 'شوف كثر',
@@ -310,6 +318,7 @@ const aryArab: Record<Cle, string> = {
   'motif.DEJA_PAYE': 'راني خلّصت',
   'motif.AUTRE': 'حاجة أخرى',
   'contestation.commentaire': 'شرح (إلا بغيتي)',
+  'contestation.enCours': 'صيفطتي اعتراض نهار {date}: {motif}. خاص الموزّع يجاوب.',
 }
 
 const aryLatn: Record<Cle, string> = {
@@ -325,7 +334,6 @@ const aryLatn: Record<Cle, string> = {
   vide: 'Walou daba',
   annuler: 'Rje3',
   envoyer: 'Sifet',
-  envoye: 'Tsifet. Lmowazi3 3ref.',
   retour: 'Rje3',
 
   'connexion.titre': 'Dkhoul',
@@ -342,6 +350,7 @@ const aryLatn: Record<Cle, string> = {
   'erreur.lienExpire': 'Had lien sala. Dekhel nmra dyalek.',
   'erreur.lienInvalide': 'Had lien makhdamch. Dekhel nmra dyalek.',
   'erreur.pasHanout': 'Had nmra machi dyal chi 7anout f Daba.',
+  'erreur.appareilRevoque': 'Had tilifoun t9ta3 3lih l7sab mn b3id. 3iyet l Daba.',
   'erreur.photo': 'Tsswira mabanatch wla t9ila bzaf. 3awed sawwer.',
   'donnees.telecharger': 'Nezzel lma3loumat dyali',
   'donnees.retirer': '7iyed lmowaf9a dyali w khrej',
@@ -391,6 +400,8 @@ const aryLatn: Record<Cle, string> = {
   'doc.ecart': '3adad machi madbout',
   'doc.quantiteRecue': 'Ch7al wslek',
   'doc.confirmeLe': 'Akkedti lwsoul nhar {date}',
+  'doc.ecartLe': 'Sifetti bli l3adad machi madbout nhar {date}. Lmowazi3 3ref.',
+  'doc.receptionAcquise': 'Lwsoul deja msajjel. Ila kan chi mochkil, dir i3tirad.',
   'doc.contester': '3ndi i3tirad',
   'docs.titre': 'Lbonat w lfaktourat',
   'docs.plus': 'Chouf ktar',
@@ -413,6 +424,7 @@ const aryLatn: Record<Cle, string> = {
   'motif.DEJA_PAYE': 'Rani khellest',
   'motif.AUTRE': '7aja okhra',
   'contestation.commentaire': 'Cherre7 (ila bghiti)',
+  'contestation.enCours': 'Sifetti i3tirad nhar {date}: {motif}. Khass lmowazi3 yjaweb.',
 }
 
 export const textes = { fr, ar, 'ary-Arab': aryArab, 'ary-Latn': aryLatn } satisfies Record<string, Record<Cle, string>>

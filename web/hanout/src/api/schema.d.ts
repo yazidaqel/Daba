@@ -38,6 +38,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Renouvelle la session de l'appareil avec le refreshToken (valable 90 jours)
+         * @description L'accessToken vaut 24 h ; l'app le renouvelle ici, sans nouvel OTP, tant que l'appareil
+         *     n'est pas déconnecté à distance. 401 si le refreshToken est invalide ou l'appareil révoqué.
+         */
+        post: operations["rafraichirSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/deconnexion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ferme la session de l'appareil connecté côté serveur
+         * @description L'accessToken et le refreshToken de cette session deviennent invalides (401 ensuite) et
+         *     l'appareil ne reçoit plus de push. Ce n'est pas une révocation : une nouvelle connexion OTP
+         *     sur le même appareil reste possible. Permis sans consentement CNDP. L'app ambulant pousse
+         *     d'abord sa file (`POST /v1/sync/operations`) : sinon les opérations restent sur le téléphone
+         *     et un autre ambulant qui s'y connecte ne pourra pas les rejouer.
+         *     De même, chaque connexion OTP ouvre une nouvelle session sur l'appareil : les jetons de la
+         *     précédente ne valent plus (seuls ceux de la dernière Session reçue servent).
+         */
+        post: operations["seDeconnecter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/liens/{jeton}": {
         parameters: {
             query?: never;
@@ -120,6 +167,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/organisations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * L'administrateur inscrit un grossiste ou un grand client et ses utilisateurs
+         * @description Les ambulants s'inscrivent seuls par OTP ; un numéro présent dans la base POS devient un
+         *     compte HANOUT à sa première connexion. Grossistes et grands clients sont créés ici ; leurs
+         *     utilisateurs se connectent ensuite par OTP. 409 si un numéro est déjà inscrit.
+         */
+        post: operations["creerOrganisation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/photos/{photoId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Photo envoyée par un utilisateur (bon de livraison d'un dépôt, rupture signalée en photo)
+         * @description Cible des champs `photoBonLivraisonUrl` et `photoUrl`. Identifiant non devinable,
+         *     réservé aux utilisateurs connectés.
+         */
+        get: operations["lirePhoto"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/hanouts": {
         parameters: {
             query?: never;
@@ -162,6 +252,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/produits/{produitId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Un produit du référentiel */
+        get: operations["lireProduit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Catégories de produits, qui servent aussi de catégories d'ambulants au ciblage (`Ciblage.categories`, §5.1) */
+        get: operations["listerCategories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/regions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Les 12 régions du Maroc et leurs principales villes (ciblage d'une campagne, §5.1)
+         * @description `Ciblage.regions` et `Ciblage.villes` prennent les `code` renvoyés ici. Une offre est visible
+         *     si la ville du grossiste dépositaire (comparée sans casse, accents ni espaces) est ciblée, et
+         *     si elle appartient à une région ciblée. Libellés en fr, ar et darija (graphies arabe et latine).
+         */
+        get: operations["listerRegions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/grossistes": {
         parameters: {
             query?: never;
@@ -173,6 +319,51 @@ export interface paths {
         get: operations["listerGrossistes"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/hanouts/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Importe la base POS fournie par RED (CSV)
+         * @description CSV UTF-8, séparateur « ; » ou « , », première ligne d'en-têtes : code_pos, nom, gerant,
+         *     telephone, lat, lon, adresse, ville, ice. Clé : code_pos (réimporter met à jour). Téléphones
+         *     06…, 2126… ou 002126… acceptés. Une ligne invalide est rejetée avec son numéro, les autres passent.
+         */
+        post: operations["importerHanouts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/produits/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Importe le référentiel produits (CSV)
+         * @description En-têtes : ean, libelle_fr, libelle_ar, libelle_ary_arab, libelle_ary_latn, marque, categorie,
+         *     conditionnement (UNITE, PACK, CARTON), unites, photo_url, grand_client_id (organisation
+         *     propriétaire, pour la carte des ruptures), taux_tva (pourcentage : 0, 7, 10, 14 ou 20 ;
+         *     vide = inconnu). Clé : ean.
+         */
+        post: operations["importerProduits"];
         delete?: never;
         options?: never;
         head?: never;
@@ -194,8 +385,10 @@ export interface paths {
          *     l'appareil : la rejouer renvoie `DEJA_APPLIQUEE` sans nouvel effet (idempotence).
          *     Une opération qui reflète un fait terrain (vente, versement, chargement) n'est jamais refusée
          *     pour une règle de gestion : elle est appliquée et signalée en anomalie (RG-S1, RG-C3, RG-F1…).
-         *     Seule une opération mal formée (dont une FACTURE sans `mentionsLegales`, RG-F2) ou qui
-         *     référence un objet inconnu est `REJETEE` ; elle est journalisée et
+         *     Seule une opération mal formée (dont une FACTURE sans `mentionsLegales`, RG-F2, un numéro
+         *     dont le préfixe n'est pas celui de l'appareil, RG-F1, ou un AVOIR supérieur au restant à
+         *     annuler du document d'origine, RG-C4) ou qui référence un objet inconnu est `REJETEE` ;
+         *     elle est journalisée et
          *     l'appareil doit l'afficher. Aucun écrasement silencieux : tout conflit est
          *     résolu côté serveur, journalisé et décrit dans le résultat.
          */
@@ -303,6 +496,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ambulants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ambulants rattachés au grossiste connecté, avec leur volume et leur régularité (§4.3)
+         * @description Rattaché = a reçu au moins un bon de sortie de ce grossiste (le rattachement déclaré au
+         *     profil de l'ambulant, §3.1, n'existe pas encore : dette du MVP). Le grossiste y retrouve le
+         *     téléphone, qu'il a lui-même saisi dans un bon de sortie.
+         */
+        get: operations["listerAmbulantsRattaches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/documents": {
         parameters: {
             query?: never;
@@ -353,6 +568,78 @@ export interface paths {
         get: operations["telechargerDocumentPdf"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/documents/{documentId}/lien": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lien hanout signé vers le document, à envoyer à la main par SMS
+         * @description Même lien que celui de l'SMS automatique (§9) : signé, valable 30 jours, il ouvre la PWA du
+         *     hanout qui se connecte par OTP au numéro de sa fiche. 422 si le hanout n'a pas de téléphone.
+         *     Exige le réseau ; hors ligne, l'app partage le PDF généré sur l'appareil.
+         */
+        get: operations["lienDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/documents/{documentId}/reception": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Le hanout confirme la réception d'une livraison ou signale un écart par ligne (§6)
+         * @description Distinct de `Document.confirmationHanout`, saisie sur l'écran de l'ambulant à la livraison
+         *     et figée dans le document (RG-C4). Si `confirmationHanout` existe déjà, la réception est
+         *     acquise : 409, et un désaccord passe par `POST /v1/contestations`. Le résultat apparaît dans
+         *     `Document.receptionHanout`. Un écart ne modifie ni le document ni le solde : l'ambulant,
+         *     notifié (push), régularise par un avoir.
+         *     Une seule réception par document : rejouer le même `id` rend 200, un autre `id` 409.
+         *     409 aussi pour un AVOIR ou un document ANNULE.
+         */
+        post: operations["confirmerReceptionDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/contestations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Contestations du hanout connecté, ou adressées à l'ambulant connecté */
+        get: operations["listerContestations"];
+        put?: never;
+        /**
+         * Le hanout conteste un document ou le solde de son compte chez un ambulant (§6)
+         * @description L'ambulant est notifié (push, SMS en repli) et reçoit la contestation par synchronisation
+         *     (entité CONTESTATION) ; il la clôt hors ligne par l'opération `RESOLUTION_CONTESTATION`.
+         *     Une seule contestation OUVERTE par cible : une seconde répond 409. Rejouer le même `id`
+         *     rend la contestation existante (200).
+         */
+        post: operations["contester"];
         delete?: never;
         options?: never;
         head?: never;
@@ -580,6 +867,7 @@ export interface paths {
          * Le grossiste confirme la réception physique (quantités reçues, photo du bon de livraison)
          * @description Pivot du flux promo (§7.2, RG-P1) : le dépôt passe à RECU, la campagne à ACTIVE si c'est
          *     le premier dépôt confirmé, et les ambulants ciblés sont notifiés (moins de 2 minutes, §10).
+         *     Si la campagne n'a pas encore commencé, l'offre est publiée et notifiée à son début.
          *     Seulement à l'état ACCEPTE (sinon 409).
          */
         post: operations["confirmerReception"];
@@ -600,8 +888,9 @@ export interface paths {
         put?: never;
         /**
          * Le grossiste clôture son dépôt et déclare le sort du reliquat (retourné ou racheté)
-         * @description Seulement quand la campagne est EPUISEE ou EXPIREE (sinon 409). La campagne passe
-         *     à CLOTUREE quand tous ses dépôts reçus sont clôturés.
+         * @description Seulement pour un dépôt RECU dont la campagne est EPUISEE ou EXPIREE (sinon 409) : le
+         *     portail lit `Depot.statutCampagne` pour ne proposer la clôture qu'à ce moment. La campagne
+         *     passe à CLOTUREE quand tous ses dépôts reçus sont clôturés.
          */
         post: operations["cloturerDepot"];
         delete?: never;
@@ -728,7 +1017,9 @@ export interface paths {
          * Active ou coupe la disponibilité, et met à jour la position tant qu'elle est active
          * @description CNDP (loi 09-08) : la position n'est acceptée qu'avec `disponible = true` et un consentement
          *     `geolocalisation` enregistré (`PUT /v1/moi/consentement`, sinon 422) ; passer à `false`
-         *     efface la dernière position connue côté serveur.
+         *     efface la dernière position connue côté serveur. `disponible = false` est toujours accepté,
+         *     sans position (une position envoyée est ignorée, jamais stockée) et même s'il l'est déjà :
+         *     l'app l'envoie au démarrage et après une coupure hors ligne.
          *     L'app renvoie la même requête pour mettre à jour la position pendant la tournée.
          */
         put: operations["changerDisponibilite"];
@@ -758,6 +1049,11 @@ export interface paths {
          *     déclaré (RG-D1). Sans acceptation dans le délai, le rayon s'élargit une fois, puis le
          *     hanout est prévenu (RG-D3). L'`id` vient de l'appareil : renvoyer la même requête rend
          *     la demande existante (200).
+         *
+         *     **Signalement en photo seule (sans `produitId`) : question ouverte.** Le cahier des charges
+         *     (RG-D1, §6) ne dit pas à qui l'envoyer, puisque le critère « produit en stock déclaré » ne
+         *     s'applique pas. À trancher avec RED ; en attendant, le serveur l'envoie à tous les
+         *     ambulants disponibles du rayon, sans filtre de stock.
          */
         post: operations["signalerRupture"];
         delete?: never;
@@ -887,15 +1183,35 @@ export interface components {
         };
         /**
          * Format: int64
-         * @description Montant en centimes de dirham (MAD)
+         * @description Montant en centimes de dirham (MAD) ; les prix de vente sont TTC
          * @example 12550
          */
         Montant: number;
+        /**
+         * @description Taux de TVA du produit, en pour cent ; absent = inconnu. Les prix étant TTC, la TVA d'une
+         *     ligne de montant M au taux t vaut M × t / (100 + t), arrondie au centime (demi au-dessus,
+         *     en valeur absolue), et celle d'un document est la somme de ses lignes (RG-F2).
+         * @enum {number}
+         */
+        TauxTva: 0 | 7 | 10 | 14 | 20;
         Ean: string;
+        /**
+         * @description Position WGS 84
+         * @example {
+         *       "lat": 33.5731,
+         *       "lon": -7.5898
+         *     }
+         */
         Position: {
-            /** Format: double */
+            /**
+             * Format: double
+             * @example 33.5731
+             */
             lat: number;
-            /** Format: double */
+            /**
+             * Format: double
+             * @example -7.5898
+             */
             lon: number;
         };
         /** @description Polygone GeoJSON (RFC 7946), coordonnées [lon, lat] */
@@ -917,7 +1233,25 @@ export interface components {
             nom: string;
         };
         Problem: {
-            /** Format: uri */
+            /**
+             * Format: uri
+             * @description `https://daba.ma/problemes/<code>` ; codes fixes (les clients décident sur ce code, jamais sur `detail`) :
+             *     - `requete-invalide` (400, détail par champ dans `erreurs`)
+             *     - `non-authentifie` (401 : jeton absent, invalide, expiré, ou session fermée)
+             *     - `code-invalide` (401, OTP faux ou expiré)
+             *     - `appareil-revoque` (403 sur tout appel authentifié, 401 à `POST /v1/auth/otp/verify` :
+             *       appareil déconnecté à distance, l'app efface ses données locales)
+             *     - `consentement-requis` (403 : consentement CNDP à recueillir, `PUT /v1/moi/consentement`)
+             *     - `role-non-autorise` (403)
+             *     - `appareil-different` (403 : `appareilId` du corps différent de celui de la session)
+             *     - `introuvable` (404, y compris hors de l'organisation de l'appelant)
+             *     - `conflit` (409)
+             *     - `lien-expire`, `curseur-expire` (410)
+             *     - `regle-de-gestion` (422, `regle` nomme la règle)
+             *     - `trop-de-demandes` (429)
+             *     - `erreur-serveur` (dans `ResultatOperation.erreur` seulement : renvoyer l'opération plus tard)
+             * @example https://daba.ma/problemes/appareil-revoque
+             */
             type?: string;
             title?: string;
             status?: number;
@@ -966,8 +1300,10 @@ export interface components {
             prefixeNumerotation?: components["schemas"]["PrefixeNumerotation"];
         };
         /**
-         * @description Préfixe court attribué par le serveur à l'appareil d'un ambulant (RG-F1). Présent
-         *     seulement pour le rôle AMBULANT ; stable pour un même appareilId.
+         * @description Préfixe court attribué par le serveur au couple (ambulant, appareil) (RG-F1). Présent
+         *     seulement pour le rôle AMBULANT ; stable pour un même ambulant sur un même appareilId. Un
+         *     autre ambulant qui se connecte sur ce téléphone reçoit son propre préfixe, et le premier
+         *     retrouve le sien (et la suite de ses séquences) à sa reconnexion.
          * @example K7Q2
          */
         PrefixeNumerotation: string;
@@ -1015,6 +1351,45 @@ export interface components {
             plateforme: "ANDROID" | "IOS";
             langue?: components["schemas"]["Langue"];
         };
+        OrganisationSaisie: {
+            /** @enum {string} */
+            type: "GROSSISTE" | "GRAND_CLIENT";
+            nom: string;
+            utilisateurs: {
+                telephone: components["schemas"]["Telephone"];
+                nom?: string;
+            }[];
+            /** @description Requise pour un grossiste */
+            position?: components["schemas"]["Position"];
+            adresse?: string;
+            ville?: string;
+        };
+        OrganisationCreee: {
+            /**
+             * Format: uuid
+             * @description Identifiant de l'organisation ; pour un grossiste, c'est aussi son grossisteId
+             */
+            id: string;
+            type: string;
+            nom: string;
+            utilisateurs: {
+                /** Format: uuid */
+                id: string;
+                telephone: components["schemas"]["Telephone"];
+            }[];
+        };
+        FichierImport: {
+            fichier: string;
+        };
+        BilanImport: {
+            crees: number;
+            misAJour: number;
+            rejets: {
+                /** @description Numéro de ligne dans le fichier (l'en-tête est la ligne 1) */
+                ligne: number;
+                erreur: string;
+            }[];
+        };
         Hanout: {
             /** Format: uuid */
             id: string;
@@ -1039,6 +1414,16 @@ export interface components {
             code: string;
             libelle: components["schemas"]["LibelleI18n"];
         };
+        Region: {
+            /** @example CASABLANCA_SETTAT */
+            code: string;
+            nom: components["schemas"]["LibelleI18n"];
+            villes: {
+                /** @example CASABLANCA */
+                code: string;
+                nom: components["schemas"]["LibelleI18n"];
+            }[];
+        };
         Produit: {
             /** Format: uuid */
             id: string;
@@ -1049,6 +1434,7 @@ export interface components {
             /** @enum {string} */
             conditionnement: "UNITE" | "PACK" | "CARTON";
             unitesParConditionnement: number;
+            tauxTva?: components["schemas"]["TauxTva"];
             /**
              * Format: uri
              * @description Image compressée (faible consommation de données)
@@ -1092,7 +1478,7 @@ export interface components {
              */
             creeLe: string;
         };
-        Operation: components["schemas"]["OperationChargement"] | components["schemas"]["OperationRetour"] | components["schemas"]["OperationInventaire"] | components["schemas"]["OperationEmissionDocument"] | components["schemas"]["OperationAvoir"] | components["schemas"]["OperationVersement"] | components["schemas"]["OperationTarif"] | components["schemas"]["OperationHanout"] | components["schemas"]["OperationCreditHanout"] | components["schemas"]["OperationParametresAmbulant"];
+        Operation: components["schemas"]["OperationChargement"] | components["schemas"]["OperationRetour"] | components["schemas"]["OperationInventaire"] | components["schemas"]["OperationEmissionDocument"] | components["schemas"]["OperationAvoir"] | components["schemas"]["OperationVersement"] | components["schemas"]["OperationTarif"] | components["schemas"]["OperationHanout"] | components["schemas"]["OperationCreditHanout"] | components["schemas"]["OperationParametresAmbulant"] | components["schemas"]["OperationResolutionContestation"];
         OperationChargement: components["schemas"]["OperationBase"] & {
             /** @constant */
             type: "CHARGEMENT";
@@ -1219,6 +1605,26 @@ export interface components {
              */
             type: "PARAMETRES_AMBULANT";
         };
+        OperationResolutionContestation: components["schemas"]["OperationBase"] & {
+            /** @constant */
+            type: "RESOLUTION_CONTESTATION";
+            donnees: components["schemas"]["ResolutionContestation"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "RESOLUTION_CONTESTATION";
+        };
+        /**
+         * @description L'ambulant clôt une contestation qui lui est adressée (après un avoir, une explication…).
+         *     Rejouer sur une contestation déjà RESOLUE ne change rien.
+         */
+        ResolutionContestation: {
+            /** Format: uuid */
+            contestationId: string;
+            commentaire?: string;
+        };
         LigneQuantite: {
             /** Format: uuid */
             produitId: string;
@@ -1284,6 +1690,7 @@ export interface components {
          *     qu'elle les connaît au moment de l'émission, dans `mentionsLegales` : une facture émise
          *     hors ligne reste valable même si le profil change avant la synchronisation (RG-F1, RG-C4).
          *     Un document rejeté (référence inconnue) laisse un trou qui remonte en NUMEROTATION_TROU.
+         *     Le préfixe du numéro doit être `Session.prefixeNumerotation` de l'appareil qui pousse (sinon REJETEE, RG-F1).
          *     Une FACTURE sans `mentionsLegales` ne peut venir que d'une app non conforme : REJETEE.
          *     Le reste à payer (total − règlements) passe au crédit du hanout. Avec `demandeDepannageId`,
          *     la vente est liée à la demande, qui passe à LIVREE (RG-D4).
@@ -1341,6 +1748,11 @@ export interface components {
             campagneId?: string;
             /** Format: uuid */
             reservationId?: string;
+            /**
+             * @description Taux du produit tel que l'appareil le connaît à l'émission (`Produit.tauxTva`), figé dans
+             *     la pièce comme les mentions légales ; absent, le serveur prend le taux actuel du produit.
+             */
+            tauxTva?: components["schemas"]["TauxTva"];
         } & (unknown & unknown);
         Reglement: {
             /** @enum {string} */
@@ -1358,7 +1770,9 @@ export interface components {
         };
         /**
          * @description Seul moyen d'annuler tout ou partie d'un document (RG-C4). Sans `lignes`, annule le
-         *     document entier. Numéroté dans la série AV de l'appareil (RG-F1).
+         *     restant du document (ses lignes sont reprises pour la traçabilité promo). Numéroté dans la
+         *     série AV de l'appareil (RG-F1). Un avoir dont le total dépasse le restant à annuler (total du
+         *     document moins les avoirs déjà émis) est REJETE (`regle` RG-C4) : l'app ne doit pas le proposer.
          */
         AvoirSaisie: {
             /** Format: uuid */
@@ -1448,7 +1862,9 @@ export interface components {
             /** Format: uuid */
             id: string;
             /**
-             * @description STOCK_NEGATIF (RG-S1), ECART_SANS_MOTIF (RG-S4), NUMEROTATION_TROU et NUMERO_EN_DOUBLE
+             * @description TVA_INCONNUE (RG-F2, facture d'un ambulant assujetti dont un produit n'a pas de taux :
+             *     enregistrée, sans `tva` ; l'app ne devrait pas proposer FACTURE dans ce cas),
+             *     STOCK_NEGATIF (RG-S1), ECART_SANS_MOTIF (RG-S4), NUMEROTATION_TROU et NUMERO_EN_DOUBLE
              *     (RG-F1), PLAFOND_CREDIT_DEPASSE et DELAI_CREDIT_DEPASSE (RG-C3),
              *     CHARGEMENT_EN_DOUBLE (bon de sortie déjà chargé),
              *     PROMO_SANS_RETRAIT (RG-S3, vente promo au-delà de la quantité retirée),
@@ -1456,7 +1872,7 @@ export interface components {
              *     REMISE_PLAFOND_DEPASSE (§3.4, remise ponctuelle au-delà du plafond de l'ambulant).
              * @enum {string}
              */
-            type: "STOCK_NEGATIF" | "ECART_SANS_MOTIF" | "NUMEROTATION_TROU" | "NUMERO_EN_DOUBLE" | "PLAFOND_CREDIT_DEPASSE" | "DELAI_CREDIT_DEPASSE" | "CHARGEMENT_EN_DOUBLE" | "PROMO_SANS_RETRAIT" | "DEMANDE_NON_ATTRIBUEE" | "REMISE_PLAFOND_DEPASSE";
+            type: "STOCK_NEGATIF" | "ECART_SANS_MOTIF" | "NUMEROTATION_TROU" | "NUMERO_EN_DOUBLE" | "PLAFOND_CREDIT_DEPASSE" | "DELAI_CREDIT_DEPASSE" | "CHARGEMENT_EN_DOUBLE" | "PROMO_SANS_RETRAIT" | "DEMANDE_NON_ATTRIBUEE" | "REMISE_PLAFOND_DEPASSE" | "TVA_INCONNUE";
             /** @example RG-S1 */
             regle: string;
             /** Format: uuid */
@@ -1484,7 +1900,7 @@ export interface components {
              */
             action: "UPSERT" | "SUPPRESSION";
         };
-        Changement: components["schemas"]["ChangementProduit"] | components["schemas"]["ChangementHanout"] | components["schemas"]["ChangementStock"] | components["schemas"]["ChangementMouvement"] | components["schemas"]["ChangementDocument"] | components["schemas"]["ChangementVersement"] | components["schemas"]["ChangementCompteCredit"] | components["schemas"]["ChangementTarif"] | components["schemas"]["ChangementPromo"] | components["schemas"]["ChangementReservation"] | components["schemas"]["ChangementAnomalie"] | components["schemas"]["ChangementParametres"] | components["schemas"]["ChangementBonSortie"];
+        Changement: components["schemas"]["ChangementProduit"] | components["schemas"]["ChangementHanout"] | components["schemas"]["ChangementStock"] | components["schemas"]["ChangementMouvement"] | components["schemas"]["ChangementDocument"] | components["schemas"]["ChangementVersement"] | components["schemas"]["ChangementCompteCredit"] | components["schemas"]["ChangementTarif"] | components["schemas"]["ChangementPromo"] | components["schemas"]["ChangementReservation"] | components["schemas"]["ChangementAnomalie"] | components["schemas"]["ChangementParametres"] | components["schemas"]["ChangementBonSortie"] | components["schemas"]["ChangementContestation"];
         ChangementProduit: components["schemas"]["ChangementBase"] & {
             /** @constant */
             entite?: "PRODUIT";
@@ -1628,6 +2044,17 @@ export interface components {
              */
             entite: "BON_SORTIE";
         };
+        ChangementContestation: components["schemas"]["ChangementBase"] & {
+            /** @constant */
+            entite?: "CONTESTATION";
+            donnees?: components["schemas"]["Contestation"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            entite: "CONTESTATION";
+        };
         ParametresAmbulant: {
             politiqueDepassementCredit: components["schemas"]["PolitiqueDepassementCredit"];
             plafondRemisePonctuellePourcent?: number;
@@ -1667,8 +2094,13 @@ export interface components {
              * @description Heure de réception par le serveur
              */
             recuLe: string;
-            /** Format: uuid */
-            operationId?: string;
+            /**
+             * Format: uuid
+             * @description Opération de synchronisation à l'origine du mouvement (l'app remplace ses mouvements
+             *     locaux par ceux du serveur portant le même operationId). Pour un mouvement PROMO, créé
+             *     par le retrait chez le grossiste sans opération de l'appareil : l'id de la réservation.
+             */
+            operationId: string;
             /** Format: uuid */
             documentId?: string;
             /** Format: uuid */
@@ -1750,6 +2182,28 @@ export interface components {
         BonSortiePage: components["schemas"]["PageMeta"] & {
             contenu: components["schemas"]["BonSortie"][];
         };
+        AmbulantRattache: {
+            /** Format: uuid */
+            id: string;
+            nom: string;
+            telephone?: components["schemas"]["Telephone"];
+            /** @description Bons de sortie reçus de ce grossiste */
+            nombreBons: number;
+            /**
+             * Format: int64
+             * @description Volume, en unités, de tous ses bons de sortie
+             */
+            quantiteTotale: number;
+            /** @description Régularité — bons des 30 derniers jours */
+            bons30Jours: number;
+            /** Format: date-time */
+            premierBonLe: string;
+            /** Format: date-time */
+            dernierBonLe: string;
+        };
+        AmbulantRattachePage: components["schemas"]["PageMeta"] & {
+            contenu: components["schemas"]["AmbulantRattache"][];
+        };
         /** @enum {string} */
         TypeDocument: "BON_LIVRAISON" | "FACTURE" | "AVOIR";
         /** @description Document de vente émis par un ambulant ; jamais modifié ni supprimé, seulement annulé par avoir (RG-C4) */
@@ -1767,6 +2221,11 @@ export interface components {
             emisLe: string;
             lignes: components["schemas"]["LigneDocument"][];
             total: components["schemas"]["Montant"];
+            /**
+             * @description TVA comprise dans le total (formule de `TauxTva`), pour une FACTURE dont les mentions
+             *     légales portent `assujettiTva`, et pour un AVOIR qui en annule une (TVA contre-passée) ;
+             *     absente si un taux de ligne est inconnu (anomalie TVA_INCONNUE, RG-F2).
+             */
             tva?: components["schemas"]["Montant"];
             montantRegle: components["schemas"]["Montant"];
             montantCredit: components["schemas"]["Montant"];
@@ -1786,6 +2245,7 @@ export interface components {
             demandeDepannageId?: string;
             mentionsLegales?: components["schemas"]["MentionsLegales"];
             confirmationHanout?: components["schemas"]["ConfirmationHanout"];
+            receptionHanout?: components["schemas"]["ReceptionHanout"];
         };
         LigneDocument: components["schemas"]["LigneDocumentSaisie"] & {
             libelle: components["schemas"]["LibelleI18n"];
@@ -1801,6 +2261,71 @@ export interface components {
         };
         DocumentPage: components["schemas"]["PageMeta"] & {
             contenu: components["schemas"]["Document"][];
+        };
+        LienDocument: {
+            /** Format: uri */
+            url: string;
+            /** Format: date-time */
+            expireLe: string;
+        };
+        /**
+         * @description `conforme = true` sans `ecarts` : tout est reçu. `conforme = false` : au moins un écart. Une
+         *     ligne est repérée par son rang dans `Document.lignes` (à partir de 0), car un même produit
+         *     peut y figurer deux fois (stock normal et stock promo, RG-S3) ; seule une ligne ARTICLE porte
+         *     un écart, avec une quantité reçue différente de la quantité livrée.
+         */
+        ReceptionHanoutSaisie: {
+            /**
+             * Format: uuid
+             * @description Généré par l'appareil ; clé d'idempotence
+             */
+            id: string;
+            conforme: boolean;
+            ecarts?: components["schemas"]["EcartReception"][];
+            commentaire?: string;
+        };
+        EcartReception: {
+            ligne: number;
+            quantiteRecue: number;
+        };
+        /** @description Réception confirmée par le hanout après la livraison (§6), distincte de `confirmationHanout` */
+        ReceptionHanout: {
+            conforme: boolean;
+            ecarts?: components["schemas"]["EcartReception"][];
+            commentaire?: string;
+            /** Format: date-time */
+            le: string;
+        };
+        ContestationSaisie: {
+            /**
+             * Format: uuid
+             * @description Généré par l'appareil ; clé d'idempotence
+             */
+            id: string;
+            /** @enum {string} */
+            cible: "DOCUMENT" | "COMPTE_CREDIT";
+            /**
+             * Format: uuid
+             * @description Un document adressé au hanout, ou l'un de ses comptes de crédit (404 sinon)
+             */
+            cibleId: string;
+            /** @enum {string} */
+            motif: "MONTANT" | "QUANTITE" | "NON_RECU" | "DEJA_PAYE" | "AUTRE";
+            commentaire?: string;
+        };
+        Contestation: components["schemas"]["ContestationSaisie"] & {
+            /** @enum {string} */
+            statut: "OUVERTE" | "RESOLUE";
+            /** Format: date-time */
+            creeLe: string;
+            ambulant: components["schemas"]["Reference"];
+            hanout: components["schemas"]["Reference"];
+            /** Format: date-time */
+            resolueLe?: string;
+            commentaireResolution?: string;
+        };
+        ContestationPage: components["schemas"]["PageMeta"] & {
+            contenu: components["schemas"]["Contestation"][];
         };
         Versement: components["schemas"]["VersementSaisie"] & {
             /** Format: uuid */
@@ -1966,11 +2491,15 @@ export interface components {
             quantiteRetiree: number;
             /** @description Déposée − réservée − retirée ; une réservation expirée revient ici (RG-P2) */
             quantiteRestante: number;
+            /** @description Plafond par ambulant de la campagne pour ce produit (RG-P3), pour borner la quantité remise au retrait */
+            quantiteMaxParAmbulant: number;
         };
         Depot: {
             /** Format: uuid */
             id: string;
             campagne: components["schemas"]["Reference"];
+            /** @description Clôture possible quand le dépôt est RECU et la campagne EPUISEE ou EXPIREE */
+            statutCampagne: components["schemas"]["StatutCampagne"];
             marque?: components["schemas"]["Reference"];
             grossiste: components["schemas"]["Grossiste"];
             statut: components["schemas"]["StatutDepot"];
@@ -2098,8 +2627,19 @@ export interface components {
             expireLe: string;
             /** Format: date-time */
             retireeLe?: string;
-            /** @description Contenu du QR code à présenter au grossiste ; renvoyé à l'ambulant seulement, tant que la réservation est RESERVEE */
+            /**
+             * @description Contenu du QR code à présenter au grossiste (RG-P4) : JWS compact signé par le serveur,
+             *     d'environ 200 caractères, jamais un code court à saisir. Seul le serveur le vérifie, au
+             *     scan. Renvoyé à l'ambulant seulement, tant que la réservation est RESERVEE.
+             */
             qrJeton?: string;
+        };
+        /** @description Charge utile du QR d'une réservation */
+        ReservationQr: {
+            /** Format: uuid */
+            reservationId: string;
+            /** Format: uuid */
+            depotId: string;
         };
         ReservationPage: components["schemas"]["PageMeta"] & {
             contenu: components["schemas"]["Reservation"][];
@@ -2110,7 +2650,7 @@ export interface components {
         RetraitSaisie: components["schemas"]["ScanQr"] & {
             /**
              * Format: uuid
-             * @description Appareil (ou navigateur) du grossiste qui scanne ; porté par le mouvement PROMO (RG-S2)
+             * @description Appareil (ou navigateur) du grossiste qui scanne, celui de la session (403 sinon) ; porté par le mouvement PROMO (RG-S2)
              */
             appareilId: string;
             /** @description Au plus la quantité réservée */
@@ -2118,7 +2658,7 @@ export interface components {
         };
         DisponibiliteSaisie: {
             disponible: boolean;
-            /** @description Requise avec disponible = true, refusée (400) sinon */
+            /** @description Requise avec disponible = true (400 sinon) ; ignorée avec disponible = false */
             position?: components["schemas"]["Position"];
         };
         Disponibilite: {
@@ -2133,7 +2673,10 @@ export interface components {
          * @enum {string}
          */
         StatutDemande: "EN_ATTENTE" | "ACCEPTEE" | "EN_ROUTE" | "LIVREE" | "SANS_REPONSE";
-        /** @description Produit choisi dans la liste (`produitId`) ; avec une photo (multipart), `produitId` peut manquer */
+        /**
+         * @description Produit choisi dans la liste (`produitId`) ; avec une photo (multipart), `produitId` peut
+         *     manquer (destinataires : voir `POST /v1/demandes-depannage`, question ouverte sur RG-D1)
+         */
         RuptureSaisie: {
             /**
              * Format: uuid
@@ -2230,7 +2773,10 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Rôle non autorisé pour cette opération, ou consentement CNDP manquant (`type` …/consentement-requis) */
+        /**
+         * @description Rôle non autorisé (`…/role-non-autorise`), consentement CNDP manquant (`…/consentement-requis`)
+         *     ou appareil déconnecté à distance (`…/appareil-revoque`)
+         */
         Forbidden: {
             headers: {
                 [name: string]: unknown;
@@ -2239,7 +2785,10 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description Rôle non autorisé, ou appareil déconnecté à distance (§10, appareil perdu) */
+        /**
+         * @description Rôle non autorisé, `appareilId` différent de la session (`…/appareil-different`), ou appareil
+         *     déconnecté à distance (`…/appareil-revoque`, §10, appareil perdu : l'app efface ses données)
+         */
         AppareilRevoque: {
             headers: {
                 [name: string]: unknown;
@@ -2363,6 +2912,53 @@ export interface operations {
             429: components["responses"]["Problem"];
         };
     };
+    rafraichirSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    refreshToken: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Nouvelle session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    seDeconnecter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session fermée */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     ouvrirLien: {
         parameters: {
             query?: never;
@@ -2483,6 +3079,60 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    creerOrganisation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganisationSaisie"];
+            };
+        };
+        responses: {
+            /** @description Organisation créée */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganisationCreee"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    lirePhoto: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                photoId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Image */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
+                    "image/webp": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
     listerHanouts: {
         parameters: {
             query?: {
@@ -2524,6 +3174,10 @@ export interface operations {
                 categorie?: string;
                 /** @description Hanout seulement — restreint aux produits qu'il a déjà achetés à ses ambulants (signalement de rupture) */
                 habituels?: boolean;
+                /** @description Grand client seulement — restreint aux produits de son organisation (colonne grand_client_id de l'import) */
+                mesProduits?: boolean;
+                /** @description Restreint à ces produits (libellés des lignes de dépôt, de réservation, de bon de sortie) */
+                ids?: string[];
                 page?: components["parameters"]["Page"];
                 taille?: components["parameters"]["Taille"];
             };
@@ -2543,6 +3197,75 @@ export interface operations {
                 };
             };
             400: components["responses"]["Problem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    lireProduit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                produitId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Produit */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Produit"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listerCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Catégories, par code */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Categorie"][];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    listerRegions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Régions, avec leurs villes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Region"][];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
         };
@@ -2572,6 +3295,60 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GrossistePage"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    importerHanouts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["FichierImport"];
+            };
+        };
+        responses: {
+            /** @description Bilan de l'import */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BilanImport"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    importerProduits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["FichierImport"];
+            };
+        };
+        responses: {
+            /** @description Bilan de l'import */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BilanImport"];
                 };
             };
             400: components["responses"]["Problem"];
@@ -2789,6 +3566,32 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    listerAmbulantsRattaches: {
+        parameters: {
+            query?: {
+                page?: components["parameters"]["Page"];
+                taille?: components["parameters"]["Taille"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page d'ambulants, du dernier servi au plus ancien */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AmbulantRattachePage"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     listerDocuments: {
         parameters: {
             query?: {
@@ -2874,6 +3677,138 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    lienDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                documentId: components["parameters"]["DocumentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Lien */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LienDocument"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    confirmerReceptionDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                documentId: components["parameters"]["DocumentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReceptionHanoutSaisie"];
+            };
+        };
+        responses: {
+            /** @description Réception déjà enregistrée par une requête précédente au même id */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            /** @description Réception enregistrée */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Document"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listerContestations: {
+        parameters: {
+            query?: {
+                cibleId?: string;
+                statut?: "OUVERTE" | "RESOLUE";
+                page?: components["parameters"]["Page"];
+                taille?: components["parameters"]["Taille"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page de contestations, de la plus récente à la plus ancienne */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContestationPage"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    contester: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContestationSaisie"];
+            };
+        };
+        responses: {
+            /** @description Contestation déjà créée par une requête précédente au même id */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contestation"];
+                };
+            };
+            /** @description Contestation ouverte */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contestation"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     lireSyntheseCreances: {

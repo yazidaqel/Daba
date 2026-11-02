@@ -2,11 +2,17 @@
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig, type ProxyOptions } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // Prism (npm run mock) par défaut ; API_URL=http://localhost:8080 pour le vrai back-end.
-const proxy = { '/v1': process.env.API_URL ?? 'http://localhost:4010' }
+// Avec Prism, `Prefer: example=hanout` fait toujours répondre une session hanout à la connexion.
+const proxy: Record<string, string | ProxyOptions> = process.env.API_URL
+  ? { '/v1': process.env.API_URL }
+  : {
+      '/v1/auth/otp/verify': { target: 'http://localhost:4010', headers: { Prefer: 'example=hanout' } },
+      '/v1': 'http://localhost:4010',
+    }
 
 export default defineConfig({
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },

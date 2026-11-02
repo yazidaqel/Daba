@@ -1,11 +1,10 @@
 import { ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
-import { api } from '@/api/client'
+import { api, deconnecter } from '@/api/client'
 import { Alerte, cleErreur } from '@/components/commun'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { naviguer } from '@/router'
-import { fermerSession } from '@/session'
 import type { Cle } from '@/textes'
 
 /** Consentement CNDP (loi 09-08), demandé à la première connexion. */
@@ -22,7 +21,7 @@ export function Consentement({ suite }: { suite: string }) {
         body: { versionTexte: `hanout-1-${langue}`, traitementDonnees: accord, langue },
       })
       if (!accord) {
-        fermerSession()
+        deconnecter()
         naviguer('/connexion', true)
       } else if (data) naviguer(suite, true)
       else setErreur('erreur.generique')
