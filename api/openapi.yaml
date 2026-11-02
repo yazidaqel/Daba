@@ -1,10 +1,17 @@
 openapi: 3.1.0
 info:
   title: Daba API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Contrat unique entre le back-end, les apps mobiles (ambulant, hanout) et les portails web.
     Changement incompatible = nouvelle version de l'endpoint (/v2/...), jamais de rupture silencieuse.
+
+    **Sessions.** Tout appel authentifié peut répondre 401 (`…/non-authentifie` : jeton expiré, ou
+    session fermée par `POST /v1/auth/deconnexion` ; l'app rafraîchit ou redemande l'OTP) ou 403
+    `…/appareil-revoque` (appareil déconnecté à distance, §10 : l'app efface ses données locales).
+    Seul ce `type` autorise l'effacement ; un autre 403 ne doit jamais détruire la file hors ligne.
+    Pour le mock Prism, `POST /v1/auth/otp/verify` a un exemple de Session par rôle, à choisir avec
+    l'en-tête `Prefer: example=grossiste` (ou ambulant, grandClient, hanout).
 
     **Cloisonnement multi-tenant.** Chaque appel authentifié est cloisonné par l'organisation
     portée par le jeton (`organisationId` de la Session) ; aucun chemin ne prend l'organisation
@@ -101,6 +108,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Session'
+              examples:
+                ambulant:
+                  $ref: '#/components/examples/SessionAmbulant'
+                grossiste:
+                  $ref: '#/components/examples/SessionGrossiste'
+                grandClient:
+                  $ref: '#/components/examples/SessionGrandClient'
+                hanout:
+                  $ref: '#/components/examples/SessionHanout'
         '400':
           $ref: '#/components/responses/Problem'
         '401':
@@ -138,6 +154,22 @@ paths:
                 $ref: '#/components/schemas/Session'
         '400':
           $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/auth/deconnexion:
+    post:
+      tags: [comptes]
+      operationId: seDeconnecter
+      summary: Ferme la session de l'appareil connecté côté serveur
+      description: |
+        L'accessToken et le refreshToken de cette session deviennent invalides (401 ensuite) et
+        l'appareil ne reçoit plus de push. Ce n'est pas une révocation : une nouvelle connexion OTP
+        sur le même appareil reste possible. Permis sans consentement CNDP.
+      x-roles: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT, ADMIN]
+      responses:
+        '204':
+          description: Session fermée
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -393,6 +425,23 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: mesProduits
+          in: query
+          description: Grand client seulement — restreint aux produits de son organisation (colonne grand_client_id de l'import)
+          schema:
+            type: boolean
+            default: false
+        - name: ids
+          in: query
+          description: Restreint à ces produits (libellés des lignes de dépôt, de réservation, de bon de sortie)
+          style: form
+          explode: false
+          schema:
+            type: array
+            maxItems: 200
+            items:
+              type: string
+              format: uuid
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Taille'
       responses:
@@ -404,6 +453,76 @@ paths:
                 $ref: '#/components/schemas/ProduitPage'
         '400':
           $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/produits/{produitId}:
+    get:
+      tags: [referentiel]
+      operationId: lireProduit
+      summary: Un produit du référentiel
+      x-roles: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT, ADMIN]
+      parameters:
+        - name: produitId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Produit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Produit'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/categories:
+    get:
+      tags: [referentiel]
+      operationId: listerCategories
+      summary: Catégories de produits, qui servent aussi de catégories d'ambulants au ciblage (`Ciblage.categories`, §5.1)
+      x-roles: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT, ADMIN]
+      responses:
+        '200':
+          description: Catégories, par code
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Categorie'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/regions:
+    get:
+      tags: [referentiel]
+      operationId: listerRegions
+      summary: Les 12 régions du Maroc et leurs principales villes (ciblage d'une campagne, §5.1)
+      description: |
+        `Ciblage.regions` et `Ciblage.villes` prennent les `code` renvoyés ici. Une ville ciblée
+        correspond à la ville du grossiste dépositaire, comparée sans casse, accents ni espaces.
+      x-roles: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT, ADMIN]
+      responses:
+        '200':
+          description: Régions, avec leurs villes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Region'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -482,7 +601,8 @@ paths:
       description: |
         En-têtes : ean, libelle_fr, libelle_ar, libelle_ary_arab, libelle_ary_latn, marque, categorie,
         conditionnement (UNITE, PACK, CARTON), unites, photo_url, grand_client_id (organisation
-        propriétaire, pour la carte des ruptures). Clé : ean.
+        propriétaire, pour la carte des ruptures), taux_tva (pourcentage : 0, 7, 10, 14 ou 20 ;
+        vide = inconnu). Clé : ean.
       x-roles: [ADMIN]
       requestBody:
         required: true
@@ -729,6 +849,33 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /v1/ambulants:
+    get:
+      tags: [stock]
+      operationId: listerAmbulantsRattaches
+      summary: Ambulants rattachés au grossiste connecté, avec leur volume et leur régularité (§4.3)
+      description: |
+        Rattaché = a reçu au moins un bon de sortie de ce grossiste (le rattachement déclaré au
+        profil de l'ambulant, §3.1, n'existe pas encore). Le grossiste y retrouve le téléphone à
+        saisir dans un nouveau bon de sortie.
+      x-roles: [GROSSISTE]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
+      responses:
+        '200':
+          description: Page d'ambulants, du dernier servi au plus ancien
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AmbulantRattachePage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   # ---------------------------------------------------------------- ventes
   /v1/documents:
     get:
@@ -823,6 +970,152 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /v1/documents/{documentId}/lien:
+    get:
+      tags: [ventes]
+      operationId: lienDocument
+      summary: Lien hanout signé vers le document, à envoyer à la main par SMS
+      description: |
+        Même lien que celui de l'SMS automatique (§9) : signé, valable 30 jours, il ouvre la PWA du
+        hanout qui se connecte par OTP au numéro de sa fiche. 422 si le hanout n'a pas de téléphone.
+        Exige le réseau ; hors ligne, l'app partage le PDF généré sur l'appareil.
+      x-roles: [AMBULANT]
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Lien
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LienDocument'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  /v1/documents/{documentId}/reception:
+    post:
+      tags: [ventes]
+      operationId: confirmerReceptionDocument
+      summary: Le hanout confirme la réception d'une livraison ou signale un écart par ligne (§6)
+      description: |
+        Distinct de `Document.confirmationHanout`, saisie sur l'écran de l'ambulant à la livraison
+        et figée dans le document (RG-C4). Si `confirmationHanout` existe déjà, la réception est
+        acquise : 409, et un désaccord passe par `POST /v1/contestations`. Le résultat apparaît dans
+        `Document.receptionHanout`. Un écart ne modifie ni le document ni le solde : l'ambulant,
+        notifié (push), régularise par un avoir.
+        Une seule réception par document : rejouer le même `id` rend 200, un autre `id` 409.
+        409 aussi pour un AVOIR ou un document ANNULE.
+      x-roles: [HANOUT]
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReceptionHanoutSaisie'
+      responses:
+        '200':
+          description: Réception déjà enregistrée par une requête précédente au même id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '201':
+          description: Réception enregistrée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /v1/contestations:
+    post:
+      tags: [ventes]
+      operationId: contester
+      summary: Le hanout conteste un document ou le solde de son compte chez un ambulant (§6)
+      description: |
+        L'ambulant est notifié (push, SMS en repli) et reçoit la contestation par synchronisation
+        (entité CONTESTATION) ; il la clôt hors ligne par l'opération `RESOLUTION_CONTESTATION`.
+        Une seule contestation OUVERTE par cible : une seconde répond 409. Rejouer le même `id`
+        rend la contestation existante (200).
+      x-roles: [HANOUT]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContestationSaisie'
+      responses:
+        '200':
+          description: Contestation déjà créée par une requête précédente au même id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contestation'
+        '201':
+          description: Contestation ouverte
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Contestation'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    get:
+      tags: [ventes]
+      operationId: listerContestations
+      summary: Contestations du hanout connecté, ou adressées à l'ambulant connecté
+      x-roles: [HANOUT, AMBULANT]
+      parameters:
+        - name: cibleId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: statut
+          in: query
+          schema:
+            type: string
+            enum: [OUVERTE, RESOLUE]
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
+      responses:
+        '200':
+          description: Page de contestations, de la plus récente à la plus ancienne
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContestationPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /v1/karni/synthese:
     get:
@@ -1293,8 +1586,9 @@ paths:
       operationId: cloturerDepot
       summary: Le grossiste clôture son dépôt et déclare le sort du reliquat (retourné ou racheté)
       description: |
-        Seulement quand la campagne est EPUISEE ou EXPIREE (sinon 409). La campagne passe
-        à CLOTUREE quand tous ses dépôts reçus sont clôturés.
+        Seulement pour un dépôt RECU dont la campagne est EPUISEE ou EXPIREE (sinon 409) : le
+        portail lit `Depot.statutCampagne` pour ne proposer la clôture qu'à ce moment. La campagne
+        passe à CLOTUREE quand tous ses dépôts reçus sont clôturés.
       x-roles: [GROSSISTE]
       parameters:
         - $ref: '#/components/parameters/DepotId'
@@ -1545,7 +1839,9 @@ paths:
       description: |
         CNDP (loi 09-08) : la position n'est acceptée qu'avec `disponible = true` et un consentement
         `geolocalisation` enregistré (`PUT /v1/moi/consentement`, sinon 422) ; passer à `false`
-        efface la dernière position connue côté serveur.
+        efface la dernière position connue côté serveur. `disponible = false` est toujours accepté,
+        sans position (une position envoyée est ignorée, jamais stockée) et même s'il l'est déjà :
+        l'app l'envoie au démarrage et après une coupure hors ligne.
         L'app renvoie la même requête pour mettre à jour la position pendant la tournée.
       x-roles: [AMBULANT]
       requestBody:
@@ -1580,6 +1876,11 @@ paths:
         déclaré (RG-D1). Sans acceptation dans le délai, le rayon s'élargit une fois, puis le
         hanout est prévenu (RG-D3). L'`id` vient de l'appareil : renvoyer la même requête rend
         la demande existante (200).
+
+        **Signalement en photo seule (sans `produitId`) : question ouverte.** Le cahier des charges
+        (RG-D1, §6) ne dit pas à qui l'envoyer, puisque le critère « produit en stock déclaré » ne
+        s'applique pas. À trancher avec RED ; en attendant, le serveur l'envoie à tous les
+        ambulants disponibles du rayon, sans filtre de stock.
       x-roles: [HANOUT]
       requestBody:
         required: true
@@ -1905,17 +2206,41 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
     Forbidden:
-      description: Rôle non autorisé pour cette opération, ou consentement CNDP manquant (`type` …/consentement-requis)
+      description: |
+        Rôle non autorisé (`…/role-non-autorise`), consentement CNDP manquant (`…/consentement-requis`)
+        ou appareil déconnecté à distance (`…/appareil-revoque`)
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+          examples:
+            appareilRevoque:
+              value:
+                type: https://daba.ma/problemes/appareil-revoque
+                title: Forbidden
+                status: 403
+                detail: 'Appareil déconnecté : reconnectez-vous'
+            consentementRequis:
+              value:
+                type: https://daba.ma/problemes/consentement-requis
+                title: Forbidden
+                status: 403
+                detail: Consentement CNDP requis (PUT /v1/moi/consentement)
     AppareilRevoque:
-      description: Rôle non autorisé, ou appareil déconnecté à distance (§10, appareil perdu)
+      description: |
+        Rôle non autorisé, `appareilId` différent de la session (`…/appareil-different`), ou appareil
+        déconnecté à distance (`…/appareil-revoque`, §10, appareil perdu : l'app efface ses données)
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+          examples:
+            appareilRevoque:
+              value:
+                type: https://daba.ma/problemes/appareil-revoque
+                title: Forbidden
+                status: 403
+                detail: 'Appareil déconnecté : reconnectez-vous'
     NotFound:
       description: Ressource inexistante ou hors de l'organisation de l'appelant (cloisonnement multi-tenant)
       content:
@@ -1940,6 +2265,63 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+
+  # Sessions d'exemple, une par rôle, pour le mock Prism (`Prefer: example=<nom>`).
+  examples:
+    SessionAmbulant:
+      summary: Ambulant (avec préfixe de numérotation)
+      value:
+        accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJhY2NlcyJ9.exemple-ambulant
+        refreshToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJyZWZyZXNoIn0.exemple-ambulant
+        expireDans: 86400
+        prefixeNumerotation: K7Q2
+        utilisateur:
+          id: 3f0c2a8e-6b1d-4c57-9a1e-0d6f1b2c3a01
+          telephone: '+212612345678'
+          nom: Youssef
+          roles: [AMBULANT]
+          organisationId: 3f0c2a8e-6b1d-4c57-9a1e-0d6f1b2c3a02
+          nouveau: false
+    SessionGrossiste:
+      summary: Grossiste (son organisationId est son grossisteId)
+      value:
+        accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJhY2NlcyJ9.exemple-grossiste
+        refreshToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJyZWZyZXNoIn0.exemple-grossiste
+        expireDans: 86400
+        utilisateur:
+          id: 7a1b9c2d-3e4f-4a5b-8c6d-1e2f3a4b5c01
+          telephone: '+212522123456'
+          nom: Dépôt Derb Omar
+          roles: [GROSSISTE]
+          organisationId: 7a1b9c2d-3e4f-4a5b-8c6d-1e2f3a4b5c02
+          nouveau: false
+    SessionGrandClient:
+      summary: Grand client (marque ou distributeur)
+      value:
+        accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJhY2NlcyJ9.exemple-grand-client
+        refreshToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJyZWZyZXNoIn0.exemple-grand-client
+        expireDans: 86400
+        utilisateur:
+          id: 9d8c7b6a-5f4e-4d3c-9b2a-1f0e9d8c7b01
+          telephone: '+212661234567'
+          nom: Responsable trade marketing
+          roles: [GRAND_CLIENT]
+          organisationId: 9d8c7b6a-5f4e-4d3c-9b2a-1f0e9d8c7b02
+          nouveau: false
+    SessionHanout:
+      summary: Hanout (avec son hanoutId)
+      value:
+        accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJhY2NlcyJ9.exemple-hanout
+        refreshToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJyZWZyZXNoIn0.exemple-hanout
+        expireDans: 86400
+        utilisateur:
+          id: 1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e01
+          telephone: '+212677654321'
+          nom: Hanout Al Baraka
+          roles: [HANOUT]
+          organisationId: 1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e02
+          hanoutId: 1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e03
+          nouveau: false
 
   schemas:
     # ------------------------------------------------------------ communs
@@ -1971,8 +2353,16 @@ components:
     Montant:
       type: integer
       format: int64
-      description: Montant en centimes de dirham (MAD)
+      description: Montant en centimes de dirham (MAD) ; les prix de vente sont TTC
       examples: [12550]
+
+    TauxTva:
+      type: number
+      enum: [0, 7, 10, 14, 20]
+      description: |
+        Taux de TVA du produit, en pour cent ; absent = inconnu. Les prix étant TTC, la TVA d'une
+        ligne de montant M au taux t vaut M × t / (100 + t), arrondie au centime (demi au-dessus,
+        en valeur absolue), et celle d'un document est la somme de ses lignes (RG-F2).
 
     Ean:
       type: string
@@ -1980,14 +2370,24 @@ components:
 
     Position:
       type: object
+      description: Position WGS 84
       required: [lat, lon]
       properties:
         lat:
           type: number
           format: double
+          minimum: -90
+          maximum: 90
+          examples: [33.5731]
         lon:
           type: number
           format: double
+          minimum: -180
+          maximum: 180
+          examples: [-7.5898]
+      examples:
+        - lat: 33.5731
+          lon: -7.5898
 
     ZoneGeo:
       type: object
@@ -2037,6 +2437,23 @@ components:
         type:
           type: string
           format: uri
+          description: |
+            `https://daba.ma/problemes/<code>` ; codes fixes (les clients décident sur ce code, jamais sur `detail`) :
+            - `requete-invalide` (400, détail par champ dans `erreurs`)
+            - `non-authentifie` (401 : jeton absent, invalide, expiré, ou session fermée)
+            - `code-invalide` (401, OTP faux ou expiré)
+            - `appareil-revoque` (403 sur tout appel authentifié, 401 à `POST /v1/auth/otp/verify` :
+              appareil déconnecté à distance, l'app efface ses données locales)
+            - `consentement-requis` (403 : consentement CNDP à recueillir, `PUT /v1/moi/consentement`)
+            - `role-non-autorise` (403)
+            - `appareil-different` (403 : `appareilId` du corps différent de celui de la session)
+            - `introuvable` (404, y compris hors de l'organisation de l'appelant)
+            - `conflit` (409)
+            - `lien-expire`, `curseur-expire` (410)
+            - `regle-de-gestion` (422, `regle` nomme la règle)
+            - `trop-de-demandes` (429)
+            - `erreur-serveur` (dans `ResultatOperation.erreur` seulement : renvoyer l'opération plus tard)
+          examples: [https://daba.ma/problemes/appareil-revoque]
         title:
           type: string
         status:
@@ -2123,8 +2540,10 @@ components:
     PrefixeNumerotation:
       type: string
       description: |
-        Préfixe court attribué par le serveur à l'appareil d'un ambulant (RG-F1). Présent
-        seulement pour le rôle AMBULANT ; stable pour un même appareilId.
+        Préfixe court attribué par le serveur au couple (ambulant, appareil) (RG-F1). Présent
+        seulement pour le rôle AMBULANT ; stable pour un même ambulant sur un même appareilId. Un
+        autre ambulant qui se connecte sur ce téléphone reçoit son propre préfixe, et le premier
+        retrouve le sien (et la suite de ses séquences) à sa reconnexion.
       pattern: '^[A-Z0-9]{3,6}$'
       examples: [K7Q2]
 
@@ -2342,6 +2761,27 @@ components:
         libelle:
           $ref: '#/components/schemas/LibelleI18n'
 
+    Region:
+      type: object
+      required: [code, nom, villes]
+      properties:
+        code:
+          type: string
+          examples: [CASABLANCA_SETTAT]
+        nom:
+          $ref: '#/components/schemas/LibelleI18n'
+        villes:
+          type: array
+          items:
+            type: object
+            required: [code, nom]
+            properties:
+              code:
+                type: string
+                examples: [CASABLANCA]
+              nom:
+                $ref: '#/components/schemas/LibelleI18n'
+
     Produit:
       type: object
       required: [id, ean, libelle, marque, categorie, conditionnement, unitesParConditionnement]
@@ -2363,6 +2803,8 @@ components:
         unitesParConditionnement:
           type: integer
           minimum: 1
+        tauxTva:
+          $ref: '#/components/schemas/TauxTva'
         photoUrl:
           type: string
           format: uri
@@ -2452,6 +2894,7 @@ components:
         - $ref: '#/components/schemas/OperationHanout'
         - $ref: '#/components/schemas/OperationCreditHanout'
         - $ref: '#/components/schemas/OperationParametresAmbulant'
+        - $ref: '#/components/schemas/OperationResolutionContestation'
       discriminator:
         propertyName: type
         mapping:
@@ -2465,6 +2908,7 @@ components:
           HANOUT: '#/components/schemas/OperationHanout'
           CREDIT_HANOUT: '#/components/schemas/OperationCreditHanout'
           PARAMETRES_AMBULANT: '#/components/schemas/OperationParametresAmbulant'
+          RESOLUTION_CONTESTATION: '#/components/schemas/OperationResolutionContestation'
 
     OperationChargement:
       allOf:
@@ -2602,6 +3046,31 @@ components:
               const: PARAMETRES_AMBULANT
             donnees:
               $ref: '#/components/schemas/ParametresAmbulantSaisie'
+
+    OperationResolutionContestation:
+      allOf:
+        - $ref: '#/components/schemas/OperationBase'
+        - type: object
+          required: [type, donnees]
+          properties:
+            type:
+              const: RESOLUTION_CONTESTATION
+            donnees:
+              $ref: '#/components/schemas/ResolutionContestation'
+
+    ResolutionContestation:
+      type: object
+      description: |
+        L'ambulant clôt une contestation qui lui est adressée (après un avoir, une explication…).
+        Rejouer sur une contestation déjà RESOLUE ne change rien.
+      required: [contestationId]
+      properties:
+        contestationId:
+          type: string
+          format: uuid
+        commentaire:
+          type: string
+          maxLength: 500
 
     LigneQuantite:
       type: object
@@ -2822,6 +3291,11 @@ components:
         reservationId:
           type: string
           format: uuid
+        tauxTva:
+          $ref: '#/components/schemas/TauxTva'
+          description: |
+            Taux du produit tel que l'appareil le connaît à l'émission (`Produit.tauxTva`), figé dans
+            la pièce comme les mentions légales ; absent, le serveur prend le taux actuel du produit.
 
     Reglement:
       type: object
@@ -3100,6 +3574,7 @@ components:
         - $ref: '#/components/schemas/ChangementAnomalie'
         - $ref: '#/components/schemas/ChangementParametres'
         - $ref: '#/components/schemas/ChangementBonSortie'
+        - $ref: '#/components/schemas/ChangementContestation'
       discriminator:
         propertyName: entite
         mapping:
@@ -3116,6 +3591,7 @@ components:
           ANOMALIE: '#/components/schemas/ChangementAnomalie'
           PARAMETRES: '#/components/schemas/ChangementParametres'
           BON_SORTIE: '#/components/schemas/ChangementBonSortie'
+          CONTESTATION: '#/components/schemas/ChangementContestation'
 
     ChangementProduit:
       allOf:
@@ -3247,6 +3723,16 @@ components:
             donnees:
               $ref: '#/components/schemas/BonSortie'
 
+    ChangementContestation:
+      allOf:
+        - $ref: '#/components/schemas/ChangementBase'
+        - type: object
+          properties:
+            entite:
+              const: CONTESTATION
+            donnees:
+              $ref: '#/components/schemas/Contestation'
+
     ParametresAmbulant:
       type: object
       required: [politiqueDepassementCredit, seuilEcartInventairePourcent]
@@ -3271,7 +3757,7 @@ components:
     Mouvement:
       type: object
       description: Mouvement de stock (RG-S2) — type, auteur, horodatage et appareil toujours présents
-      required: [id, type, produitId, quantite, auteurId, appareilId, horodatage, recuLe]
+      required: [id, type, produitId, quantite, auteurId, appareilId, horodatage, recuLe, operationId]
       properties:
         id:
           type: string
@@ -3302,6 +3788,10 @@ components:
         operationId:
           type: string
           format: uuid
+          description: |
+            Opération de synchronisation à l'origine du mouvement (l'app remplace ses mouvements
+            locaux par ceux du serveur portant le même operationId). Pour un mouvement PROMO, créé
+            par le retrait chez le grossiste sans opération de l'appareil : l'id de la réservation.
         documentId:
           type: string
           format: uuid
@@ -3452,6 +3942,45 @@ components:
               items:
                 $ref: '#/components/schemas/BonSortie'
 
+    AmbulantRattache:
+      type: object
+      required: [id, nom, telephone, nombreBons, quantiteTotale, bons30Jours, premierBonLe, dernierBonLe]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nom:
+          type: string
+        telephone:
+          $ref: '#/components/schemas/Telephone'
+        nombreBons:
+          type: integer
+          description: Bons de sortie reçus de ce grossiste
+        quantiteTotale:
+          type: integer
+          format: int64
+          description: Volume, en unités, de tous ses bons de sortie
+        bons30Jours:
+          type: integer
+          description: Régularité — bons des 30 derniers jours
+        premierBonLe:
+          type: string
+          format: date-time
+        dernierBonLe:
+          type: string
+          format: date-time
+
+    AmbulantRattachePage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/AmbulantRattache'
+
     # ------------------------------------------------------------ ventes
     TypeDocument:
       type: string
@@ -3498,6 +4027,9 @@ components:
           $ref: '#/components/schemas/Montant'
         tva:
           $ref: '#/components/schemas/Montant'
+          description: |
+            TVA comprise dans le total (formule de `TauxTva`), pour une FACTURE dont les mentions
+            légales portent `assujettiTva` ; absente si un taux de ligne est inconnu (RG-F2).
         montantRegle:
           $ref: '#/components/schemas/Montant'
         montantCredit:
@@ -3524,6 +4056,8 @@ components:
           $ref: '#/components/schemas/MentionsLegales'
         confirmationHanout:
           $ref: '#/components/schemas/ConfirmationHanout'
+        receptionHanout:
+          $ref: '#/components/schemas/ReceptionHanout'
 
     LigneDocument:
       allOf:
@@ -3562,6 +4096,124 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/Document'
+
+    LienDocument:
+      type: object
+      required: [url, expireLe]
+      properties:
+        url:
+          type: string
+          format: uri
+        expireLe:
+          type: string
+          format: date-time
+
+    ReceptionHanoutSaisie:
+      type: object
+      description: |
+        `conforme = true` sans `ecarts` : tout est reçu. `conforme = false` : au moins un écart. Une
+        ligne est repérée par son rang dans `Document.lignes` (à partir de 0), car un même produit
+        peut y figurer deux fois (stock normal et stock promo, RG-S3) ; seule une ligne ARTICLE porte
+        un écart, avec une quantité reçue différente de la quantité livrée.
+      required: [id, conforme]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Généré par l'appareil ; clé d'idempotence
+        conforme:
+          type: boolean
+        ecarts:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/EcartReception'
+        commentaire:
+          type: string
+          maxLength: 500
+
+    EcartReception:
+      type: object
+      required: [ligne, quantiteRecue]
+      properties:
+        ligne:
+          type: integer
+          minimum: 0
+        quantiteRecue:
+          type: integer
+          minimum: 0
+
+    ReceptionHanout:
+      type: object
+      description: Réception confirmée par le hanout après la livraison (§6), distincte de `confirmationHanout`
+      required: [conforme, le]
+      properties:
+        conforme:
+          type: boolean
+        ecarts:
+          type: array
+          items:
+            $ref: '#/components/schemas/EcartReception'
+        commentaire:
+          type: string
+        le:
+          type: string
+          format: date-time
+
+    ContestationSaisie:
+      type: object
+      required: [id, cible, cibleId, motif]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Généré par l'appareil ; clé d'idempotence
+        cible:
+          type: string
+          enum: [DOCUMENT, COMPTE_CREDIT]
+        cibleId:
+          type: string
+          format: uuid
+          description: Un document adressé au hanout, ou l'un de ses comptes de crédit (404 sinon)
+        motif:
+          type: string
+          enum: [MONTANT, QUANTITE, NON_RECU, DEJA_PAYE, AUTRE]
+        commentaire:
+          type: string
+          maxLength: 500
+
+    Contestation:
+      allOf:
+        - $ref: '#/components/schemas/ContestationSaisie'
+        - type: object
+          required: [statut, creeLe, ambulant, hanout]
+          properties:
+            statut:
+              type: string
+              enum: [OUVERTE, RESOLUE]
+            creeLe:
+              type: string
+              format: date-time
+            ambulant:
+              $ref: '#/components/schemas/Reference'
+            hanout:
+              $ref: '#/components/schemas/Reference'
+            resolueLe:
+              type: string
+              format: date-time
+            commentaireResolution:
+              type: string
+
+    ContestationPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/Contestation'
 
     Versement:
       allOf:
@@ -3872,7 +4524,7 @@ components:
 
     LigneDepot:
       type: object
-      required: [produitId, quantiteProposee, quantiteDeposee, quantiteReservee, quantiteRetiree, quantiteRestante]
+      required: [produitId, quantiteProposee, quantiteDeposee, quantiteReservee, quantiteRetiree, quantiteRestante, quantiteMaxParAmbulant]
       properties:
         produitId:
           type: string
@@ -3891,16 +4543,22 @@ components:
         quantiteRestante:
           type: integer
           description: Déposée − réservée − retirée ; une réservation expirée revient ici (RG-P2)
+        quantiteMaxParAmbulant:
+          type: integer
+          description: Plafond par ambulant de la campagne pour ce produit (RG-P3), pour borner la quantité remise au retrait
 
     Depot:
       type: object
-      required: [id, campagne, grossiste, statut, lignes]
+      required: [id, campagne, statutCampagne, grossiste, statut, lignes]
       properties:
         id:
           type: string
           format: uuid
         campagne:
           $ref: '#/components/schemas/Reference'
+        statutCampagne:
+          $ref: '#/components/schemas/StatutCampagne'
+          description: Clôture possible quand le dépôt est RECU et la campagne EPUISEE ou EXPIREE
         marque:
           $ref: '#/components/schemas/Reference'
         grossiste:
@@ -4152,7 +4810,26 @@ components:
           format: date-time
         qrJeton:
           type: string
-          description: Contenu du QR code à présenter au grossiste ; renvoyé à l'ambulant seulement, tant que la réservation est RESERVEE
+          contentMediaType: application/jwt
+          contentSchema:
+            $ref: '#/components/schemas/ReservationQr'
+          pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
+          description: |
+            Contenu du QR code à présenter au grossiste (RG-P4) : JWS compact signé par le serveur,
+            d'environ 200 caractères, jamais un code court à saisir. Seul le serveur le vérifie, au
+            scan. Renvoyé à l'ambulant seulement, tant que la réservation est RESERVEE.
+
+    ReservationQr:
+      type: object
+      description: Charge utile du QR d'une réservation
+      required: [reservationId, depotId]
+      properties:
+        reservationId:
+          type: string
+          format: uuid
+        depotId:
+          type: string
+          format: uuid
 
     ReservationPage:
       allOf:
@@ -4196,7 +4873,7 @@ components:
           type: boolean
         position:
           $ref: '#/components/schemas/Position'
-          description: Requise avec disponible = true, refusée (400) sinon
+          description: Requise avec disponible = true (400 sinon) ; ignorée avec disponible = false
 
     Disponibilite:
       type: object
@@ -4218,7 +4895,9 @@ components:
 
     RuptureSaisie:
       type: object
-      description: Produit choisi dans la liste (`produitId`) ; avec une photo (multipart), `produitId` peut manquer
+      description: |
+        Produit choisi dans la liste (`produitId`) ; avec une photo (multipart), `produitId` peut
+        manquer (destinataires : voir `POST /v1/demandes-depannage`, question ouverte sur RG-D1)
       required: [id, quantite]
       properties:
         id:
