@@ -41,6 +41,10 @@ class PdfDocuments {
 			"ary-Latn", Map.of("BON_LIVRAISON", "Bon dyal livraison", "FACTURE", "Facture", "AVOIR", "Avoir", "date", "Tarikh",
 					"vendeur", "Biya3", "client", "Client", "total", "Majmou3", "regle", "Tkhless", "credit", "B lcredit", "annule", "Tlgha b avoir"));
 
+	/** TVA comprise dans le total TTC d'une facture d'ambulant assujetti (RG-F2). */
+	private static final Map<String, String> DONT_TVA = Map.of("fr", "Dont TVA", "ar", "منها الضريبة على القيمة المضافة",
+			"ary-Arab", "فيها TVA", "ary-Latn", "Fiha TVA");
+
 	byte[] generer(Ventes.Document document, String langue) {
 		var l = LIBELLES.getOrDefault(langue, LIBELLES.get("fr"));
 		var rtl = "ar".equals(langue) || "ary-Arab".equals(langue);
@@ -64,6 +68,9 @@ class PdfDocuments {
 		}
 		lignes.add("");
 		lignes.add(l.get("total") + " : " + dirhams(document.total()));
+		if (document.tva() != null) {
+			lignes.add(DONT_TVA.getOrDefault(langue, DONT_TVA.get("fr")) + " : " + dirhams(document.tva()));
+		}
 		if (!"AVOIR".equals(document.type())) {
 			lignes.add(l.get("regle") + " : " + dirhams(document.montantRegle()));
 			lignes.add(l.get("credit") + " : " + dirhams(document.montantCredit()));

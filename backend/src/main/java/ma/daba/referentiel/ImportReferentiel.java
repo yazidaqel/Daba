@@ -73,7 +73,7 @@ class ImportReferentiel {
 
 	/**
 	 * Colonnes : ean, libelle_fr, libelle_ar, libelle_ary_arab, libelle_ary_latn, marque, categorie,
-	 * conditionnement (UNITE, PACK, CARTON), unites, photo_url, grand_client_id.
+	 * conditionnement (UNITE, PACK, CARTON), unites, photo_url, grand_client_id, taux_tva (vide = inconnu).
 	 */
 	@Transactional
 	Bilan produits(MultipartFile fichier) {
@@ -98,14 +98,18 @@ class ImportReferentiel {
 				throw new IllegalArgumentException("Conditionnement inconnu : " + conditionnement);
 			}
 			var grandClient = vide(l.get("grand_client_id"));
+			var tva = vide(l.get("taux_tva"));
+			if (tva != null && !List.of("0", "7", "10", "14", "20").contains(tva)) {
+				throw new IllegalArgumentException("Taux de TVA inconnu : " + tva);
+			}
 			var r = jdbc.sql("""
 					INSERT INTO produit (id, ean, libelle, marque, categorie, conditionnement, unites_par_conditionnement,
-					  photo_url, grand_client_id)
-					VALUES (:id, :ean, :libelle::jsonb, :marque, :categorie, :cond, :unites, :photo, :gc)
+					  photo_url, grand_client_id, taux_tva)
+					VALUES (:id, :ean, :libelle::jsonb, :marque, :categorie, :cond, :unites, :photo, :gc, :tva)
 					ON CONFLICT (ean) DO UPDATE SET libelle = excluded.libelle, marque = excluded.marque,
 					  categorie = excluded.categorie, conditionnement = excluded.conditionnement,
 					  unites_par_conditionnement = excluded.unites_par_conditionnement, photo_url = excluded.photo_url,
-					  grand_client_id = excluded.grand_client_id
+					  grand_client_id = excluded.grand_client_id, taux_tva = excluded.taux_tva
 					RETURNING id, (xmax = 0) AS cree
 					""")
 				.param("id", UUID.randomUUID()).param("ean", ean).param("libelle", json.ecrire(libelle))
@@ -113,6 +117,7 @@ class ImportReferentiel {
 				.param("unites", Integer.parseInt(l.getOrDefault("unites", "1").isBlank() ? "1" : l.get("unites")))
 				.param("photo", vide(l.get("photo_url")))
 				.param("gc", grandClient == null ? null : UUID.fromString(grandClient))
+				.param("tva", tva == null ? null : Integer.valueOf(tva))
 				.query((rs, i) -> Map.entry(rs.getObject("id", UUID.class), rs.getBoolean("cree"))).single();
 			referentiel.publierProduit(r.getKey());
 			return r.getValue();

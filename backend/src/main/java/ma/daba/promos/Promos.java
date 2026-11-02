@@ -107,11 +107,17 @@ public class Promos {
 	}
 
 	record LigneDepot(UUID produitId, int quantiteProposee, Integer quantiteContreProposee, int quantiteDeposee,
-			int quantiteReservee, int quantiteRetiree, int quantiteRestante) {
+			int quantiteReservee, int quantiteRetiree, int quantiteRestante, Integer quantiteMaxParAmbulant) {
+
+		LigneDepot avecPlafond(Integer plafond) {
+			return new LigneDepot(produitId, quantiteProposee, quantiteContreProposee, quantiteDeposee, quantiteReservee,
+					quantiteRetiree, quantiteRestante, plafond);
+		}
+
 	}
 
-	record Depot(UUID id, Reference campagne, Reference marque, Grossiste grossiste, String statut, List<LigneDepot> lignes,
-			Instant finCampagne, Instant recuLe, String photoBonLivraisonUrl, Map<String, Object> cloture) {
+	record Depot(UUID id, Reference campagne, String statutCampagne, Reference marque, Grossiste grossiste, String statut,
+			List<LigneDepot> lignes, Instant finCampagne, Instant recuLe, String photoBonLivraisonUrl, Map<String, Object> cloture) {
 	}
 
 	record OffrePromo(UUID id, UUID campagneId, Map<String, String> campagneNom, UUID depotId, Produit produit,
@@ -400,16 +406,22 @@ public class Promos {
 
 	Depot depot(UUID id) {
 		return jdbc.sql("""
-				SELECT d.*, c.nom AS campagne_nom, c.grand_client_id, c.fin FROM depot d JOIN campagne c ON c.id = d.campagne_id
+				SELECT d.*, c.nom AS campagne_nom, c.statut AS statut_campagne, c.grand_client_id, c.fin
+				FROM depot d JOIN campagne c ON c.id = d.campagne_id
 				WHERE d.id = :id
 				""").param("id", id).query((rs, i) -> {
+				var campagneId = rs.getObject("campagne_id", UUID.class);
+				// Plafond par ambulant (RG-P3) visible du grossiste, qui borne la quantité remise au retrait.
+				var plafonds = jdbc.sql("SELECT produit_id, quantite_max_par_ambulant FROM campagne_ligne WHERE campagne_id = :c")
+					.param("c", campagneId).query((r, n) -> Map.entry(r.getObject(1, UUID.class), r.getInt(2))).list().stream()
+					.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 				var lignes = jdbc.sql(LIGNES_DEPOT + " WHERE dl.depot_id = :d GROUP BY dl.id, d.id ORDER BY dl.produit_id")
-					.param("d", id).query(this::ligneDepot).list();
+					.param("d", id).query(this::ligneDepot).list().stream()
+					.map(l -> l.avecPlafond(plafonds.get(l.produitId()))).toList();
 				var gc = rs.getObject("grand_client_id", UUID.class);
 				var recu = rs.getTimestamp("recu_le");
-				return new Depot(id, new Reference(rs.getObject("campagne_id", UUID.class),
-						json.lire(rs.getString("campagne_nom"), LIBELLE).get("fr")),
-						new Reference(gc, comptes.nomOrganisation(gc)), referentiel.grossiste(rs.getObject("grossiste_id", UUID.class)).orElse(null),
+				return new Depot(id, new Reference(campagneId, json.lire(rs.getString("campagne_nom"), LIBELLE).get("fr")),
+						rs.getString("statut_campagne"), new Reference(gc, comptes.nomOrganisation(gc)), referentiel.grossiste(rs.getObject("grossiste_id", UUID.class)).orElse(null),
 						rs.getString("statut"), lignes, rs.getTimestamp("fin").toInstant(), recu == null ? null : recu.toInstant(),
 						photos.url(rs.getObject("photo_id", UUID.class)), json.lire(rs.getString("cloture"), OBJET));
 			}).single();
@@ -420,7 +432,7 @@ public class Promos {
 		int reservee = rs.getInt("reservee");
 		int retiree = rs.getInt("retiree");
 		return new LigneDepot(rs.getObject("produit_id", UUID.class), rs.getInt("quantite_proposee"),
-				(Integer) rs.getObject("quantite_contre_proposee"), deposee, reservee, retiree, deposee - reservee - retiree);
+				(Integer) rs.getObject("quantite_contre_proposee"), deposee, reservee, retiree, deposee - reservee - retiree, null);
 	}
 
 	private String statutDepot(UUID grossiste, UUID depotId) {
@@ -559,7 +571,7 @@ public class Promos {
 		var grossiste = referentiel.grossiste(rs.getObject("grossiste_id", UUID.class)).orElse(null);
 		var ciblage = json.lire("null".equals(campagne[3]) ? null : campagne[3], OBJET);
 		if (ciblage != null && ciblage.get("villes") instanceof List<?> villes && !villes.isEmpty()
-				&& (grossiste == null || villes.stream().noneMatch(v -> String.valueOf(v).equalsIgnoreCase(grossiste.ville())))) {
+				&& (grossiste == null || villes.stream().noneMatch(v -> codeVille(String.valueOf(v)).equals(codeVille(grossiste.ville()))))) {
 			return null;
 		}
 		var ligne = jdbc.sql("SELECT remise, quantite_max_par_ambulant, prix_revente_conseille FROM campagne_ligne WHERE campagne_id = :c AND produit_id = :p")
@@ -571,6 +583,13 @@ public class Promos {
 		return new OffrePromo(rs.getObject("id", UUID.class), campagneId, json.lire(campagne[0], LIBELLE),
 				rs.getObject("depot_id", UUID.class), referentiel.produit(produitId).orElseThrow(), remise, (Long) ligne[2],
 				grossiste, disponible, (int) ligne[1], 0, Instant.parse(campagne[2]), Integer.parseInt(campagne[1]));
+	}
+
+	/** Code de ville de {@code GET /v1/regions} : « Fès », « fes » et « FES » désignent la même ville. */
+	static String codeVille(String ville) {
+		return ville == null ? ""
+				: java.text.Normalizer.normalize(ville, java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "")
+					.toUpperCase(java.util.Locale.ROOT).trim().replaceAll("[^A-Z0-9]+", "_");
 	}
 
 	private OffrePromo avecDejaReserve(OffrePromo o, UUID ambulantId) {

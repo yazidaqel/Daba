@@ -54,7 +54,7 @@ public class Ventes implements ProduitsHabituels {
 	public record LigneSaisie(@NotNull @jakarta.validation.constraints.Pattern(regexp = "^(ARTICLE|REMISE_PONCTUELLE|REMISE_PROMO)$") String nature,
 			@NotNull UUID produitId, Integer quantite, Long prixUnitaire,
 			@jakarta.validation.constraints.Pattern(regexp = "^(STANDARD|NEGOCIE)$") String tarif, Long montant,
-			UUID campagneId, UUID reservationId) {
+			UUID campagneId, UUID reservationId, Integer tauxTva) {
 	}
 
 	public record Reglement(@NotNull @jakarta.validation.constraints.Pattern(regexp = "^(ESPECES|CHEQUE)$") String mode,
@@ -104,14 +104,24 @@ public class Ventes implements ProduitsHabituels {
 	// ---------------------------------------------------------------- vues
 
 	public record LigneDocument(String nature, UUID produitId, Integer quantite, Long prixUnitaire, String tarif,
-			long montant, UUID campagneId, UUID reservationId, Map<String, String> libelle, Map<String, String> campagneNom) {
+			long montant, UUID campagneId, UUID reservationId, Integer tauxTva, Map<String, String> libelle,
+			Map<String, String> campagneNom) {
+	}
+
+	public record EcartReception(@NotNull @Min(0) Integer ligne, @NotNull @Min(0) Integer quantiteRecue) {
+	}
+
+	public record ReceptionHanout(boolean conforme, List<EcartReception> ecarts, String commentaire, Instant le) {
 	}
 
 	public record Document(UUID id, String type, String numero, long sequence, UUID appareilId, Reference ambulant,
 			Reference hanout, Instant emisLe, List<LigneDocument> lignes, long total, Long tva, long montantRegle,
 			long montantCredit, String statut, UUID documentOrigineId, List<UUID> avoirIds, String motifAvoir,
-			UUID demandeDepannageId, MentionsLegales mentionsLegales, ConfirmationHanout confirmationHanout) {
+			UUID demandeDepannageId, MentionsLegales mentionsLegales, ConfirmationHanout confirmationHanout,
+			ReceptionHanout receptionHanout) {
 	}
+
+	static final Set<Integer> TAUX_TVA = Set.of(0, 7, 10, 14, 20);
 
 	public record Versement(UUID versementId, UUID hanoutId, String mode, long montant, String chequeNumero,
 			String chequeBanque, List<Imputation> imputations, UUID ambulantId, Instant recuLe) {
@@ -298,9 +308,13 @@ public class Ventes implements ProduitsHabituels {
 			if (l.campagneId() != null && campagne == null) {
 				throw Probleme.regle(null, "Campagne inconnue : " + l.campagneId());
 			}
+			if (l.tauxTva() != null && !TAUX_TVA.contains(l.tauxTva())) {
+				throw Probleme.requete("Taux de TVA inconnu : " + l.tauxTva());
+			}
+			// Le taux connu de l'appareil à l'émission est figé dans la pièce (RG-F2), sinon le taux actuel du produit.
 			return new LigneDocument(l.nature(), l.produitId(), "ARTICLE".equals(l.nature()) ? l.quantite() : null,
 					"ARTICLE".equals(l.nature()) ? l.prixUnitaire() : null, l.tarif(), montant, l.campagneId(),
-					l.reservationId(), produit.libelle(), campagne);
+					l.reservationId(), l.tauxTva() != null ? l.tauxTva() : produit.tauxTva(), produit.libelle(), campagne);
 		}).toList();
 	}
 
@@ -314,8 +328,8 @@ public class Ventes implements ProduitsHabituels {
 		if (!m.matches() || !m.group(2).equals(SERIES.get(type)) || Long.parseLong(m.group(3)) != sequence) {
 			throw Probleme.requete("Numéro " + numero + " incohérent avec le type " + type + " et la séquence " + sequence);
 		}
-		if (!comptes.prefixe(geste.appareilId()).map(m.group(1)::equals).orElse(false)) {
-			throw Probleme.regle("RG-F1", "Le préfixe " + m.group(1) + " n'est pas celui attribué à cet appareil");
+		if (!comptes.prefixe(geste.ambulantId(), geste.appareilId()).map(m.group(1)::equals).orElse(false)) {
+			throw Probleme.regle("RG-F1", "Le préfixe " + m.group(1) + " n'est pas celui de cet ambulant sur cet appareil");
 		}
 		var anomalies = new ArrayList<Anomalie>();
 		var serie = serie(numero);
@@ -578,16 +592,43 @@ public class Ventes implements ProduitsHabituels {
 			.param("id", id).query((r, n) -> Map.entry(r.getObject("id", UUID.class), r.getLong("total"))).list();
 		long annule = avoirs.stream().mapToLong(Map.Entry::getValue).sum();
 		var statut = "AVOIR".equals(type) || annule == 0 ? "EMIS" : annule >= total ? "ANNULE" : "PARTIELLEMENT_ANNULE";
+		var lignes = json.lire(rs.getString("lignes"), LIGNES);
+		var mentions = json.lire(rs.getString("mentions_legales"), MentionsLegales.class);
+		var reception = jdbc.sql("SELECT conforme, ecarts::text, commentaire, le FROM reception_hanout WHERE document_id = :id")
+			.param("id", id)
+			.query((r, n) -> new ReceptionHanout(r.getBoolean(1), json.lire(r.getString(2), ECARTS), r.getString(3),
+					r.getTimestamp(4).toInstant()))
+			.optional().orElse(null);
 		return new Document(id, type, rs.getString("numero"), rs.getLong("sequence"), rs.getObject("appareil_id", UUID.class),
 				new Reference(a, comptes.nom(a)), new Reference(h, referentiel.hanout(h).map(Referentiel.Hanout::nom).orElse("—")),
-				rs.getTimestamp("emis_le").toInstant(), json.lire(rs.getString("lignes"), LIGNES), total, null,
+				rs.getTimestamp("emis_le").toInstant(), lignes, total,
+				"FACTURE".equals(type) && mentions != null && mentions.assujettiTva() ? tva(lignes) : null,
 				rs.getLong("montant_regle"), rs.getLong("montant_credit"), statut, rs.getObject("document_origine_id", UUID.class),
 				avoirs.isEmpty() ? null : avoirs.stream().map(Map.Entry::getKey).toList(), rs.getString("motif_avoir"),
-				rs.getObject("demande_depannage_id", UUID.class), json.lire(rs.getString("mentions_legales"), MentionsLegales.class),
-				json.lire(rs.getString("confirmation_hanout"), ConfirmationHanout.class));
+				rs.getObject("demande_depannage_id", UUID.class), mentions,
+				json.lire(rs.getString("confirmation_hanout"), ConfirmationHanout.class), reception);
 	}
 
-	private void publier(UUID documentId) {
+	static final TypeReference<List<EcartReception>> ECARTS = new TypeReference<>() {
+	};
+
+	/**
+	 * RG-F2 : TVA comprise dans des prix TTC, M × t / (100 + t) arrondi au centime par ligne (demi
+	 * au-dessus en valeur absolue) ; null si un taux est inconnu.
+	 */
+	static Long tva(List<LigneDocument> lignes) {
+		long tva = 0;
+		for (var l : lignes) {
+			if (l.tauxTva() == null) {
+				return null;
+			}
+			tva += BigDecimal.valueOf(l.montant()).multiply(BigDecimal.valueOf(l.tauxTva()))
+				.divide(BigDecimal.valueOf(100L + l.tauxTva()), 0, java.math.RoundingMode.HALF_UP).longValueExact();
+		}
+		return tva;
+	}
+
+	void publier(UUID documentId) {
 		var document = document(documentId);
 		journal.publier(document.ambulant().id(), "DOCUMENT", documentId, document);
 	}

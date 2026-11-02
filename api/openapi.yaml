@@ -166,6 +166,8 @@ paths:
         L'accessToken et le refreshToken de cette session deviennent invalides (401 ensuite) et
         l'appareil ne reçoit plus de push. Ce n'est pas une révocation : une nouvelle connexion OTP
         sur le même appareil reste possible. Permis sans consentement CNDP.
+        De même, chaque connexion OTP ouvre une nouvelle session sur l'appareil : les jetons de la
+        précédente ne valent plus (seuls ceux de la dernière Session reçue servent).
       x-roles: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT, ADMIN]
       responses:
         '204':

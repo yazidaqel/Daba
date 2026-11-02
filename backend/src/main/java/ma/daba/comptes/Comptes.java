@@ -40,18 +40,25 @@ public class Comptes implements Acces.VerificationCompte {
 
 	@Override
 	public void verifier(Appelant appelant, boolean consentementExige) {
+		record Etat(boolean revoque, boolean sessionOuverte, boolean consenti) {
+		}
 		var etat = jdbc.sql("""
-				SELECT a.revoque, (SELECT c.traitement_donnees FROM consentement c
-				                   WHERE c.utilisateur_id = a.utilisateur_id ORDER BY c.id DESC LIMIT 1) AS consenti
+				SELECT a.revoque, a.session IS NOT NULL AND a.session = :session AS ouverte,
+				  (SELECT c.traitement_donnees FROM consentement c
+				   WHERE c.utilisateur_id = a.utilisateur_id ORDER BY c.id DESC LIMIT 1) AS consenti
 				FROM appareil a WHERE a.id = :appareil AND a.utilisateur_id = :u
 				""")
-			.param("appareil", appelant.appareilId()).param("u", appelant.utilisateurId())
-			.query((rs, i) -> Map.entry(rs.getBoolean("revoque"), Boolean.TRUE.equals(rs.getObject("consenti"))))
+			.param("appareil", appelant.appareilId()).param("u", appelant.utilisateurId()).param("session", appelant.sessionId())
+			.query((rs, i) -> new Etat(rs.getBoolean("revoque"), rs.getBoolean("ouverte"),
+					Boolean.TRUE.equals(rs.getObject("consenti"))))
 			.optional();
-		if (etat.isEmpty() || etat.get().getKey()) {
+		if (etat.isEmpty() || etat.get().revoque()) {
 			throw Probleme.interdit("appareil-revoque", "Appareil déconnecté : reconnectez-vous");
 		}
-		if (consentementExige && !etat.get().getValue() && !appelant.a(Appelant.Role.ADMIN)) {
+		if (!etat.get().sessionOuverte()) {
+			throw Probleme.nonAuthentifie();
+		}
+		if (consentementExige && !etat.get().consenti() && !appelant.a(Appelant.Role.ADMIN)) {
 			throw Probleme.interdit("consentement-requis", "Consentement CNDP requis (PUT /v1/moi/consentement)");
 		}
 	}
@@ -84,9 +91,10 @@ public class Comptes implements Acces.VerificationCompte {
 			.optional().orElse("—");
 	}
 
-	/** Préfixe de numérotation attribué à l'appareil d'un ambulant (RG-F1). */
-	public Optional<String> prefixe(UUID appareilId) {
-		return jdbc.sql("SELECT prefixe FROM appareil WHERE id = :a").param("a", appareilId).query(String.class).optional();
+	/** Préfixe de numérotation attribué au couple (ambulant, appareil) (RG-F1). */
+	public Optional<String> prefixe(UUID ambulantId, UUID appareilId) {
+		return jdbc.sql("SELECT prefixe FROM prefixe_numerotation WHERE utilisateur_id = :u AND appareil_id = :a")
+			.param("u", ambulantId).param("a", appareilId).query(String.class).optional();
 	}
 
 	public String nomOrganisation(UUID organisationId) {

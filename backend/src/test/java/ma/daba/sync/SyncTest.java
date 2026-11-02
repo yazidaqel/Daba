@@ -186,6 +186,79 @@ class SyncTest extends TestIntegration {
 	}
 
 	@Test
+	void rgF2_tvaDUneFactureAssujettieCalculeeSurDesPrixTtc() {
+		var ambulant = ambulant();
+		var the = produit();
+		var sucre = produit();
+		jdbc.sql("UPDATE produit SET taux_tva = 20 WHERE id = :p").param("p", the).update();
+		jdbc.sql("UPDATE produit SET taux_tva = 7 WHERE id = :p").param("p", sucre).update();
+		var hanout = hanout(33.57, -7.59);
+		var factureId = UUID.randomUUID();
+		// Le thé prend le taux du produit (20 %) ; le sucre, le taux connu de l'appareil à l'émission (10 %), figé dans la pièce.
+		var facture = op("EMISSION_DOCUMENT", m("documentId", factureId, "type", "FACTURE", "numero", ambulant.prefixe() + "-FA-000001",
+				"sequence", 1, "hanoutId", hanout,
+				"mentionsLegales", m("ice", "001234567000089", "identifiantFiscal", "1234567", "registreCommerce", "RC 123", "assujettiTva", true),
+				"lignes", List.of(m("nature", "ARTICLE", "produitId", the, "quantite", 2, "prixUnitaire", 1200),
+						m("nature", "ARTICLE", "produitId", sucre, "quantite", 1, "prixUnitaire", 1100, "tauxTva", 10),
+						m("nature", "REMISE_PONCTUELLE", "produitId", the, "montant", -120))));
+		var vente = vente(ambulant, 1, hanout, the, 1, 1200, 1200);
+		pousser(ambulant, chargement(the, 5), chargement(sucre, 5), facture, vente);
+
+		// 2400 × 20/120 = 400 ; 1100 × 10/110 = 100 ; −120 × 20/120 = −20.
+		var doc = lire(get(ambulant, "/v1/documents/" + factureId));
+		assertThat(doc.get("tva").asLong()).isEqualTo(480);
+		assertThat(doc.get("lignes").get(0).get("tauxTva").asInt()).isEqualTo(20);
+		assertThat(doc.get("lignes").get(1).get("tauxTva").asInt()).isEqualTo(10);
+		assertThat(lire(get(ambulant, "/v1/produits/" + sucre)).get("tauxTva").asInt()).isEqualTo(7);
+		// Un bon de livraison ne porte pas de TVA.
+		var bl = lire(get(ambulant, "/v1/documents?type=BON_LIVRAISON")).get("contenu").get(0);
+		assertThat(bl.has("tva")).isFalse();
+
+		// Un taux inconnu rend la TVA absente plutôt que fausse.
+		var inconnu = produit();
+		var sansTaux = UUID.randomUUID();
+		pousser(ambulant, chargement(inconnu, 1), op("EMISSION_DOCUMENT", m("documentId", sansTaux, "type", "FACTURE",
+				"numero", ambulant.prefixe() + "-FA-000002", "sequence", 2, "hanoutId", hanout,
+				"mentionsLegales", m("ice", "001234567000089", "identifiantFiscal", "1234567", "registreCommerce", "RC 123", "assujettiTva", true),
+				"lignes", List.of(m("nature", "ARTICLE", "produitId", inconnu, "quantite", 1, "prixUnitaire", 500)))));
+		assertThat(lire(get(ambulant, "/v1/documents/" + sansTaux)).has("tva")).isFalse();
+	}
+
+	@Test
+	void lienSigneDUnDocumentPourUnEnvoiManuelParSms() {
+		var ambulant = ambulant();
+		var produit = produit();
+		var v = vente(ambulant, 1, hanout(33.57, -7.59), produit, 1, 100, 0);
+		pousser(ambulant, chargement(produit, 1), v);
+		var docId = ((Map<?, ?>) v.get("donnees")).get("documentId").toString();
+		var lien = lire(get(ambulant, "/v1/documents/" + docId + "/lien"));
+		var url = lien.get("url").asString();
+		var cible = lire(get(null, "/v1/liens/" + url.substring(url.lastIndexOf('/') + 1)));
+		assertThat(cible.get("cible").asString()).isEqualTo("DOCUMENT");
+		assertThat(cible.get("cibleId").asString()).isEqualTo(docId);
+		assertThat(get(ambulant(), "/v1/documents/" + docId + "/lien")).hasStatus(404);
+	}
+
+	@Test
+	void ambulantsRattachesAuGrossisteAvecVolumeEtRegularite() {
+		var grossiste = grossiste();
+		var ambulant = ambulant();
+		var produit = produit();
+		for (int q : new int[] { 3, 4 }) {
+			post(grossiste, "/v1/bons-sortie", m("id", UUID.randomUUID(), "ambulantTelephone", ambulant.telephone(),
+					"lignes", List.of(m("produitId", produit, "quantite", q))));
+		}
+		var page = lire(get(grossiste, "/v1/ambulants"));
+		assertThat(page.get("total").asInt()).isEqualTo(1);
+		var a = page.get("contenu").get(0);
+		assertThat(a.get("id").asString()).isEqualTo(ambulant.id().toString());
+		assertThat(a.get("telephone").asString()).isEqualTo(ambulant.telephone());
+		assertThat(List.of(a.get("nombreBons").asInt(), a.get("quantiteTotale").asInt(), a.get("bons30Jours").asInt()))
+			.containsExactly(2, 7, 2);
+		assertThat(lire(get(grossiste(), "/v1/ambulants")).get("total").asInt()).isZero();
+	}
+
+	@Test
 	void rgF3_remisePromoSansCampagneRejetee() {
 		var ambulant = ambulant();
 		var produit = produit();

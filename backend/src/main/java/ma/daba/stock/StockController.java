@@ -25,6 +25,7 @@ import ma.daba.commun.Appelant;
 import ma.daba.commun.Appelant.Role;
 import ma.daba.commun.Page;
 import ma.daba.commun.Probleme;
+import ma.daba.comptes.Comptes;
 
 @RestController
 @Validated
@@ -35,10 +36,12 @@ class StockController {
 
 	private final Stock stock;
 	private final JdbcClient jdbc;
+	private final Comptes comptes;
 
-	StockController(Stock stock, JdbcClient jdbc) {
+	StockController(Stock stock, JdbcClient jdbc, Comptes comptes) {
 		this.stock = stock;
 		this.jdbc = jdbc;
+		this.comptes = comptes;
 	}
 
 	@GetMapping("/v1/stock")
@@ -98,6 +101,33 @@ class StockController {
 			s.param("g", appelant.organisationId()).param("depuis", ts(depuis)).param("jusqua", ts(jusqua));
 		}
 		return Page.de(page, taille, compte.query(Long.class).single(), liste.query(stock::ligneBon).list());
+	}
+
+	record AmbulantRattache(UUID id, String nom, String telephone, int nombreBons, long quantiteTotale, int bons30Jours,
+			Instant premierBonLe, Instant dernierBonLe) {
+	}
+
+	/** §4.3 : ambulants rattachés (au moins un bon de sortie reçu), avec volume et régularité. */
+	@GetMapping("/v1/ambulants")
+	@Roles(Role.GROSSISTE)
+	Page<AmbulantRattache> ambulants(Appelant appelant, @RequestParam(defaultValue = "0") @Min(0) int page,
+			@RequestParam(defaultValue = "50") @Min(1) @Max(200) int taille) {
+		var total = jdbc.sql("SELECT count(DISTINCT ambulant_id) FROM bon_sortie WHERE grossiste_id = :g")
+			.param("g", appelant.organisationId()).query(Long.class).single();
+		var contenu = jdbc.sql("""
+				SELECT b.ambulant_id, count(*) AS bons, sum(x.q) AS quantite,
+				  count(*) FILTER (WHERE b.emis_le > now() - interval '30 days') AS bons30, min(b.emis_le) AS premier, max(b.emis_le) AS dernier
+				FROM bon_sortie b, LATERAL (SELECT sum((l->>'quantite')::int) AS q FROM jsonb_array_elements(b.lignes) l) x
+				WHERE b.grossiste_id = :g
+				GROUP BY b.ambulant_id ORDER BY max(b.emis_le) DESC LIMIT :taille OFFSET :offset
+				""").param("g", appelant.organisationId()).param("taille", taille).param("offset", page * taille)
+			.query((rs, i) -> {
+				var a = rs.getObject("ambulant_id", UUID.class);
+				return new AmbulantRattache(a, comptes.nom(a), comptes.telephone(a).orElse(null), rs.getInt("bons"),
+						rs.getLong("quantite"), rs.getInt("bons30"), rs.getTimestamp("premier").toInstant(),
+						rs.getTimestamp("dernier").toInstant());
+			}).list();
+		return Page.de(page, taille, total, contenu);
 	}
 
 	@GetMapping("/v1/bons-sortie/{bonSortieId}")

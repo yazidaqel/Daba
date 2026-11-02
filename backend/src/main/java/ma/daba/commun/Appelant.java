@@ -5,9 +5,11 @@ import java.util.UUID;
 
 /**
  * Utilisateur authentifié, lu dans le jeton d'accès. L'organisation sert au cloisonnement
- * multi-tenant : jamais lue dans le chemin ni dans le corps.
+ * multi-tenant : jamais lue dans le chemin ni dans le corps. {@code sessionId} : session de
+ * l'appareil, invalidée par la déconnexion.
  */
-public record Appelant(UUID utilisateurId, UUID organisationId, Set<Role> roles, UUID appareilId, UUID hanoutId) {
+public record Appelant(UUID utilisateurId, UUID organisationId, Set<Role> roles, UUID appareilId, UUID hanoutId,
+		UUID sessionId) {
 
 	public enum Role {
 		AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT, ADMIN

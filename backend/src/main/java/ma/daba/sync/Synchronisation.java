@@ -38,6 +38,7 @@ import ma.daba.referentiel.Referentiel;
 import ma.daba.stock.Stock;
 import ma.daba.stock.Stock.InventaireLigne;
 import ma.daba.stock.Stock.LigneQuantite;
+import ma.daba.ventes.AvisHanout;
 import ma.daba.ventes.Ventes;
 import tools.jackson.databind.JsonNode;
 
@@ -83,9 +84,11 @@ class Synchronisation {
 	private final Referentiel referentiel;
 	private final Promos promos;
 	private final Depannage depannage;
+	private final AvisHanout avisHanout;
 
 	Synchronisation(JdbcClient jdbc, Json json, Journal journal, Validator validateur, TransactionTemplate transactions,
-			Stock stock, Ventes ventes, Referentiel referentiel, Promos promos, Depannage depannage) {
+			Stock stock, Ventes ventes, Referentiel referentiel, Promos promos, Depannage depannage, AvisHanout avisHanout) {
+		this.avisHanout = avisHanout;
 		this.jdbc = jdbc;
 		this.json = json;
 		this.journal = journal;
@@ -186,6 +189,7 @@ class Synchronisation {
 			case "TARIF" -> ventes.tarif(geste, lire(donnees, Ventes.Tarif.class));
 			case "CREDIT_HANOUT" -> ventes.credit(geste, lire(donnees, Ventes.CreditHanout.class));
 			case "PARAMETRES_AMBULANT" -> ventes.parametres(geste, lire(donnees, Ventes.ParametresSaisie.class));
+			case "RESOLUTION_CONTESTATION" -> avisHanout.resoudre(geste, lire(donnees, AvisHanout.Resolution.class));
 			case "HANOUT" -> {
 				var h = lire(donnees, NouveauHanout.class);
 				referentiel.creerHanoutTerrain(h.hanoutId(), h.nom(), h.gerant(), h.telephone(), h.position(), h.adresse(),

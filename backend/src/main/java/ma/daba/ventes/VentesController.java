@@ -9,16 +9,20 @@ import java.util.UUID;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
@@ -27,6 +31,8 @@ import ma.daba.commun.Appelant;
 import ma.daba.commun.Appelant.Role;
 import ma.daba.commun.Page;
 import ma.daba.commun.Probleme;
+import ma.daba.comptes.Comptes;
+import ma.daba.referentiel.Referentiel;
 
 @RestController
 @Validated
@@ -47,11 +53,18 @@ class VentesController {
 	private final JdbcClient jdbc;
 	private final Ventes ventes;
 	private final PdfDocuments pdfs;
+	private final AvisHanout avis;
+	private final Referentiel referentiel;
+	private final Comptes comptes;
 
-	VentesController(JdbcClient jdbc, Ventes ventes, PdfDocuments pdfs) {
+	VentesController(JdbcClient jdbc, Ventes ventes, PdfDocuments pdfs, AvisHanout avis, Referentiel referentiel,
+			Comptes comptes) {
 		this.jdbc = jdbc;
 		this.ventes = ventes;
 		this.pdfs = pdfs;
+		this.avis = avis;
+		this.referentiel = referentiel;
+		this.comptes = comptes;
 	}
 
 	/** Cloisonnement : l'ambulant voit les pièces de son organisation, le hanout celles qui lui sont adressées. */
@@ -112,6 +125,45 @@ class VentesController {
 			.contentType(MediaType.APPLICATION_PDF)
 			.header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + document.numero() + ".pdf\"")
 			.body(pdfs.generer(document, choisie));
+	}
+
+	record LienDocument(String url, Instant expireLe) {
+	}
+
+	/** Lien hanout signé vers le document, que l'ambulant envoie lui-même par SMS. */
+	@GetMapping("/v1/documents/{documentId}/lien")
+	@Roles(Role.AMBULANT)
+	LienDocument lien(Appelant appelant, @PathVariable UUID documentId) {
+		var document = document(appelant, documentId);
+		var telephone = referentiel.hanout(document.hanout().id()).map(Referentiel.Hanout::telephone)
+			.orElseThrow(() -> Probleme.regle(null, "Hanout sans téléphone : partagez le PDF"));
+		var expire = Instant.now().plus(NotificationsVentes.VALIDITE_LIEN);
+		return new LienDocument(comptes.lien(Comptes.CibleLien.DOCUMENT, documentId, telephone, NotificationsVentes.VALIDITE_LIEN),
+				expire);
+	}
+
+	@PostMapping("/v1/documents/{documentId}/reception")
+	@Roles(Role.HANOUT)
+	ResponseEntity<Ventes.Document> receptionner(Appelant appelant, @PathVariable UUID documentId,
+			@Valid @RequestBody AvisHanout.ReceptionSaisie saisie) {
+		var r = avis.receptionner(appelant, documentId, saisie);
+		return ResponseEntity.status(r.getValue() ? HttpStatus.CREATED : HttpStatus.OK).body(r.getKey());
+	}
+
+	@PostMapping("/v1/contestations")
+	@Roles(Role.HANOUT)
+	ResponseEntity<AvisHanout.Contestation> contester(Appelant appelant, @Valid @RequestBody AvisHanout.ContestationSaisie saisie) {
+		var r = avis.contester(appelant, saisie);
+		return ResponseEntity.status(r.getValue() ? HttpStatus.CREATED : HttpStatus.OK).body(r.getKey());
+	}
+
+	@GetMapping("/v1/contestations")
+	@Roles({ Role.HANOUT, Role.AMBULANT })
+	Page<AvisHanout.Contestation> contestations(Appelant appelant, @RequestParam(required = false) UUID cibleId,
+			@RequestParam(required = false) @Pattern(regexp = "^(OUVERTE|RESOLUE)$") String statut,
+			@RequestParam(defaultValue = "0") @Min(0) int page,
+			@RequestParam(defaultValue = "50") @Min(1) @Max(200) int taille) {
+		return avis.contestations(appelant, cibleId, statut, page, taille);
 	}
 
 	@GetMapping("/v1/karni/comptes")

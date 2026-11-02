@@ -3,11 +3,13 @@ package ma.daba.referentiel;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 
 import ma.daba.TestIntegration;
+import tools.jackson.databind.JsonNode;
 
 class ReferentielTest extends TestIntegration {
 
@@ -62,6 +64,35 @@ class ReferentielTest extends TestIntegration {
 		assertThat(trouve.get("contenu").get(0).get("libelle").get("ar").asString()).isEqualTo("شاي أخضر");
 		assertThat(trouve.get("contenu").get(0).get("unitesParConditionnement").asInt()).isEqualTo(10);
 		assertThat(lire(get(ambulant(), "/v1/produits?ean=" + ean)).get("total").asInt()).isEqualTo(1);
+	}
+
+	@Test
+	void produitParIdFiltresIdsEtMesProduitsCategoriesEtRegions() {
+		var marque = grandClient();
+		var aMoi = produit(marque.organisationId());
+		var autre = produit();
+		var grossiste = grossiste();
+		assertThat(lire(get(grossiste, "/v1/produits/" + aMoi)).get("id").asString()).isEqualTo(aMoi.toString());
+		assertThat(get(grossiste, "/v1/produits/" + UUID.randomUUID())).hasStatus(404);
+
+		var parIds = lire(get(grossiste, "/v1/produits?ids=" + aMoi + "," + autre));
+		assertThat(parIds.get("total").asInt()).isEqualTo(2);
+		var miens = lire(get(marque, "/v1/produits?mesProduits=true&taille=200"));
+		assertThat(miens.get("total").asInt()).isEqualTo(1);
+		assertThat(miens.get("contenu").get(0).get("id").asString()).isEqualTo(aMoi.toString());
+
+		assertThat(lire(get(marque, "/v1/categories")).findValues("code").stream().map(c -> c.asString()))
+			.contains("BOISSONS");
+		var regions = lire(get(marque, "/v1/regions"));
+		assertThat(regions.size()).isEqualTo(12);
+		JsonNode casa = null;
+		for (var r : regions) {
+			if (r.get("code").asString().equals("CASABLANCA_SETTAT")) {
+				casa = r;
+			}
+		}
+		assertThat(casa.get("nom").get("ar").asString()).isEqualTo("الدار البيضاء سطات");
+		assertThat(casa.get("villes").findValues("code").stream().map(c -> c.asString())).contains("CASABLANCA", "MOHAMMEDIA");
 	}
 
 	@Test

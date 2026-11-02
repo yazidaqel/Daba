@@ -52,7 +52,9 @@ public class Canaux {
 		RESERVATION_EXPIRE_BIENTOT(Canal.PUSH),
 		PROPOSITION_DEPOT(Canal.PUSH, Canal.SMS),
 		RETRAIT_EFFECTUE(Canal.PUSH),
-		DOCUMENT_EMIS(Canal.SMS);
+		DOCUMENT_EMIS(Canal.SMS),
+		RECEPTION_ECART(Canal.PUSH),
+		CONTESTATION(Canal.PUSH, Canal.SMS);
 
 		private final List<Canal> route;
 

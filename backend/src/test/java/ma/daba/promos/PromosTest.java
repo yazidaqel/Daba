@@ -174,6 +174,8 @@ class PromosTest extends TestIntegration {
 		var mvt = lire(get(ambulant, "/v1/stock/mouvements?type=PROMO")).get("contenu").get(0);
 		assertThat(mvt.get("appareilId").asString()).isEqualTo(s.grossiste().appareilId().toString());
 		assertThat(mvt.get("campagneId").asString()).isEqualTo(s.campagneId());
+		// Sans opération de l'appareil ambulant, l'operationId du mouvement PROMO est l'id de la réservation.
+		assertThat(mvt.get("operationId").asString()).isEqualTo(resaId.toString());
 
 		// Revente au hanout avec la référence de campagne sur la ligne (RG-F3) ; au-delà du retiré, anomalie RG-S3.
 		var hanout = hanout(33.57, -7.59);
@@ -205,6 +207,29 @@ class PromosTest extends TestIntegration {
 			.containsExactly(20, 4, 4, 5);
 		var texte = new String(entonnoir.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8);
 		assertThat(texte).doesNotContain(ambulant.id().toString()).doesNotContain(hanout.toString());
+	}
+
+	@Test
+	void rgP3_plafondEtStatutDeCampagneVisiblesDuGrossiste_etRgP4_qrDeReservationEnJwsSigne() {
+		var s = promoActive();
+		var depot = lire(get(s.grossiste(), "/v1/depots/" + s.depotId()));
+		assertThat(depot.get("statutCampagne").asString()).isEqualTo("ACTIVE");
+		assertThat(depot.get("lignes").get(0).get("quantiteMaxParAmbulant").asInt()).isEqualTo(5);
+
+		var ambulant = ambulant();
+		var resaId = UUID.randomUUID();
+		var qr = lire(post(ambulant, "/v1/reservations", m("id", resaId, "offreId", offre(ambulant, s), "quantite", 1)))
+			.get("qrJeton").asString();
+		assertThat(qr).matches("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$");
+		var charge = json.readTree(java.util.Base64.getUrlDecoder().decode(qr.split("\\.")[1]));
+		assertThat(charge.get("reservationId").asString()).isEqualTo(resaId.toString());
+		assertThat(charge.get("depotId").asString()).isEqualTo(s.depotId());
+		// Une charge modifiée sans la clé ne passe pas (RG-P4).
+		var falsifie = qr.split("\\.")[0] + "." + java.util.Base64.getUrlEncoder().withoutPadding()
+			.encodeToString(json.writeValueAsBytes(m("reservationId", UUID.randomUUID(), "depotId", s.depotId(), "typ", "resa")))
+				+ "." + qr.split("\\.")[2];
+		assertThat(post(s.grossiste(), "/v1/retraits/apercu", m("qrJeton", falsifie))).hasStatus(422).bodyJson()
+			.extractingPath("$.regle").isEqualTo("RG-P4");
 	}
 
 	@Test

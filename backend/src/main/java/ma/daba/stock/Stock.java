@@ -235,11 +235,14 @@ public class Stock {
 		return BigDecimal.valueOf(Math.abs(ecart) * 100L).compareTo(seuilPourcent.multiply(BigDecimal.valueOf(theorique))) > 0;
 	}
 
-	/** Entrée de stock promo au retrait chez le grossiste (RG-S3), avec l'appareil du grossiste qui a scanné. */
+	/**
+	 * Entrée de stock promo au retrait chez le grossiste (RG-S3), avec l'appareil du grossiste qui a
+	 * scanné ; sans opération de l'appareil ambulant, l'operationId est l'id de la réservation.
+	 */
 	@Transactional
 	public void entreePromo(UUID ambulantId, UUID organisationId, UUID grossisteUtilisateurId, UUID appareilGrossiste,
 			UUID produitId, int quantite, UUID campagneId, UUID reservationId) {
-		var geste = new Geste(ambulantId, organisationId, appareilGrossiste, null, Instant.now());
+		var geste = new Geste(ambulantId, organisationId, appareilGrossiste, reservationId, Instant.now());
 		enregistrer(geste, grossisteUtilisateurId,
 				new NouveauMouvement("PROMO", produitId, quantite, null, null, campagneId, reservationId, null));
 	}

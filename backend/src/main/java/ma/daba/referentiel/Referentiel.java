@@ -29,8 +29,9 @@ public class Referentiel {
 	public record Categorie(String code, Map<String, String> libelle) {
 	}
 
+	/** {@code tauxTva} en pour cent, null si inconnu (RG-F2). */
 	public record Produit(UUID id, String ean, Map<String, String> libelle, String marque, Categorie categorie,
-			String conditionnement, int unitesParConditionnement, String photoUrl) {
+			String conditionnement, int unitesParConditionnement, Integer tauxTva, String photoUrl) {
 	}
 
 	public record Hanout(UUID id, String codePos, String nom, String gerant, String telephone, Position position,
@@ -148,7 +149,9 @@ public class Referentiel {
 		return new Produit(rs.getObject("id", UUID.class), rs.getString("ean"), json.lire(rs.getString("libelle"), LIBELLE),
 				rs.getString("marque"),
 				new Categorie(rs.getString("categorie"), json.lire(rs.getString("categorie_libelle"), LIBELLE)),
-				rs.getString("conditionnement"), rs.getInt("unites_par_conditionnement"), rs.getString("photo_url"));
+				rs.getString("conditionnement"), rs.getInt("unites_par_conditionnement"),
+				rs.getBigDecimal("taux_tva") == null ? null : rs.getBigDecimal("taux_tva").intValueExact(),
+				rs.getString("photo_url"));
 	}
 
 	Hanout ligneHanout(ResultSet rs, int i) throws SQLException {

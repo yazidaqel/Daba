@@ -89,8 +89,13 @@ public abstract class TestIntegration {
 			.param("id", id).param("org", org).param("tel", tel).param("nom", role.toLowerCase() + " " + tel.substring(8))
 			.param("role", role).param("h", hanoutId).update();
 		var prefixe = "AMBULANT".equals(role) ? "T" + "%5s".formatted(Long.toString(PREFIXES.incrementAndGet(), 36).toUpperCase()).replace(' ', '0') : null;
-		jdbc.sql("INSERT INTO appareil (id, utilisateur_id, prefixe) VALUES (:id, :u, :p)")
-			.param("id", appareil).param("u", id).param("p", prefixe).update();
+		var session = UUID.randomUUID();
+		jdbc.sql("INSERT INTO appareil (id, utilisateur_id, session) VALUES (:id, :u, :s)")
+			.param("id", appareil).param("u", id).param("s", session).update();
+		if (prefixe != null) {
+			jdbc.sql("INSERT INTO prefixe_numerotation (utilisateur_id, appareil_id, prefixe) VALUES (:u, :a, :p)")
+				.param("u", id).param("a", appareil).param("p", prefixe).update();
+		}
 		jdbc.sql("INSERT INTO consentement (utilisateur_id, version_texte, traitement_donnees, geolocalisation) VALUES (:u, 'v1', true, true)")
 			.param("u", id).update();
 		var claims = new HashMap<String, Object>();
@@ -98,6 +103,7 @@ public abstract class TestIntegration {
 		claims.put("org", org.toString());
 		claims.put("roles", List.of(role));
 		claims.put("app", appareil.toString());
+		claims.put("ses", session.toString());
 		if (hanoutId != null) {
 			claims.put("hanout", hanoutId.toString());
 		}

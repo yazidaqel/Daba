@@ -114,19 +114,20 @@ public class Depannage implements Acces.ContributeurExport {
 
 	/**
 	 * La position n'est acceptée qu'avec la disponibilité active et le consentement géolocalisation
-	 * (loi 09-08) ; couper la disponibilité efface la dernière position.
+	 * (loi 09-08) ; couper la disponibilité efface la dernière position. Couper est toujours accepté,
+	 * sans position (une position envoyée est ignorée) : l'app le renvoie au démarrage.
 	 */
 	@Transactional
 	Disponibilite changerDisponibilite(UUID ambulantId, DisponibiliteSaisie saisie) {
-		if (saisie.disponible() != (saisie.position() != null)) {
-			throw Probleme.requete(saisie.disponible() ? "position requise quand disponible" : "position refusée quand indisponible");
-		}
-		if (saisie.disponible() && !comptes.geolocalisationConsentie(ambulantId)) {
-			throw Probleme.regle("CNDP", "Consentement à la géolocalisation requis (PUT /v1/moi/consentement)");
-		}
 		if (!saisie.disponible()) {
 			couper(ambulantId);
 			return disponibilite(ambulantId);
+		}
+		if (saisie.position() == null) {
+			throw Probleme.requete("position requise quand disponible");
+		}
+		if (!comptes.geolocalisationConsentie(ambulantId)) {
+			throw Probleme.regle("CNDP", "Consentement à la géolocalisation requis (PUT /v1/moi/consentement)");
 		}
 		jdbc.sql("""
 				INSERT INTO disponibilite (ambulant_id, disponible, depuis, position, position_le)
@@ -206,7 +207,8 @@ public class Depannage implements Acces.ContributeurExport {
 
 	/**
 	 * RG-D1 : ambulants disponibles dans le rayon, ayant consenti à la géolocalisation et le produit
-	 * en stock déclaré (sans produit précis, signalement en photo : tous les disponibles du rayon).
+	 * en stock déclaré. Signalement en photo sans produit : le cahier des charges ne dit pas à qui
+	 * l'envoyer (question ouverte, à trancher avec RED) ; en attendant, tous les disponibles du rayon.
 	 */
 	private void dispatcher(UUID demandeId) {
 		var d = jdbc.sql("SELECT produit_id, rayon_m FROM demande WHERE id = :id").param("id", demandeId)

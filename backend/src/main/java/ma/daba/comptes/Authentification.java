@@ -101,10 +101,10 @@ class Authentification {
 		var existant = comptes.utilisateurParTelephone(telephone);
 		var utilisateurId = existant.orElseGet(() -> inscrire(telephone));
 		var role = jdbc.sql("SELECT role FROM utilisateur WHERE id = :u").param("u", utilisateurId).query(String.class).single();
+		// Chaque connexion ouvre une nouvelle session sur l'appareil ; les jetons de la précédente ne valent plus.
 		var revoque = jdbc.sql("""
-				INSERT INTO appareil (id, utilisateur_id, derniere_connexion) VALUES (:id, :u, now())
-				ON CONFLICT (id) DO UPDATE SET derniere_connexion = now(),
-				  prefixe = CASE WHEN appareil.utilisateur_id = excluded.utilisateur_id THEN appareil.prefixe END,
+				INSERT INTO appareil (id, utilisateur_id, derniere_connexion, session) VALUES (:id, :u, now(), gen_random_uuid())
+				ON CONFLICT (id) DO UPDATE SET derniere_connexion = now(), session = excluded.session,
 				  jeton_push = CASE WHEN appareil.utilisateur_id = excluded.utilisateur_id THEN appareil.jeton_push END,
 				  utilisateur_id = excluded.utilisateur_id
 				RETURNING revoque
@@ -113,7 +113,7 @@ class Authentification {
 			throw new Probleme(HttpStatus.UNAUTHORIZED, "appareil-revoque", null, "Appareil déconnecté à distance");
 		}
 		if ("AMBULANT".equals(role)) {
-			attribuerPrefixe(appareilId);
+			attribuerPrefixe(utilisateurId, appareilId);
 		}
 		return session(utilisateurId, appareilId, existant.isEmpty());
 	}
@@ -129,8 +129,10 @@ class Authentification {
 		}
 		var utilisateurId = UUID.fromString(claims.get("sub").toString());
 		var appareilId = UUID.fromString(claims.get("app").toString());
-		var actif = jdbc.sql("SELECT count(*) FROM appareil WHERE id = :a AND utilisateur_id = :u AND NOT revoque")
-			.param("a", appareilId).param("u", utilisateurId).query(Long.class).single() > 0;
+		var actif = jdbc.sql("""
+				SELECT count(*) FROM appareil WHERE id = :a AND utilisateur_id = :u AND NOT revoque AND session::text = :ses
+				""").param("a", appareilId).param("u", utilisateurId).param("ses", String.valueOf(claims.get("ses")))
+			.query(Long.class).single() > 0;
 		if (!actif) {
 			throw Probleme.nonAuthentifie();
 		}
@@ -188,17 +190,24 @@ class Authentification {
 		return utilisateurId;
 	}
 
-	/** Préfixe court, unique et stable pour l'appareil d'un ambulant (RG-F1). */
-	private void attribuerPrefixe(UUID appareilId) {
-		while (jdbc.sql("SELECT prefixe IS NULL FROM appareil WHERE id = :id").param("id", appareilId).query(Boolean.class).single()) {
+	/**
+	 * Préfixe court, unique et stable pour le couple (ambulant, appareil) (RG-F1) : un second ambulant
+	 * sur le même téléphone a sa propre série, le premier retrouve la sienne.
+	 */
+	private void attribuerPrefixe(UUID utilisateurId, UUID appareilId) {
+		int attribue = 0;
+		while (attribue == 0) {
 			var prefixe = new StringBuilder();
 			for (int i = 0; i < 4; i++) {
 				prefixe.append(ALPHABET_PREFIXE.charAt(aleatoire.nextInt(ALPHABET_PREFIXE.length())));
 			}
-			jdbc.sql("""
-					UPDATE appareil SET prefixe = :p
-					WHERE id = :id AND prefixe IS NULL AND NOT EXISTS (SELECT 1 FROM appareil WHERE prefixe = :p)
-					""").param("p", prefixe.toString()).param("id", appareilId).update();
+			attribue = jdbc.sql("""
+					INSERT INTO prefixe_numerotation (utilisateur_id, appareil_id, prefixe) VALUES (:u, :a, :p)
+					ON CONFLICT DO NOTHING
+					""").param("u", utilisateurId).param("a", appareilId).param("p", prefixe.toString()).update();
+			if (attribue == 0 && comptes.prefixe(utilisateurId, appareilId).isPresent()) {
+				return;
+			}
 		}
 	}
 
@@ -208,18 +217,19 @@ class Authentification {
 					List.of(rs.getString("role")), rs.getObject("organisation_id", UUID.class),
 					rs.getObject("hanout_id", UUID.class), nouveau))
 			.single();
-		var prefixe = jdbc.sql("SELECT prefixe FROM appareil WHERE id = :a").param("a", appareilId).query(String.class)
-			.optional().orElse(null);
+		var prefixe = comptes.prefixe(utilisateurId, appareilId).orElse(null);
+		var session = jdbc.sql("SELECT session FROM appareil WHERE id = :a").param("a", appareilId).query(UUID.class).single();
 		var claims = new HashMap<String, Object>();
 		claims.put("sub", utilisateurId.toString());
 		claims.put("org", utilisateur.organisationId().toString());
 		claims.put("roles", utilisateur.roles());
 		claims.put("app", appareilId.toString());
+		claims.put("ses", session.toString());
 		if (utilisateur.hanoutId() != null) {
 			claims.put("hanout", utilisateur.hanoutId().toString());
 		}
-		var refresh = jetons.signer("refresh", Map.of("sub", utilisateurId.toString(), "app", appareilId.toString()),
-				VALIDITE_REFRESH);
+		var refresh = jetons.signer("refresh",
+				Map.of("sub", utilisateurId.toString(), "app", appareilId.toString(), "ses", session.toString()), VALIDITE_REFRESH);
 		return new Session(jetons.signer("acces", claims, VALIDITE_ACCES), refresh, VALIDITE_ACCES.toSeconds(),
 				utilisateur, prefixe);
 	}

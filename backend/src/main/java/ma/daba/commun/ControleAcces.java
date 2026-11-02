@@ -72,7 +72,8 @@ class ControleAcces implements WebMvcConfigurer, HandlerInterceptor, HandlerMeth
 			var roles = ((Collection<?>) c.get("roles")).stream()
 				.map(r -> Appelant.Role.valueOf(r.toString()))
 				.collect(Collectors.toUnmodifiableSet());
-			return new Appelant(uuid(c.get("sub")), uuid(c.get("org")), roles, uuid(c.get("app")), uuid(c.get("hanout")));
+			return new Appelant(uuid(c.get("sub")), uuid(c.get("org")), roles, uuid(c.get("app")), uuid(c.get("hanout")),
+					uuid(c.get("ses")));
 		}
 		catch (RuntimeException e) {
 			throw Probleme.nonAuthentifie();

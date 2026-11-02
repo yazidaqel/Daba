@@ -118,6 +118,16 @@ class ComptesController {
 		return authentification.rafraichir(requete.refreshToken());
 	}
 
+	/** Ferme la session de l'appareil : ses jetons ne valent plus, il ne reçoit plus de push (pas une révocation). */
+	@PostMapping("/v1/auth/deconnexion")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	@Roles({ Role.AMBULANT, Role.HANOUT, Role.GROSSISTE, Role.GRAND_CLIENT, Role.ADMIN })
+	@SansConsentement
+	void seDeconnecter(Appelant appelant) {
+		jdbc.sql("UPDATE appareil SET session = NULL, jeton_push = NULL WHERE id = :a AND utilisateur_id = :u")
+			.param("a", appelant.appareilId()).param("u", appelant.utilisateurId()).update();
+	}
+
 	private String telephone(String telephone, String lienJeton) {
 		if (lienJeton != null) {
 			return authentification.telephoneDuLien(lienJeton);
@@ -195,8 +205,10 @@ class ComptesController {
 				""").param("u", appelant.utilisateurId()).query().singleRow());
 		export.put("consentements", consentements(appelant.utilisateurId()));
 		export.put("appareils", jdbc.sql("""
-				SELECT id, prefixe, plateforme, langue, jeton_push IS NOT NULL AS push_actif, revoque, cree_le, derniere_connexion
-				FROM appareil WHERE utilisateur_id = :u
+				SELECT a.id, p.prefixe, a.plateforme, a.langue, a.jeton_push IS NOT NULL AS push_actif, a.revoque, a.cree_le,
+				  a.derniere_connexion
+				FROM appareil a LEFT JOIN prefixe_numerotation p ON p.appareil_id = a.id AND p.utilisateur_id = a.utilisateur_id
+				WHERE a.utilisateur_id = :u
 				""").param("u", appelant.utilisateurId()).query().listOfRows());
 		for (var contributeur : contributeurs) {
 			export.put(contributeur.cle(), contributeur.exporter(appelant.utilisateurId()));

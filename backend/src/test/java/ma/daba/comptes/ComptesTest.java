@@ -48,6 +48,48 @@ class ComptesTest extends TestIntegration {
 		assertThat(post(null, "/v1/auth/refresh", m("refreshToken", seconde.get("refreshToken").asString()))).hasStatusOk();
 	}
 
+	private tools.jackson.databind.JsonNode connecter(String telephone, UUID appareil) {
+		post(null, "/v1/auth/otp", m("telephone", telephone));
+		var r = post(null, "/v1/auth/otp/verify", m("telephone", telephone, "code", codeEnvoye(telephone), "appareilId", appareil));
+		assertThat(r).hasStatusOk();
+		return lire(r);
+	}
+
+	@Test
+	void rgF1_prefixeParCoupleAmbulantAppareil() {
+		var telephone = UUID.randomUUID();
+		var premier = telephone();
+		var second = telephone();
+		var a = connecter(premier, telephone).get("prefixeNumerotation").asString();
+		var b = connecter(second, telephone).get("prefixeNumerotation").asString();
+		assertThat(b).isNotEqualTo(a);
+		// Le premier ambulant retrouve sa série sur ce téléphone.
+		assertThat(connecter(premier, telephone).get("prefixeNumerotation").asString()).isEqualTo(a);
+		assertThat(connecter(premier, UUID.randomUUID()).get("prefixeNumerotation").asString()).isNotEqualTo(a);
+	}
+
+	@Test
+	void deconnexionFermeLaSessionSansRevoquerLAppareil() {
+		var tel = telephone();
+		var appareil = UUID.randomUUID();
+		var session = connecter(tel, appareil);
+		var bearer = "Bearer " + session.get("accessToken").asString();
+		assertThat(mvc.get().uri("/v1/moi/donnees").header("Authorization", bearer).exchange()).hasStatusOk();
+
+		assertThat(mvc.post().uri("/v1/auth/deconnexion").header("Authorization", bearer).exchange()).hasStatus(204);
+		assertThat(mvc.get().uri("/v1/moi/donnees").header("Authorization", bearer).exchange()).hasStatus(401).bodyJson()
+			.extractingPath("$.type").asString().endsWith("non-authentifie");
+		assertThat(post(null, "/v1/auth/refresh", m("refreshToken", session.get("refreshToken").asString()))).hasStatus(401);
+
+		// Pas une révocation : l'appareil se reconnecte par OTP, et une nouvelle connexion ferme l'ancienne session.
+		var nouvelle = connecter(tel, appareil);
+		var autre = connecter(tel, appareil);
+		assertThat(mvc.get().uri("/v1/moi/donnees").header("Authorization", "Bearer " + nouvelle.get("accessToken").asString())
+			.exchange()).hasStatus(401);
+		assertThat(mvc.get().uri("/v1/moi/donnees").header("Authorization", "Bearer " + autre.get("accessToken").asString())
+			.exchange()).hasStatusOk();
+	}
+
 	@Test
 	void codeFauxRefuseEtEssaisLimites() {
 		var tel = telephone();

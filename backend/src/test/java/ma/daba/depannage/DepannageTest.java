@@ -170,8 +170,13 @@ class DepannageTest extends TestIntegration {
 	@Test
 	void cndp_positionSeulementAvecConsentementEtEffaceeQuandIndisponible() throws InterruptedException {
 		var ambulant = ambulant();
+		// Couper est toujours accepté, sans position (renvoyé au démarrage de l'app) ; une position envoyée est ignorée.
+		assertThat(put(ambulant, "/v1/ambulant/disponibilite", m("disponible", false))).hasStatusOk();
+		assertThat(put(ambulant, "/v1/ambulant/disponibilite", m("disponible", false))).hasStatusOk();
 		assertThat(put(ambulant, "/v1/ambulant/disponibilite", m("disponible", false, "position", m("lat", LAT, "lon", LON))))
-			.hasStatus(400);
+			.hasStatusOk();
+		assertThat(lire(get(ambulant, "/v1/moi/donnees")).get("disponibilite").get(0).hasNonNull("lat")).isFalse();
+		assertThat(put(ambulant, "/v1/ambulant/disponibilite", m("disponible", true))).hasStatus(400);
 		disponible(ambulant, LAT, LON);
 		assertThat(lire(get(ambulant, "/v1/moi/donnees")).get("disponibilite").get(0).get("lat").asDouble()).isEqualTo(LAT);
 
