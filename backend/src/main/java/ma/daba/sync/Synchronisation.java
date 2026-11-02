@@ -32,6 +32,7 @@ import ma.daba.commun.Journal;
 import ma.daba.commun.Json;
 import ma.daba.commun.Position;
 import ma.daba.commun.Probleme;
+import ma.daba.promos.Promos;
 import ma.daba.referentiel.Referentiel;
 import ma.daba.stock.Stock;
 import ma.daba.stock.Stock.InventaireLigne;
@@ -79,9 +80,10 @@ class Synchronisation {
 	private final Stock stock;
 	private final Ventes ventes;
 	private final Referentiel referentiel;
+	private final Promos promos;
 
 	Synchronisation(JdbcClient jdbc, Json json, Journal journal, Validator validateur, TransactionTemplate transactions,
-			Stock stock, Ventes ventes, Referentiel referentiel) {
+			Stock stock, Ventes ventes, Referentiel referentiel, Promos promos) {
 		this.jdbc = jdbc;
 		this.json = json;
 		this.journal = journal;
@@ -90,6 +92,7 @@ class Synchronisation {
 		this.stock = stock;
 		this.ventes = ventes;
 		this.referentiel = referentiel;
+		this.promos = promos;
 	}
 
 	List<Resultat> appliquer(Appelant appelant, List<JsonNode> operations) {
@@ -187,10 +190,7 @@ class Synchronisation {
 	private Map<UUID, Map<String, String>> noms(List<Ventes.LigneSaisie> lignes) {
 		var ids = lignes == null ? Set.<UUID>of()
 				: lignes.stream().map(Ventes.LigneSaisie::campagneId).filter(Objects::nonNull).collect(Collectors.toSet());
-		if (ids.isEmpty()) {
-			return Map.of();
-		}
-		return Map.of();
+		return promos.nomsCampagnes(ids);
 	}
 
 	/** Lit et valide les données d'une opération ; mal formées = REJETEE avec le détail par champ. */

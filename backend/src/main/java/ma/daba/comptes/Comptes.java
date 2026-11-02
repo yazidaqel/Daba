@@ -84,6 +84,11 @@ public class Comptes implements Acces.VerificationCompte {
 			.optional().orElse("—");
 	}
 
+	public String nomOrganisation(UUID organisationId) {
+		return jdbc.sql("SELECT nom FROM organisation WHERE id = :o").param("o", organisationId).query(String.class)
+			.optional().orElse("—");
+	}
+
 	public Optional<String> telephone(UUID utilisateurId) {
 		return jdbc.sql("SELECT telephone FROM utilisateur WHERE id = :u").param("u", utilisateurId).query(String.class).optional();
 	}
