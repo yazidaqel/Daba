@@ -1,7 +1,7 @@
 import { Link } from 'react-router'
 import { $api } from '@/api/client'
 import { useNomProduit } from '@/api/produits'
-import { Etat } from '@/components/communs'
+import { Etat, StatutCampagne } from '@/components/communs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useI18n } from '@/i18n'
@@ -28,6 +28,7 @@ export default function StockPromo() {
                 <CardTitle>
                   <Link to={`/depots/${depot.id}`} className="hover:underline">{depot.campagne.nom}</Link>
                   {depot.marque && <span className="text-muted-foreground ms-2 text-sm font-normal">{depot.marque.nom}</span>}
+                  <span className="ms-2 align-middle"><StatutCampagne statut={depot.statutCampagne} /></span>
                 </CardTitle>
               </CardHeader>
               <CardContent>

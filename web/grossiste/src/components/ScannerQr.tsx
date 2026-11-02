@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { CircleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 
@@ -60,7 +61,12 @@ export function ScannerQr({ onScan }: { onScan: (valeur: string) => void }) {
       <Button type="button" variant={actif ? 'outline' : 'default'} onClick={() => setActif(!actif)}>
         {actif ? t('retrait.arreterCamera') : t('retrait.camera')}
       </Button>
-      {indisponible && <p className="text-destructive text-sm">{t('retrait.cameraIndisponible')}</p>}
+      {indisponible && (
+        <p className="text-destructive flex items-center gap-1.5 text-sm">
+          <CircleAlert aria-hidden className="size-4" />
+          {t('retrait.cameraIndisponible')}
+        </p>
+      )}
       <video ref={video} muted playsInline className={actif ? 'w-full max-w-md rounded-lg border' : 'hidden'} />
     </div>
   )

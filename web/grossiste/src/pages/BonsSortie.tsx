@@ -2,8 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { renderSVG } from 'uqr'
 import { $api, queryClient, type S } from '@/api/client'
 import { libelle, useNomProduit } from '@/api/produits'
-import { Erreur, Etat, Pagination } from '@/components/communs'
-import { Badge } from '@/components/ui/badge'
+import { Charge, Erreur, Etat, Pagination } from '@/components/communs'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -51,7 +50,7 @@ export default function BonsSortie() {
                     <TableCell>{date(b.emisLe)}</TableCell>
                     <TableCell className="text-end">{b.lignes.length}</TableCell>
                     <TableCell>
-                      <Badge variant={b.chargeLe ? 'secondary' : 'outline'}>{b.chargeLe ? t('bons.charge') : t('bons.nonCharge')}</Badge>
+                      <Charge charge={!!b.chargeLe} />
                     </TableCell>
                     <TableCell className="text-end">
                       <Button size="sm" variant="outline" onClick={() => setAffiche(b)}>{t('bons.voir')}</Button>
@@ -191,7 +190,7 @@ function BonQr({ bon, onFermer }: { bon: S['BonSortie']; onFermer: () => void })
       </h1>
       <p>{bon.ambulant.nom} · {date(bon.emisLe)}</p>
       {/* SVG produit localement par uqr à partir du jeton signé du bon. */}
-      <div className="w-72 bg-white p-2" dangerouslySetInnerHTML={{ __html: renderSVG(bon.qrJeton) }} />
+      <div className="bg-qr-fond text-qr-encre w-72 p-2" dangerouslySetInnerHTML={{ __html: renderSVG(bon.qrJeton, { whiteColor: 'transparent', blackColor: 'currentColor' }) }} />
       <p className="text-muted-foreground text-sm">{t('bons.qrAide')}</p>
       <Table>
         <TableBody>

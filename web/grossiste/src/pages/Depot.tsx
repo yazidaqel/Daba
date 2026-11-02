@@ -2,7 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router'
 import { $api, queryClient, type S } from '@/api/client'
 import { useNomProduit } from '@/api/produits'
-import { Erreur, Etat, StatutDepot, Succes } from '@/components/communs'
+import { RefreshCw } from 'lucide-react'
+import { Erreur, Etat, StatutCampagne, StatutDepot, StatutReservation, Succes } from '@/components/communs'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -35,9 +36,14 @@ export default function Depot() {
               <h1 className="text-2xl font-semibold">{d.campagne.nom}</h1>
               <StatutDepot statut={d.statut} />
               {d.marque && <span className="text-muted-foreground">{d.marque.nom}</span>}
-              <Badge variant="outline">{t('depot.campagne', { statut: t(`campagne.${d.statutCampagne}`) })}</Badge>
+              <StatutCampagne statut={d.statutCampagne} />
               {d.finCampagne && <span className="text-muted-foreground text-sm">{t('depot.finLe', { date: date(d.finCampagne) })}</span>}
-              {d.statut === 'RECU' && <Badge variant="outline">{t('depot.miseAJour')}</Badge>}
+              {d.statut === 'RECU' && (
+                <Badge variant="outline">
+                  <RefreshCw aria-hidden />
+                  {t('depot.miseAJour')}
+                </Badge>
+              )}
             </header>
             <Lignes depot={d} />
             {d.recuLe && <p className="text-sm">{t('depot.recuLe', { date: date(d.recuLe) })}</p>}
@@ -299,7 +305,7 @@ function Reservations({ depot }: { depot: S['Depot'] }) {
                     <TableCell>{r.ambulant?.nom ?? '—'}</TableCell>
                     <TableCell>{nom(r.produitId)}</TableCell>
                     <TableCell className="text-end">{nombre(r.statut === 'RESERVEE' || r.statut === 'EXPIREE' ? r.quantiteReservee : (r.quantiteRetiree ?? r.quantiteReservee))}</TableCell>
-                    <TableCell><Badge variant="secondary">{t(`resa.${r.statut}`)}</Badge></TableCell>
+                    <TableCell><StatutReservation statut={r.statut} /></TableCell>
                     <TableCell>{date(r.expireLe)}</TableCell>
                   </TableRow>
                 ))}

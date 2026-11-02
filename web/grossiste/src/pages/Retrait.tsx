@@ -64,7 +64,7 @@ export default function Retrait() {
               <p className="text-muted-foreground text-sm">{t('retrait.douchetteAide')}</p>
               <div className="flex gap-2">
                 <Input id="douchette" dir="ltr" autoComplete="off" value={douchette} onChange={(e) => setDouchette(e.target.value)} />
-                <Button type="submit" disabled={apercu.isPending}>{t('retrait.verifier')}</Button>
+                <Button type="submit" variant="outline" disabled={apercu.isPending}>{t('retrait.verifier')}</Button>
               </div>
             </form>
             {apercu.error && <Erreur erreur={apercu.error} />}

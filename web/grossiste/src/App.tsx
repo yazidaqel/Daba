@@ -58,7 +58,7 @@ function Cadre({ nav, children }: { nav?: boolean; children: ReactNode }) {
   const { t, langue, setLangue } = useI18n()
   const jeton = useSyncExternalStore(abonner, lireJeton)
   const lien = ({ isActive }: { isActive: boolean }) =>
-    `rounded-md px-3 py-2 text-sm font-medium ${isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`
+    `rounded-md px-3 py-2 text-sm font-medium ${isActive ? 'bg-primary-soft text-primary' : 'hover:bg-muted'}`
   return (
     <>
       <header className="border-b">

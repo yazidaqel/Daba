@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Archive, ArrowLeftRight, CircleAlert, CircleCheck, CircleSlash, CircleX, Clock, HandCoins, Inbox, PackageCheck, Tag, Truck, type LucideIcon } from 'lucide-react'
 import type { S } from '@/api/client'
 import { messageErreur } from '@/api/erreurs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -23,6 +24,7 @@ export function Erreur({ erreur, action }: { erreur: unknown; action?: ReactNode
   const { t } = useI18n()
   return (
     <Alert variant="destructive">
+      <CircleAlert aria-hidden />
       <AlertDescription className="flex items-center gap-3">
         {messageErreur(erreur, t)}
         {action}
@@ -33,16 +35,61 @@ export function Erreur({ erreur, action }: { erreur: unknown; action?: ReactNode
 
 export function Succes({ children }: { children: ReactNode }) {
   return (
-    <Alert>
+    <Alert variant="success">
+      <CircleCheck aria-hidden />
       <AlertDescription>{children}</AlertDescription>
     </Alert>
   )
 }
 
+// Un état s'affiche toujours avec une icône et un libellé, jamais par la couleur seule (charte graphique).
+type Variante = 'secondary' | 'outline' | 'destructive' | 'success' | 'warning' | 'promo'
+function Etiquette({ icone: Icone, variante, children }: { icone: LucideIcon; variante: Variante; children: ReactNode }) {
+  return (
+    <Badge variant={variante}>
+      <Icone aria-hidden />
+      {children}
+    </Badge>
+  )
+}
+
+const DEPOT: Record<S['StatutDepot'], [LucideIcon, Variante]> = {
+  PROPOSE: [Inbox, 'promo'],
+  CONTRE_PROPOSE: [ArrowLeftRight, 'secondary'],
+  ACCEPTE: [Truck, 'secondary'],
+  REFUSE: [CircleX, 'destructive'],
+  RECU: [CircleCheck, 'success'],
+  CLOTURE: [Archive, 'outline'],
+}
+
 export function StatutDepot({ statut }: { statut: S['StatutDepot'] }) {
   const { t } = useI18n()
-  const variante = statut === 'PROPOSE' || statut === 'ACCEPTE' ? 'default' : statut === 'REFUSE' ? 'destructive' : 'secondary'
-  return <Badge variant={variante}>{t(`statut.${statut}`)}</Badge>
+  const [icone, variante] = DEPOT[statut]
+  return <Etiquette icone={icone} variante={variante}>{t(`statut.${statut}`)}</Etiquette>
+}
+
+const RESERVATION: Record<S['StatutReservation'], [LucideIcon, Variante]> = {
+  RESERVEE: [Clock, 'secondary'],
+  RETIREE: [PackageCheck, 'success'],
+  EXPIREE: [CircleSlash, 'outline'],
+  REVENDUE: [HandCoins, 'success'],
+}
+
+export function StatutReservation({ statut }: { statut: S['StatutReservation'] }) {
+  const { t } = useI18n()
+  const [icone, variante] = RESERVATION[statut]
+  return <Etiquette icone={icone} variante={variante}>{t(`resa.${statut}`)}</Etiquette>
+}
+
+// Badge de campagne : le safran (promo) est réservé aux promotions.
+export function StatutCampagne({ statut }: { statut: S['StatutCampagne'] }) {
+  const { t } = useI18n()
+  return <Etiquette icone={Tag} variante="promo">{t('depot.campagne', { statut: t(`campagne.${statut}`) })}</Etiquette>
+}
+
+export function Charge({ charge }: { charge: boolean }) {
+  const { t } = useI18n()
+  return charge ? <Etiquette icone={PackageCheck} variante="success">{t('bons.charge')}</Etiquette> : <Etiquette icone={Clock} variante="outline">{t('bons.nonCharge')}</Etiquette>
 }
 
 export function Pagination({ meta, onPage }: { meta: S['PageMeta']; onPage: (p: number) => void }) {
