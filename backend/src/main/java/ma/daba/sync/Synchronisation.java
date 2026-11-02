@@ -32,6 +32,7 @@ import ma.daba.commun.Journal;
 import ma.daba.commun.Json;
 import ma.daba.commun.Position;
 import ma.daba.commun.Probleme;
+import ma.daba.depannage.Depannage;
 import ma.daba.promos.Promos;
 import ma.daba.referentiel.Referentiel;
 import ma.daba.stock.Stock;
@@ -81,9 +82,10 @@ class Synchronisation {
 	private final Ventes ventes;
 	private final Referentiel referentiel;
 	private final Promos promos;
+	private final Depannage depannage;
 
 	Synchronisation(JdbcClient jdbc, Json json, Journal journal, Validator validateur, TransactionTemplate transactions,
-			Stock stock, Ventes ventes, Referentiel referentiel, Promos promos) {
+			Stock stock, Ventes ventes, Referentiel referentiel, Promos promos, Depannage depannage) {
 		this.jdbc = jdbc;
 		this.json = json;
 		this.journal = journal;
@@ -93,6 +95,7 @@ class Synchronisation {
 		this.ventes = ventes;
 		this.referentiel = referentiel;
 		this.promos = promos;
+		this.depannage = depannage;
 	}
 
 	List<Resultat> appliquer(Appelant appelant, List<JsonNode> operations) {
@@ -167,7 +170,13 @@ class Synchronisation {
 					ventes.parametres(geste.ambulantId()).seuilEcartInventairePourcent());
 			case "EMISSION_DOCUMENT" -> {
 				var e = lire(donnees, Ventes.EmissionDocument.class);
-				yield ventes.emettre(geste, e, noms(e.lignes()));
+				var effet = ventes.emettre(geste, e, noms(e.lignes()));
+				if (e.demandeDepannageId() == null) {
+					yield effet;
+				}
+				var anomalies = new ArrayList<>(effet.anomalies());
+				anomalies.addAll(depannage.livraison(geste, e.demandeDepannageId(), e.documentId()));
+				yield Effet.de(anomalies);
 			}
 			case "AVOIR" -> {
 				var a = lire(donnees, Ventes.AvoirSaisie.class);

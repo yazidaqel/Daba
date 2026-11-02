@@ -44,6 +44,7 @@ public class Canaux {
 		OTP(Canal.SMS),
 		RUPTURE_SIGNALEE(Canal.PUSH, Canal.SMS),
 		DEMANDE_ACCEPTEE(Canal.SMS),
+		DEMANDE_PRISE(Canal.PUSH),
 		DEMANDE_EN_ROUTE(Canal.SMS),
 		DEMANDE_LIVREE(Canal.SMS),
 		DEMANDE_SANS_REPONSE(Canal.SMS),
@@ -51,8 +52,7 @@ public class Canaux {
 		RESERVATION_EXPIRE_BIENTOT(Canal.PUSH),
 		PROPOSITION_DEPOT(Canal.PUSH, Canal.SMS),
 		RETRAIT_EFFECTUE(Canal.PUSH),
-		DOCUMENT_EMIS(Canal.SMS),
-		PLAFOND_CREDIT_ATTEINT(Canal.PUSH);
+		DOCUMENT_EMIS(Canal.SMS);
 
 		private final List<Canal> route;
 
