@@ -34,6 +34,7 @@ Acteurs :
 - Utilise toujours les dernières versions stables et vérifie-les avant de les citer ou de les épingler.
 - Toute interface prévoit le darija (caractères arabes et latins), l'arabe (RTL) et le français.
 - Typographie commune à toutes les apps : IBM Plex Sans Arabic pour l'écriture arabe, IBM Plex Sans pour l'écriture latine, embarquées ou auto-hébergées (jamais chargées depuis Google Fonts), seulement les graisses utilisées. Icônes : Phosphor (une seule graisse) dans les apps Flutter, Lucide dans les apps web. Décidé le 2 novembre 2026.
+- Couleurs : palette Zellige, jetons et règles dans `docs/charte-graphique.md` (source unique, aucune couleur codée en dur). Le safran est réservé aux promotions.
 - L'app ambulant fonctionne hors ligne par défaut. Seules deux actions exigent le réseau : la réservation d'une promo, et le dépannage (disponibilité, accepter ou refuser, en route), car le premier qui accepte doit être arbitré par le serveur (RG-D2). Décidé le 2 novembre 2026.
 - Conformité CNDP (loi 09-08) : consentement, géolocalisation de l'ambulant seulement quand il est disponible, aucune donnée nominative partagée aux marques.
 - Une facture ne se supprime jamais : seul un avoir l'annule. Numérotation continue avec un préfixe par appareil.
