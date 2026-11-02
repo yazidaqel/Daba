@@ -237,5 +237,6 @@
   "motifDEJA_PAYE": "مخلص من قبل",
   "motifAUTRE": "شي حاجة أخرى",
   "opRESOLUTION_CONTESTATION": "شكاية تسدات",
-  "anoTVA_INCONNUE": "نسبة TVA ما معروفاش"
+  "anoTVA_INCONNUE": "نسبة TVA ما معروفاش",
+  "erreurRoleNonAmbulant": "هاد النمرة ماشي ديال بياع متجول."
 }

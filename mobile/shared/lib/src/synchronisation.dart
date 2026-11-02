@@ -52,6 +52,12 @@ class Synchronisation {
             final doc = id == null ? null : stockage.objet('DOCUMENT', id);
             if (doc != null) stockage.enregistrer('DOCUMENT', id!, {...doc, 'rejete': true}, local: true);
           }
+          if (r['statut'] == 'REJETEE' && op['type'] == 'RESOLUTION_CONTESTATION') {
+            // Clôture refusée : la contestation est toujours ouverte côté serveur, elle réapparaît.
+            final id = op['donnees']['contestationId'] as String;
+            final c = stockage.objet('CONTESTATION', id);
+            if (c != null) stockage.enregistrer('CONTESTATION', id, {...c, 'statut': 'OUVERTE'}..remove('resolueLe'));
+          }
         }
       });
       // Un serveur qui n'acquitte rien ferait boucler : on retentera à la prochaine synchro.
@@ -69,7 +75,7 @@ class Synchronisation {
         lot = await api.get('/v1/sync/changements', query: {'curseur': ?curseur})
             as Map<String, dynamic>;
       } on ProblemeApi catch (e) {
-        if (e.status != 410 || curseur == null) rethrow;
+        if (e.code != 'curseur-expire' || curseur == null) rethrow;
         // Curseur trop ancien : resynchronisation complète. La copie locale n'est purgée qu'avec
         // la première page reçue, pour ne jamais laisser l'appareil vide si le réseau retombe.
         purger = true;

@@ -1527,6 +1527,12 @@ abstract class T {
   /// In fr, this message translates to:
   /// **'Taux de TVA inconnu'**
   String get anoTVA_INCONNUE;
+
+  /// No description provided for @erreurRoleNonAmbulant.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce numéro n\'est pas un compte de vendeur ambulant.'**
+  String get erreurRoleNonAmbulant;
 }
 
 class _TDelegate extends LocalizationsDelegate<T> {

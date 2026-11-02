@@ -237,5 +237,6 @@
   "motifDEJA_PAYE": "مدفوع مسبقاً",
   "motifAUTRE": "أخرى",
   "opRESOLUTION_CONTESTATION": "اعتراض مغلق",
-  "anoTVA_INCONNUE": "نسبة الضريبة غير معروفة"
+  "anoTVA_INCONNUE": "نسبة الضريبة غير معروفة",
+  "erreurRoleNonAmbulant": "هذا الرقم ليس حساب بائع متجول."
 }

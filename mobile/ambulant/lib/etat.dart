@@ -95,7 +95,17 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
     _sync = Synchronisation(stockage, api, appareilId: appareilId, prefixe: session['prefixeNumerotation'] as String);
   }
 
+  /// Ambulant de la session enregistrée sur ce téléphone.
+  Map<String, dynamic>? get _utilisateurLocal =>
+      (jsonDecode(stockage.lire('session') ?? 'null') as Map<String, dynamic>?)?['utilisateur'] as Map<String, dynamic>?;
+
   Future<int> demanderOtp(String telephone) async {
+    // Autre numéro avec des pièces pas encore remontées : refuser avant l'OTP, dont la session
+    // invaliderait celle de l'ambulant précédent (il ne pourrait plus pousser sa file sans OTP).
+    final local = _utilisateurLocal;
+    if (local != null && local['telephone'] != telephone && stockage.nombreEnAttente > 0) {
+      throw const AutreAmbulantEnAttente();
+    }
     final r = await api.post('/v1/auth/otp', {'telephone': telephone, 'langue': codeLangue(locale)});
     return (r as Map)['expireDans'] as int;
   }
@@ -104,18 +114,25 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> verifierOtp(String telephone, String code) async {
     final session = await api.post('/v1/auth/otp/verify', {'telephone': telephone, 'code': code, 'appareilId': appareilId},
         {if (_mock) 'Prefer': 'example=ambulant'}) as Map<String, dynamic>;
-    if (!(session['utilisateur']['roles'] as List).contains('AMBULANT') || session['prefixeNumerotation'] == null) {
-      throw ProblemeApi(403, {'type': 'role'});
+    final autreAmbulant = _utilisateurLocal != null && _utilisateurLocal!['id'] != session['utilisateur']['id'];
+    Never refuser(Exception e) {
+      // La session ouverte par cet OTP ne servira pas : la fermer côté serveur.
+      api.post('/v1/auth/deconnexion', null, {'Authorization': 'Bearer ${session['accessToken']}'}).ignore();
+      throw e;
     }
-    final ancien = stockage.lire('session');
-    if (ancien != null && (jsonDecode(ancien) as Map)['utilisateur']['id'] != session['utilisateur']['id']) {
-      // Autre ambulant sur ce téléphone : les pièces du précédent doivent d'abord remonter (RG-C4).
-      if (stockage.nombreEnAttente > 0) throw const AutreAmbulantEnAttente();
-      final id = appareilId; // le préfixe reçu est lié à cet appareilId (RG-F1)
+
+    if (!(session['utilisateur']['roles'] as List).contains('AMBULANT') || session['prefixeNumerotation'] == null) {
+      refuser(ProblemeApi(403, {'type': 'https://daba.ma/problemes/role-non-autorise', 'status': 403}));
+    }
+    if (autreAmbulant) {
+      // Les pièces de l'ambulant précédent doivent d'abord remonter (RG-C4).
+      if (stockage.nombreEnAttente > 0) refuser(const AutreAmbulantEnAttente());
+      final id = appareilId; // préfixe par couple (ambulant, appareil), RG-F1
       stockage.effacerTout();
       stockage.ecrire('appareilId', id);
     }
-    await _enregistrerSession(session);
+    await _enregistrerJetons(session);
+    _ouvrir(session);
     if (stockage.lire('consentement') == null) {
       try {
         final c = await api.get('/v1/moi/consentement') as Map<String, dynamic>;
@@ -132,12 +149,13 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Chaque connexion OTP ouvre une nouvelle session : seuls les jetons de la dernière servent.
-  Future<void> _enregistrerSession(Map<String, dynamic> session) async {
+  /// Le moteur de synchro n'est pas recréé : un renouvellement arrive en pleine synchro, qui doit
+  /// rester la seule en cours (sinon des deltas locaux seraient oubliés trop tôt).
+  Future<void> _enregistrerJetons(Map<String, dynamic> session) async {
     await _coffre.write(key: 'jeton', value: session['accessToken'] as String);
     await _coffre.write(key: 'refresh', value: session['refreshToken'] as String);
     api.jeton = session['accessToken'] as String;
     stockage.ecrire('session', jsonEncode({...session}..remove('accessToken')..remove('refreshToken')));
-    _ouvrir(session);
     reconnexionRequise = false;
   }
 
@@ -146,7 +164,7 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
     final refresh = await _coffre.read(key: 'refresh');
     if (refresh == null) return false;
     try {
-      await _enregistrerSession(await api.post('/v1/auth/refresh', {'refreshToken': refresh}) as Map<String, dynamic>);
+      await _enregistrerJetons(await api.post('/v1/auth/refresh', {'refreshToken': refresh}) as Map<String, dynamic>);
       return true;
     } on ProblemeApi {
       // Session fermée ou remplacée par une autre connexion : il faut repasser par l'OTP.
@@ -262,7 +280,7 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
     } on HorsLigne {
       horsLigne = true;
     } on ProblemeApi catch (e) {
-      if (e.status == 401) reconnexionRequise = true;
+      if (e.code == 'non-authentifie') reconnexionRequise = true;
       if (e.consentementRequis) {
         stockage.ecrire('consentement', null);
         etape = Etape.consentement;

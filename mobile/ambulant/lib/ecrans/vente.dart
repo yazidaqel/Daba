@@ -321,9 +321,9 @@ class EcranDocument extends StatelessWidget {
       await SharePlus.instance.share(ShareParams(text: lien['url'] as String));
     } on ProblemeApi catch (e) {
       if (!context.mounted) return;
-      context.message(switch (e.status) {
-        404 => t.erreurDocNonSynchronise,
-        422 => t.erreurHanoutSansTelephone,
+      context.message(switch (e.code) {
+        'introuvable' => t.erreurDocNonSynchronise,
+        'regle-de-gestion' => t.erreurHanoutSansTelephone,
         _ => messageErreur(t, e),
       });
     } catch (e) {

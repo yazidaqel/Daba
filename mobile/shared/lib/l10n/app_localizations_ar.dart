@@ -792,4 +792,7 @@ class TAr extends T {
 
   @override
   String get anoTVA_INCONNUE => 'نسبة الضريبة غير معروفة';
+
+  @override
+  String get erreurRoleNonAmbulant => 'هذا الرقم ليس حساب بائع متجول.';
 }

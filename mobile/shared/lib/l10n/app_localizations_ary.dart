@@ -792,6 +792,9 @@ class TAry extends T {
 
   @override
   String get anoTVA_INCONNUE => 'نسبة TVA ما معروفاش';
+
+  @override
+  String get erreurRoleNonAmbulant => 'هاد النمرة ماشي ديال بياع متجول.';
 }
 
 /// The translations for Moroccan Arabic, using the Latin script (`ary_Latn`).
@@ -1587,4 +1590,7 @@ class TAryLatn extends TAry {
 
   @override
   String get anoTVA_INCONNUE => 'Nisbat TVA ma ma3roufach';
+
+  @override
+  String get erreurRoleNonAmbulant => 'Had nmra machi dyal bya3 mtjowel.';
 }

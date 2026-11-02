@@ -808,4 +808,8 @@ class TFr extends T {
 
   @override
   String get anoTVA_INCONNUE => 'Taux de TVA inconnu';
+
+  @override
+  String get erreurRoleNonAmbulant =>
+      'Ce numéro n\'est pas un compte de vendeur ambulant.';
 }

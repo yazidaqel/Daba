@@ -441,5 +441,6 @@
   "motifDEJA_PAYE": "Déjà payé",
   "motifAUTRE": "Autre",
   "opRESOLUTION_CONTESTATION": "Contestation close",
-  "anoTVA_INCONNUE": "Taux de TVA inconnu"
+  "anoTVA_INCONNUE": "Taux de TVA inconnu",
+  "erreurRoleNonAmbulant": "Ce numéro n'est pas un compte de vendeur ambulant."
 }

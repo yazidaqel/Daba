@@ -41,7 +41,7 @@ class FauxServeur {
     curseurDemande = req.url.queryParameters['curseur'];
     if (lots.isEmpty) return http.Response(jsonEncode({'curseur': 'fin', 'plusDeChangements': false, 'changements': []}), 200);
     final lot = lots.removeAt(0);
-    return http.Response(jsonEncode(lot['_statut'] == null ? lot : {'status': lot['_statut']}), (lot['_statut'] ?? 200) as int);
+    return http.Response(jsonEncode(lot['_statut'] == null ? lot : {'status': lot['_statut'], if (lot['_statut'] == 410) 'type': 'https://daba.ma/problemes/curseur-expire'}), (lot['_statut'] ?? 200) as int);
   });
 }
 
