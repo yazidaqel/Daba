@@ -23,17 +23,22 @@ class Synchronisation {
   Future<void> synchroniser() => _enCours ??= _synchroniser().whenComplete(() => _enCours = null);
 
   Future<void> _synchroniser() async {
+    final bool complet;
     try {
       await pousser();
-      await tirer();
+      complet = await tirer();
     } on ProblemeApi catch (e) {
       // Seule une révocation explicite efface l'appareil : un autre 403 (rôle) ne doit jamais
       // détruire des pièces de vente pas encore remontées (RG-C4).
       if (e.appareilRevoque) throw const AppareilRevoque();
       rethrow;
     }
-    stockage.oublierDeltasAcquittes();
+    if (complet) stockage.oublierDeltasAcquittes();
   }
+
+  /// Pages tirées au plus par synchronisation (500 changements chacune) ; la suite part
+  /// à la synchronisation suivante, depuis le curseur enregistré.
+  static const pagesMax = 40;
 
   Future<void> pousser() async {
     while (true) {
@@ -63,10 +68,11 @@ class Synchronisation {
     }
   }
 
-  Future<void> tirer() async {
+  /// Vrai si le serveur n'a plus de changements à donner.
+  Future<bool> tirer() async {
     var curseur = stockage.lire('curseur');
     var purger = false;
-    while (true) {
+    for (var page = 0; page < pagesMax; page++) {
       final Map<String, dynamic> lot;
       try {
         lot = await api.get('/v1/sync/changements', query: {'curseur': ?curseur})
@@ -90,8 +96,9 @@ class Synchronisation {
         stockage.ecrire('curseur', lot['curseur'] as String);
       });
       curseur = lot['curseur'] as String;
-      if (lot['plusDeChangements'] != true) return;
+      if (lot['plusDeChangements'] != true) return true;
     }
+    return false;
   }
 
   void appliquer(Map<String, dynamic> c) {

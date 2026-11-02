@@ -25,7 +25,8 @@ int distanceM(double lat1, double lon1, double lat2, double lon2) {
   const r = 6371000.0;
   double rad(double d) => d * pi / 180;
   final a = pow(sin(rad(lat2 - lat1) / 2), 2) + cos(rad(lat1)) * cos(rad(lat2)) * pow(sin(rad(lon2 - lon1) / 2), 2);
-  return (2 * r * asin(sqrt(a))).round();
+  // Coordonnées hors bornes (donnée erronée) : a peut dépasser 1, asin donnerait NaN.
+  return (2 * r * asin(sqrt(a.clamp(0.0, 1.0)))).round();
 }
 
 String distance(int m) => m < 1000 ? '$m m' : '${(m / 1000).toStringAsFixed(1)} km';

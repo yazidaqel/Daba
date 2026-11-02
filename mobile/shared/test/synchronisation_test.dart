@@ -170,6 +170,17 @@ void main() {
       expect(s.objets('HANOUT').map((h) => h['id']), ['h2']);
     });
 
+    test('tirage borné par synchronisation, deltas gardés tant qu\'il n\'est pas complet', () async {
+      final client = MockClient((req) async => http.Response(
+          jsonEncode(req.url.path == '/v1/sync/operations'
+              ? {'resultats': [for (final o in jsonDecode(req.body)['operations'] as List) {'operationId': o['id'], 'statut': 'APPLIQUEE'}]}
+              : lot('c', true, [])),
+          200));
+      s.enfiler('VERSEMENT', {}, deltas: {('SOLDE', 'h1'): -500});
+      await Synchronisation(s, Api('http://serveur', client: client), appareilId: appareil).synchroniser();
+      expect(s.delta('SOLDE', 'h1'), -500);
+    });
+
     test('un document de vente n\'est jamais supprimé', () async {
       s.enregistrer('DOCUMENT', 'd1', {'id': 'd1'});
       serveur.lots.add(lot('c', false, [{'entite': 'DOCUMENT', 'id': 'd1', 'action': 'SUPPRESSION'}]));
@@ -252,5 +263,6 @@ void main() {
     expect(centimes('abc'), isNull);
     expect(distanceM(33.5731, -7.5898, 33.5731, -7.5898), 0);
     expect(distanceM(33.5731, -7.5898, 33.5821, -7.5898), closeTo(1000, 5));
+    expect(() => distanceM(33.5, -7.6, -5e7, 9e8), returnsNormally, reason: 'position erronée reçue du serveur');
   });
 }

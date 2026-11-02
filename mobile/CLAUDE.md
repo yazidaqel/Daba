@@ -28,5 +28,7 @@ Prérequis : Flutter 3.47.9 (Dart 3.13.7), Android SDK, Node (pour le mock).
 - Tests : `cd mobile/shared && flutter test`, puis `cd mobile/ambulant && flutter test`
 - Mock du contrat (port 4010, à la racine du dépôt) : `npx @stoplight/prism-cli@5 mock -h 0.0.0.0 api/openapi.yaml`
 - Émulateur Android 8 à 2 Go de RAM : AVD `daba_api26` (`system-images;android-26;google_apis;x86_64`, `hw.ramSize=2048`), puis `emulator -avd daba_api26`
+- NDK 28.2.13676358 requis (SQLite compilé par le package sqlite3). Sous Windows, l'installation automatique de Gradle échoue (`sdkmanager.bat` coupe sur `;`) : l'installer depuis PowerShell avec `sdkmanager --install '"ndk;28.2.13676358"'`.
+- Le mock Prism statique répond toujours `plusDeChangements: true` et n'acquitte pas les UUID envoyés : l'app borne le tirage à 40 pages par synchro et garde ses opérations en attente, c'est normal.
 - Lancer sur l'émulateur contre le mock : `cd mobile/ambulant && flutter run -d emulator-5554` (API par défaut `http://10.0.2.2:4010`)
 - Autre serveur : `flutter run --dart-define=DABA_API=http://10.0.2.2:8080` (back-end local)

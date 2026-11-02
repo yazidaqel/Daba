@@ -122,10 +122,11 @@ class LigneHistorique extends StatelessWidget {
         trailing: Text(dh(-(e['montant'] as int))),
       );
     }
+    final rejete = e['rejete'] == true;
     return ListTile(
-      leading: const Icon(Icons.receipt_long_outlined),
+      leading: Icon(rejete ? Icons.block : Icons.receipt_long_outlined, color: rejete ? Colors.red.shade700 : null),
       title: Text('${nomType(t, e['type'] as String)} ${e['numero']}'),
-      subtitle: Text('${date(e['emisLe'] as String)} · ${t.total} ${dh(e['total'] as int)}'),
+      subtitle: Text(rejete ? t.docRejete : '${date(e['emisLe'] as String)} · ${t.total} ${dh(e['total'] as int)}'),
       trailing: Text(dh(e['montantCredit'] as int)),
       onTap: () => context.ouvrir(EcranDocument(e['id'] as String)),
     );

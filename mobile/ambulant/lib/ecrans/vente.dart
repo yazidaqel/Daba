@@ -70,8 +70,9 @@ class _EcranVenteState extends State<EcranVente> {
     setState(() {
       final p = centimes(prix.text);
       if (p != null && p != l.prixUnitaire) {
+        // Changer un prix connu = tarif négocié ; saisir le premier prix d'un produit reste le tarif standard.
+        if (l.prixUnitaire != 0) l.tarif = 'NEGOCIE';
         l.prixUnitaire = p;
-        l.tarif = 'NEGOCIE';
       }
       l.remise = centimes(remise.text) ?? 0;
     });
