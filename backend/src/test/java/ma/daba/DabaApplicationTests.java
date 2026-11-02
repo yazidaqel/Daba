@@ -3,23 +3,8 @@ package ma.daba;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.web.servlet.assertj.MockMvcTester;
 
-@Import(TestcontainersConfiguration.class)
-@SpringBootTest
-@AutoConfigureMockMvc
-class DabaApplicationTests {
-
-	@Autowired
-	MockMvcTester mvc;
-
-	@Autowired
-	JdbcTemplate jdbc;
+class DabaApplicationTests extends TestIntegration {
 
 	@Test
 	void healthIsUp() {
@@ -28,7 +13,7 @@ class DabaApplicationTests {
 
 	@Test
 	void flywayInstallsPostgis() {
-		assertThat(jdbc.queryForObject("SELECT postgis_lib_version()", String.class)).startsWith("3.6");
+		assertThat(jdbc.sql("SELECT postgis_lib_version()").query(String.class).single()).startsWith("3.6");
 	}
 
 	@Test

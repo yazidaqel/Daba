@@ -32,7 +32,7 @@
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-data-jpa</artifactId>
+			<artifactId>spring-boot-starter-jdbc</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -77,8 +77,12 @@
 			<artifactId>testcontainers-postgresql</artifactId>
 			<scope>test</scope>
 		</dependency>
-		<!-- Vérifie le découpage en modules (ModulesTest). Outbox PostgreSQL retenue : ajouter
-		     spring-modulith-starter-jdbc avec le premier module qui publie un événement. -->
+		<!-- Outbox PostgreSQL : registre de publication d'événements JDBC de Spring Modulith. -->
+		<dependency>
+			<groupId>org.springframework.modulith</groupId>
+			<artifactId>spring-modulith-starter-jdbc</artifactId>
+		</dependency>
+		<!-- Vérifie le découpage en modules (ModulesTest). -->
 		<dependency>
 			<groupId>org.springframework.modulith</groupId>
 			<artifactId>spring-modulith-starter-test</artifactId>

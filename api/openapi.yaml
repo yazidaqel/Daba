@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Daba API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Contrat unique entre le back-end, les apps mobiles (ambulant, hanout) et les portails web.
     Changement incompatible = nouvelle version de l'endpoint (/v2/...), jamais de rupture silencieuse.
@@ -109,6 +109,37 @@ paths:
           $ref: '#/components/responses/LienExpire'
         '429':
           $ref: '#/components/responses/Problem'
+
+  /v1/auth/refresh:
+    post:
+      tags: [comptes]
+      operationId: rafraichirSession
+      summary: Renouvelle la session de l'appareil avec le refreshToken (valable 90 jours)
+      description: |
+        L'accessToken vaut 24 h ; l'app le renouvelle ici, sans nouvel OTP, tant que l'appareil
+        n'est pas déconnecté à distance. 401 si le refreshToken est invalide ou l'appareil révoqué.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Nouvelle session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /v1/liens/{jeton}:
     get:
@@ -226,6 +257,38 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /v1/admin/organisations:
+    post:
+      tags: [comptes]
+      operationId: creerOrganisation
+      summary: L'administrateur inscrit un grossiste ou un grand client et ses utilisateurs
+      description: |
+        Les ambulants s'inscrivent seuls par OTP ; un numéro présent dans la base POS devient un
+        compte HANOUT à sa première connexion. Grossistes et grands clients sont créés ici ; leurs
+        utilisateurs se connectent ensuite par OTP. 409 si un numéro est déjà inscrit.
+      x-roles: [ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganisationSaisie'
+      responses:
+        '201':
+          description: Organisation créée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganisationCreee'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
   # ---------------------------------------------------------------- referentiel
   /v1/hanouts:
     get:
@@ -337,6 +400,66 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GrossistePage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/admin/hanouts/import:
+    post:
+      tags: [referentiel]
+      operationId: importerHanouts
+      summary: Importe la base POS fournie par RED (CSV)
+      description: |
+        CSV UTF-8, séparateur « ; » ou « , », première ligne d'en-têtes : code_pos, nom, gerant,
+        telephone, lat, lon, adresse, ville, ice. Clé : code_pos (réimporter met à jour). Téléphones
+        06…, 2126… ou 002126… acceptés. Une ligne invalide est rejetée avec son numéro, les autres passent.
+      x-roles: [ADMIN]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FichierImport'
+      responses:
+        '200':
+          description: Bilan de l'import
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BilanImport'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/admin/produits/import:
+    post:
+      tags: [referentiel]
+      operationId: importerProduits
+      summary: Importe le référentiel produits (CSV)
+      description: |
+        En-têtes : ean, libelle_fr, libelle_ar, libelle_ary_arab, libelle_ary_latn, marque, categorie,
+        conditionnement (UNITE, PACK, CARTON), unites, photo_url, grand_client_id (organisation
+        propriétaire, pour la carte des ruptures). Clé : ean.
+      x-roles: [ADMIN]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FichierImport'
+      responses:
+        '200':
+          description: Bilan de l'import
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BilanImport'
         '400':
           $ref: '#/components/responses/Problem'
         '401':
@@ -2047,6 +2170,86 @@ components:
           $ref: '#/components/schemas/Langue'
 
     # ------------------------------------------------------------ referentiel
+    OrganisationSaisie:
+      type: object
+      required: [type, nom, utilisateurs]
+      properties:
+        type:
+          type: string
+          enum: [GROSSISTE, GRAND_CLIENT]
+        nom:
+          type: string
+        utilisateurs:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [telephone]
+            properties:
+              telephone:
+                $ref: '#/components/schemas/Telephone'
+              nom:
+                type: string
+        position:
+          $ref: '#/components/schemas/Position'
+          description: Requise pour un grossiste
+        adresse:
+          type: string
+        ville:
+          type: string
+
+    OrganisationCreee:
+      type: object
+      required: [id, type, nom, utilisateurs]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identifiant de l'organisation ; pour un grossiste, c'est aussi son grossisteId
+        type:
+          type: string
+        nom:
+          type: string
+        utilisateurs:
+          type: array
+          items:
+            type: object
+            required: [id, telephone]
+            properties:
+              id:
+                type: string
+                format: uuid
+              telephone:
+                $ref: '#/components/schemas/Telephone'
+
+    FichierImport:
+      type: object
+      required: [fichier]
+      properties:
+        fichier:
+          type: string
+          contentMediaType: text/csv
+
+    BilanImport:
+      type: object
+      required: [crees, misAJour, rejets]
+      properties:
+        crees:
+          type: integer
+        misAJour:
+          type: integer
+        rejets:
+          type: array
+          items:
+            type: object
+            required: [ligne, erreur]
+            properties:
+              ligne:
+                type: integer
+                description: Numéro de ligne dans le fichier (l'en-tête est la ligne 1)
+              erreur:
+                type: string
+
     Hanout:
       type: object
       required: [id, nom, position]
