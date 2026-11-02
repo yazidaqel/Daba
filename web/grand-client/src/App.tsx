@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
-import { ApiError, api, ecrireSession, lireSession, ok } from '@/api/client'
+import { ApiError, api, lireSession, ok, seDeconnecter } from '@/api/client'
 import { useI18n } from '@/i18n'
 import { SelecteurLangue } from '@/components/SelecteurLangue'
 import { Erreur } from '@/components/Erreur'
@@ -30,16 +30,18 @@ export function App() {
   const [consenti, setConsenti] = useState<boolean>()
   const [erreurConsentement, setErreurConsentement] = useState<unknown>()
   const [essai, setEssai] = useState(0)
+  const [motifSortie, setMotifSortie] = useState<string>()
   const route = useHash()
 
-  const sortir = () => {
-    ecrireSession(null)
+  const sortir = async () => {
+    await seDeconnecter()
     setSession(null)
     setConsenti(undefined)
   }
 
   useEffect(() => {
-    const deconnecte = () => (setSession(null), setConsenti(undefined))
+    // detail : code du Problem qui a fermé la session (appareil-revoque), sinon jeton expiré.
+    const deconnecte = (e: Event) => (setSession(null), setConsenti(undefined), setMotifSortie((e as CustomEvent<string>).detail))
     const redemander = () => setConsenti(false)
     addEventListener('daba:deconnexion', deconnecte)
     addEventListener('daba:consentement', redemander)
@@ -61,7 +63,7 @@ export function App() {
       )
   }, [session, essai])
 
-  if (!session) return <Connexion onSession={setSession} />
+  if (!session) return <Connexion onSession={(s) => (setMotifSortie(undefined), setSession(s))} motif={motifSortie} />
   if (consenti === undefined)
     return (
       <div className="space-y-2 p-6">

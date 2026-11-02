@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { versCentimes, versDirhams, versE164 } from './format'
-import { remiseParDefaut, validerCampagne, versListe } from './campagne'
+import { ciblerRegions, remiseParDefaut, validerCampagne } from './campagne'
 import { MESSAGES } from '@/messages'
 
 describe('format', () => {
@@ -16,8 +16,14 @@ describe('format', () => {
     expect(versE164('00212712345678')).toBe('+212712345678')
     expect(versE164('0812345678')).toBeNull()
   })
-  it('découpe une liste, virgule arabe comprise', () => {
-    expect(versListe('Casablanca, Rabat،  ')).toEqual(['Casablanca', 'Rabat'])
+  it('retire les villes hors des régions ciblées', () => {
+    const nom = { fr: '' }
+    const regions = [
+      { code: 'CS', nom, villes: [{ code: 'CASABLANCA', nom }] },
+      { code: 'RSK', nom, villes: [{ code: 'RABAT', nom }] },
+    ]
+    expect(ciblerRegions({ villes: ['CASABLANCA', 'RABAT'] }, regions, ['CS']).villes).toEqual(['CASABLANCA'])
+    expect(ciblerRegions({ villes: ['RABAT'] }, regions, []).villes).toEqual(['RABAT'])
   })
 })
 

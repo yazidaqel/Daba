@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { api, ok } from '@/api/client'
 import { useI18n } from '@/i18n'
 import { useCharge } from '@/lib/useCharge'
-import { useProduits } from '@/lib/useProduits'
+import { useMesProduits } from '@/lib/useProduits'
 import { Carte } from '@/components/Carte'
+import { ListeVilles } from '@/components/ListeVilles'
 import { Erreur } from '@/components/Erreur'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -11,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 /** Carte des ruptures agrégée par cellule geohash (§5.3, §5.4) : aucune donnée par hanout ni ambulant. */
 export function Ruptures() {
   const { t, libelle, nombre, date } = useI18n()
-  const produits = useProduits()
+  const produits = useMesProduits()
   const [produitId, setProduitId] = useState('')
   const [ville, setVille] = useState('')
   const [precision, setPrecision] = useState<5 | 6>(6)
@@ -60,7 +61,8 @@ export function Ruptures() {
         </label>
         <label className="space-y-1">
           <span className="block">{t('ciblage.villes')}</span>
-          <Input className="w-40" value={ville} onChange={(e) => setVille(e.target.value)} />
+          <Input className="w-40" list="villes-ruptures" value={ville} onChange={(e) => setVille(e.target.value)} />
+          <ListeVilles id="villes-ruptures" />
         </label>
         <label className="space-y-1">
           <span className="block">{t('ruptures.precision')}</span>

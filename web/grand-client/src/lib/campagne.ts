@@ -17,12 +17,14 @@ export function remiseParDefaut(type: TypeRemise, produitId: string): S['Remise'
   }
 }
 
-/** "Casablanca, Rabat" → ["Casablanca", "Rabat"] */
-export function versListe(texte: string): string[] {
-  return texte
-    .split(/[,،]/)
-    .map((s) => s.trim())
-    .filter(Boolean)
+/**
+ * Nouveau choix de régions : une offre n'est visible que si la ville ET la région du dépositaire sont
+ * ciblées, donc les villes cochées hors des régions choisies sont retirées.
+ */
+export function ciblerRegions(ciblage: S['Ciblage'], regions: S['Region'][], codes: string[]): S['Ciblage'] {
+  if (!codes.length) return { ...ciblage, regions: codes }
+  const permises = new Set(regions.filter((r) => codes.includes(r.code)).flatMap((r) => r.villes.map((v) => v.code)))
+  return { ...ciblage, regions: codes, villes: ciblage.villes?.filter((v) => permises.has(v)) }
 }
 
 const pct = (n: number) => n > 0 && n <= 100

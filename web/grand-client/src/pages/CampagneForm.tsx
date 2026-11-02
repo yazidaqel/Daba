@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { api, ok, type S } from '@/api/client'
 import { LANGUES, useI18n } from '@/i18n'
-import { TYPES_REMISE, remiseParDefaut, validerCampagne, versListe, type TypeRemise } from '@/lib/campagne'
+import { TYPES_REMISE, ciblerRegions, remiseParDefaut, validerCampagne, type TypeRemise } from '@/lib/campagne'
 import { isoVersLocal, localVersIso, versCentimes, versDirhams } from '@/lib/format'
 import { useCharge } from '@/lib/useCharge'
-import { useProduits } from '@/lib/useProduits'
+import { useCategories, useProduits, useRegions } from '@/lib/useProduits'
 import { Carte } from '@/components/Carte'
 import { Erreur } from '@/components/Erreur'
 import { Button } from '@/components/ui/button'
@@ -30,6 +30,29 @@ function Nombre({ id, valeur, onChange, min = 1, max }: { id?: string; valeur: n
   )
 }
 
+function Coches({ titre, aide, options: connues, choisis = [], onChange }: { titre: string; aide?: string; options: { code: string; nom: string }[]; choisis?: string[]; onChange: (codes: string[]) => void }) {
+  // Une valeur hors référentiel (saisie libre d'avant la v0.4.0) reste visible, pour pouvoir la décocher.
+  const options = [...connues, ...choisis.filter((c) => !connues.some((o) => o.code === c)).map((c) => ({ code: c, nom: c }))]
+  return (
+    <fieldset className="space-y-1 text-sm">
+      <legend className="font-medium">{titre}</legend>
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {options.map((o) => (
+          <label key={o.code} className="flex items-center gap-1">
+            <input
+              type="checkbox"
+              checked={choisis.includes(o.code)}
+              onChange={(e) => onChange(e.target.checked ? [...choisis, o.code] : choisis.filter((x) => x !== o.code))}
+            />
+            {o.nom}
+          </label>
+        ))}
+      </div>
+      {aide && <p className="text-xs text-muted-foreground">{aide}</p>}
+    </fieldset>
+  )
+}
+
 function Champ({ label, children, aide }: { label: string; children: React.ReactNode; aide?: string }) {
   return (
     <label className="block space-y-1 text-sm">
@@ -42,12 +65,14 @@ function Champ({ label, children, aide }: { label: string; children: React.React
 
 export function CampagneForm({ id }: { id?: string }) {
   const { t, libelle } = useI18n()
-  const produits = useProduits()
   const existante = useCharge(
     () => (id ? api.GET('/v1/campagnes/{campagneId}', { params: { path: { campagneId: id } } }).then(ok) : Promise.resolve(undefined)),
     [id],
   )
   const [saisie, setSaisie] = useState<Saisie>()
+  const produits = useProduits((saisie ?? existante.data)?.lignes.map((l) => l.produitId) ?? [])
+  const categories = useCategories()
+  const regions = useRegions()
   const [recherche, setRecherche] = useState('')
   const [trace, setTrace] = useState<number[][]>([])
   const [erreur, setErreur] = useState<unknown>()
@@ -55,7 +80,7 @@ export function CampagneForm({ id }: { id?: string }) {
   const resultats = useCharge(
     () =>
       recherche.trim().length >= 2
-        ? api.GET('/v1/produits', { params: { query: { q: recherche.trim(), taille: 10 } } }).then(ok)
+        ? api.GET('/v1/produits', { params: { query: { q: recherche.trim(), mesProduits: true, taille: 10 } } }).then(ok)
         : Promise.resolve(undefined),
     [recherche],
   )
@@ -73,8 +98,9 @@ export function CampagneForm({ id }: { id?: string }) {
     const p = produits.get(pid)
     return p ? `${libelle(p.libelle)} · ${p.marque}` : pid.slice(0, 8)
   }
-  // Catégories connues du référentiel (pas d'endpoint dédié au lot 1).
-  const categories = [...new Map([...produits.values()].map((p) => [p.categorie.code, p.categorie])).values()]
+  // Seules les villes des régions cochées se proposent (voir ciblerRegions).
+  const regionsCochees = regions.filter((r) => ciblage.regions?.includes(r.code))
+  const villesProposees = (regionsCochees.length ? regionsCochees : regions).flatMap((r) => r.villes)
 
   async function enregistrer(e: React.FormEvent) {
     e.preventDefault()
@@ -225,13 +251,21 @@ export function CampagneForm({ id }: { id?: string }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">{t('ciblage.aide')}</p>
-          <div className="grid gap-4 md:grid-cols-3">
-            <Champ label={t('ciblage.regions')} aide={t('ciblage.virgules')}>
-              <Input defaultValue={(ciblage.regions ?? []).join(', ')} onChange={(e) => majCiblage({ regions: versListe(e.target.value) })} />
-            </Champ>
-            <Champ label={t('ciblage.villes')} aide={t('ciblage.virgules')}>
-              <Input defaultValue={(ciblage.villes ?? []).join(', ')} onChange={(e) => majCiblage({ villes: versListe(e.target.value) })} />
-            </Champ>
+          <Coches titre={t('ciblage.regions')} options={regions.map((r) => ({ code: r.code, nom: libelle(r.nom) }))} choisis={ciblage.regions} onChange={(codes) => maj({ ciblage: ciblerRegions(ciblage, regions, codes) })} />
+          <Coches
+            titre={t('ciblage.villes')}
+            aide={t('ciblage.villesAide')}
+            options={villesProposees.map((v) => ({ code: v.code, nom: libelle(v.nom) }))}
+            choisis={ciblage.villes}
+            onChange={(villes) => majCiblage({ villes })}
+          />
+          <Coches
+            titre={t('ciblage.categories')}
+            options={[...categories.values()].map((cat) => ({ code: cat.code, nom: libelle(cat.libelle) }))}
+            choisis={ciblage.categories}
+            onChange={(categories) => majCiblage({ categories })}
+          />
+          <div className="max-w-xs">
             <Champ label={t('ciblage.rayon')} aide={t('ciblage.rayonAide')}>
               <Nombre
                 valeur={ciblage.rayonM ?? NaN}
@@ -240,27 +274,6 @@ export function CampagneForm({ id }: { id?: string }) {
                 onChange={(n) => majCiblage({ rayonM: Number.isNaN(n) ? undefined : n })}
               />
             </Champ>
-          </div>
-          <div className="space-y-1 text-sm">
-            <span className="font-medium">{t('ciblage.categories')}</span>
-            <div className="flex flex-wrap gap-3">
-              {categories.map((cat) => (
-                <label key={cat.code} className="flex items-center gap-1">
-                  <input
-                    type="checkbox"
-                    checked={ciblage.categories?.includes(cat.code) ?? false}
-                    onChange={(e) =>
-                      majCiblage({
-                        categories: e.target.checked
-                          ? [...(ciblage.categories ?? []), cat.code]
-                          : (ciblage.categories ?? []).filter((x) => x !== cat.code),
-                      })
-                    }
-                  />
-                  {libelle(cat.libelle)}
-                </label>
-              ))}
-            </div>
           </div>
           <div className="space-y-2">
             <span className="text-sm font-medium">{t('ciblage.zones')}</span>

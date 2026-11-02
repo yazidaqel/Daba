@@ -33,7 +33,8 @@ export function Carte({ points: tous = [], onPoint, zones = [], trace = [], onCl
   const conteneur = useRef<HTMLDivElement>(null)
   const carte = useRef<Carto | null>(null)
   const rappels = useRef({ onPoint, onClic })
-  const [prete, setPrete] = useState(false)
+  // Carte chargée : l'instance elle-même, car un changement de langue la recrée.
+  const [prete, setPrete] = useState<Carto | null>(null)
   const { t, langue } = useI18n()
   const cadrage = useRef('')
 
@@ -82,11 +83,11 @@ export function Carte({ points: tous = [], onPoint, zones = [], trace = [], onCl
       m.on('click', (e) => rappels.current.onClic?.(e.lngLat.lng, e.lngLat.lat))
       m.on('mouseenter', 'points', () => (m.getCanvas().style.cursor = 'pointer'))
       m.on('mouseleave', 'points', () => (m.getCanvas().style.cursor = ''))
-      setPrete(true)
+      setPrete(m)
     })
     return () => {
       m.remove()
-      setPrete(false)
+      setPrete(null)
       cadrage.current = ''
     }
     // Recréée au changement de langue, pour les infobulles des contrôles.
@@ -94,8 +95,9 @@ export function Carte({ points: tous = [], onPoint, zones = [], trace = [], onCl
   }, [langue])
 
   useEffect(() => {
-    const m = carte.current
-    if (!prete || !m) return
+    const m = prete
+    // Dans le rendu qui suit un changement de langue, `prete` désigne encore l'ancienne carte, déjà retirée.
+    if (!m || m !== carte.current) return
     ;(m.getSource('points') as GeoJSONSource).setData({
       type: 'FeatureCollection',
       features: points.map((p) => ({
