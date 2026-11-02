@@ -715,6 +715,83 @@ class TAry extends T {
 
   @override
   String get tvaNonAssujetti => 'ماشي خاضع ل TVA';
+
+  @override
+  String get erreurFactureTvaInconnue =>
+      'ما يمكنش الفاكتورة: شي سلعة ما عندهاش نسبة TVA معروفة. طلع بون ليفريزون.';
+
+  @override
+  String get tvaComprise => 'فيها TVA';
+
+  @override
+  String get envoyerLienSms => 'صيفط اللينك ف SMS';
+
+  @override
+  String get erreurDocNonSynchronise =>
+      'دير سانكرو للبيعة هي الأولى باش تاخد اللينك.';
+
+  @override
+  String get erreurHanoutSansTelephone => 'هاد الحانوت ما عندوش نمرة تيليفون.';
+
+  @override
+  String get erreurAppareilRevoque => 'هاد التيليفون تقطع من بعيد. عاود دخل.';
+
+  @override
+  String receptionConforme(String date) {
+    return 'مول الحانوت أكد التوصيل نهار $date';
+  }
+
+  @override
+  String get receptionEcart => 'مول الحانوت قال كاين فرق ف التوصيل';
+
+  @override
+  String receptionEcartLigne(String produit, String recu, String livre) {
+    return '$produit: وصلو $recu من $livre';
+  }
+
+  @override
+  String get contestations => 'الشكايات';
+
+  @override
+  String contestationsOuvertes(String n) {
+    return '$n شكايات مفتوحين';
+  }
+
+  @override
+  String get aucuneContestation => 'ما كاينة حتى شكاية';
+
+  @override
+  String get clore => 'سد';
+
+  @override
+  String get commentaire => 'تعليق';
+
+  @override
+  String get document => 'الوثيقة';
+
+  @override
+  String get compteCredit => 'الكريدي ديال الحساب';
+
+  @override
+  String get motifMONTANT => 'المبلغ';
+
+  @override
+  String get motifQUANTITE => 'الكمية';
+
+  @override
+  String get motifNON_RECU => 'ما وصلش';
+
+  @override
+  String get motifDEJA_PAYE => 'مخلص من قبل';
+
+  @override
+  String get motifAUTRE => 'شي حاجة أخرى';
+
+  @override
+  String get opRESOLUTION_CONTESTATION => 'شكاية تسدات';
+
+  @override
+  String get anoTVA_INCONNUE => 'نسبة TVA ما معروفاش';
 }
 
 /// The translations for Moroccan Arabic, using the Latin script (`ary_Latn`).
@@ -1431,4 +1508,83 @@ class TAryLatn extends TAry {
 
   @override
   String get tvaNonAssujetti => 'Machi khade3 l TVA';
+
+  @override
+  String get erreurFactureTvaInconnue =>
+      'Ma ymkench facture: chi sel3a ma 3andhach nisbat TVA ma3roufa. Tle3 bon livraison.';
+
+  @override
+  String get tvaComprise => 'Fiha TVA';
+
+  @override
+  String get envoyerLienSms => 'Sifet lien f SMS';
+
+  @override
+  String get erreurDocNonSynchronise =>
+      'Dir synchro l lbi3a howa lowel bach takhod lien.';
+
+  @override
+  String get erreurHanoutSansTelephone =>
+      'Had l7anout ma 3andouch nmra tilifoun.';
+
+  @override
+  String get erreurAppareilRevoque =>
+      'Had tilifoun t9te3 men b3id. 3awed dkhel.';
+
+  @override
+  String receptionConforme(String date) {
+    return 'Mol l7anout akked tawsil nhar $date';
+  }
+
+  @override
+  String get receptionEcart => 'Mol l7anout gal kayn far9 f tawsil';
+
+  @override
+  String receptionEcartLigne(String produit, String recu, String livre) {
+    return '$produit: wslou $recu men $livre';
+  }
+
+  @override
+  String get contestations => 'Chkayat';
+
+  @override
+  String contestationsOuvertes(String n) {
+    return '$n chkayat mftou7in';
+  }
+
+  @override
+  String get aucuneContestation => 'Ma kayna 7ta chkaya';
+
+  @override
+  String get clore => 'Sedd';
+
+  @override
+  String get commentaire => 'Ta3li9';
+
+  @override
+  String get document => 'Lwati9a';
+
+  @override
+  String get compteCredit => 'Lcrédit dyal l7sab';
+
+  @override
+  String get motifMONTANT => 'Lmablagh';
+
+  @override
+  String get motifQUANTITE => 'Lkemmiya';
+
+  @override
+  String get motifNON_RECU => 'Ma wselch';
+
+  @override
+  String get motifDEJA_PAYE => 'Mkhalles men 9bel';
+
+  @override
+  String get motifAUTRE => 'Chi 7aja akhra';
+
+  @override
+  String get opRESOLUTION_CONTESTATION => 'Chkaya tseddat';
+
+  @override
+  String get anoTVA_INCONNUE => 'Nisbat TVA ma ma3roufach';
 }

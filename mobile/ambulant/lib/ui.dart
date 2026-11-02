@@ -41,6 +41,7 @@ String messageErreur(T t, Object e) => switch (e) {
       AutreAmbulantEnAttente() => t.erreurAutreAmbulant,
       VenteRefusee(:final motif) => switch (motif) {
           RefusVente.factureSansMentions => t.erreurFactureSansMentions,
+          RefusVente.factureTvaInconnue => t.erreurFactureTvaInconnue,
           RefusVente.creditBloque => t.erreurCreditBloque,
           RefusVente.creditAvertissement => t.avertissementCredit,
           RefusVente.remiseHorsPlafond => t.erreurRemisePlafond,
@@ -48,12 +49,15 @@ String messageErreur(T t, Object e) => switch (e) {
           RefusVente.qrIllisible => t.erreurQrIllisible,
           RefusVente.bonDejaCharge => t.erreurBonDejaCharge,
         },
-      ProblemeApi(status: 409) => t.erreurConflit,
+      // Décision sur le code fixe du contrat (`Problem.type`), jamais sur `detail`.
+      ProblemeApi(code: 'appareil-revoque') => t.erreurAppareilRevoque,
+      ProblemeApi(code: 'consentement-requis') => t.erreurConsentement,
+      ProblemeApi(code: 'code-invalide') => t.erreurCodeInvalide,
+      ProblemeApi(code: 'non-authentifie') => t.reconnexionRequise,
+      ProblemeApi(code: 'trop-de-demandes') => t.erreurTropDEssais,
+      ProblemeApi(code: 'lien-expire' || 'curseur-expire') => t.erreurCodeExpire,
       ProblemeApi(regle: 'RG-P3') => t.erreurPlafondPromo,
-      ProblemeApi(status: 429) => t.erreurTropDEssais,
-      ProblemeApi(status: 401) => t.erreurCodeInvalide,
-      ProblemeApi(status: 410) => t.erreurCodeExpire,
-      ProblemeApi p when p.consentementRequis => t.erreurConsentement,
+      ProblemeApi(code: 'conflit') || ProblemeApi(status: 409) => t.erreurConflit,
       ProblemeApi(:final status) => t.erreurServeur(status.toString()),
       _ => t.erreurInconnue,
     };

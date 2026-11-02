@@ -28,6 +28,10 @@ class _EcranVenteState extends State<EcranVente> {
   bool _especesSaisies = false, _confirme = false;
 
   int get _total => _lignes.fold(0, (a, l) => a + l.brut - l.remise);
+
+  /// Facture seulement avec les mentions légales, et pour un assujetti si chaque taux de TVA est connu (RG-F2).
+  bool get _factureOk => context.daba.m.peutFacturer && !context.daba.m.tvaInconnue(_lignes);
+  String get _typeEffectif => _factureOk ? _type : 'BON_LIVRAISON';
   int get _montantCheque => centimes(_cheque.text) ?? 0;
   int get _montantEspeces => _especesSaisies ? (centimes(_especes.text) ?? 0) : _total - _montantCheque;
   int get _credit => _total - _montantEspeces - _montantCheque;
@@ -88,7 +92,7 @@ class _EcranVenteState extends State<EcranVente> {
       final doc = daba.m.emettre(
         hanoutId: widget.hanoutId,
         lignes: _lignes,
-        type: _type,
+        type: _typeEffectif,
         reglements: [
           if (_montantEspeces > 0) Reglement('ESPECES', _montantEspeces),
           if (_montantCheque > 0)
@@ -128,13 +132,17 @@ class _EcranVenteState extends State<EcranVente> {
           child: SegmentedButton<String>(
             segments: [
               ButtonSegment(value: 'BON_LIVRAISON', label: Text(t.bonLivraison)),
-              ButtonSegment(value: 'FACTURE', label: Text(t.facture), enabled: m.peutFacturer),
+              ButtonSegment(value: 'FACTURE', label: Text(t.facture), enabled: _factureOk),
             ],
-            selected: {_type},
+            selected: {_typeEffectif},
             onSelectionChanged: (s) => setState(() => _type = s.first),
           ),
         ),
-        if (!m.peutFacturer) Padding(padding: const EdgeInsets.all(8), child: Text(t.factureIndisponible, style: style.bodySmall)),
+        if (!_factureOk)
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Text(m.peutFacturer ? t.erreurFactureTvaInconnue : t.factureIndisponible, style: style.bodySmall),
+          ),
         Padding(
           padding: const EdgeInsets.all(16),
           child: Column(children: [
@@ -174,7 +182,7 @@ class _EcranVenteState extends State<EcranVente> {
           child: FilledButton.icon(
             onPressed: _lignes.isEmpty ? null : _emettre,
             icon: const Icon(Icons.receipt_long),
-            label: Text(_type == 'FACTURE' ? t.emettreFacture : t.emettreBon),
+            label: Text(_typeEffectif == 'FACTURE' ? t.emettreFacture : t.emettreBon),
           ),
         ),
       ]),
@@ -271,6 +279,7 @@ class EcranDocument extends StatelessWidget {
         if (doc['statut'] != 'EMIS')
           Text(doc['statut'] == 'ANNULE' ? t.docAnnule : t.docPartiellementAnnule, style: TextStyle(color: Colors.red.shade700)),
         if (doc['rejete'] == true) Text(t.docRejete, style: TextStyle(color: Colors.red.shade700)),
+        ..._reception(context, doc),
         const Divider(),
         for (final l in (doc['lignes'] as List).cast<Map>())
           ListTile(
@@ -284,6 +293,7 @@ class EcranDocument extends StatelessWidget {
           ),
         const Divider(),
         ListTile(title: Text(t.total), trailing: Text(dh(doc['total'] as int), style: style.titleLarge)),
+        if (doc['tva'] != null) ListTile(dense: true, title: Text(t.tvaComprise), trailing: Text(dh(doc['tva'] as int))),
         ListTile(dense: true, title: Text(t.regle), trailing: Text(dh(doc['montantRegle'] as int))),
         ListTile(dense: true, title: Text(t.resteACredit), trailing: Text(dh(doc['montantCredit'] as int))),
         const SizedBox(height: 16),
@@ -296,9 +306,46 @@ class EcranDocument extends StatelessWidget {
           label: Text(t.partagerPdf),
         ),
         const SizedBox(height: 8),
+        OutlinedButton.icon(onPressed: () => _envoyerLien(context), icon: const Icon(Icons.sms_outlined), label: Text(t.envoyerLienSms)),
+        const SizedBox(height: 8),
         Text(t.smsApresSync, style: style.bodySmall, textAlign: TextAlign.center),
       ]),
     );
+  }
+
+  /// Lien signé du document (en ligne), partagé à la main vers l'app SMS.
+  Future<void> _envoyerLien(BuildContext context) async {
+    final t = context.t;
+    try {
+      final lien = await context.daba.api.get('/v1/documents/$id/lien') as Map<String, dynamic>;
+      await SharePlus.instance.share(ShareParams(text: lien['url'] as String));
+    } on ProblemeApi catch (e) {
+      if (!context.mounted) return;
+      context.message(switch (e.status) {
+        404 => t.erreurDocNonSynchronise,
+        422 => t.erreurHanoutSansTelephone,
+        _ => messageErreur(t, e),
+      });
+    } catch (e) {
+      if (context.mounted) context.erreur(e);
+    }
+  }
+
+  /// Réception confirmée par le hanout dans sa PWA, ou écart signalé ligne par ligne (§6).
+  List<Widget> _reception(BuildContext context, Map<String, dynamic> doc) {
+    final r = doc['receptionHanout'] as Map?;
+    if (r == null) return const [];
+    final t = context.t;
+    if (r['conforme'] == true) return [Text(t.receptionConforme(date(r['le'] as String)), style: const TextStyle(color: Colors.green))];
+    final lignes = (doc['lignes'] as List).cast<Map>();
+    return [
+      Text(t.receptionEcart, style: TextStyle(color: Colors.orange.shade800)),
+      for (final e in ((r['ecarts'] as List?) ?? const []).cast<Map>())
+        if ((e['ligne'] as int) < lignes.length)
+          Text(t.receptionEcartLigne(context.lib(lignes[e['ligne'] as int]['libelle']), '${e['quantiteRecue']}',
+              '${lignes[e['ligne'] as int]['quantite']}')),
+      if (r['commentaire'] case final String c) Text(c),
+    ];
   }
 }
 

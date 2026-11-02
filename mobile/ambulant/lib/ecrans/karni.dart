@@ -16,7 +16,15 @@ class OngletKarni extends StatelessWidget {
     final m = context.daba.m;
     final comptes = m.comptes().where((c) => c.$2 != 0 || m.compte(c.$1['id'] as String)?['plafond'] != null).toList();
     final total = comptes.fold<int>(0, (a, c) => a + c.$2);
+    final contestations = m.contestations().length;
     return ListView(children: [
+      if (contestations > 0)
+        ListTile(
+          leading: Icon(Icons.gavel, color: Colors.orange.shade800),
+          title: Text(t.contestationsOuvertes('$contestations')),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => context.ouvrir(const EcranContestations()),
+        ),
       Card(
         margin: const EdgeInsets.all(12),
         child: ListTile(
@@ -132,3 +140,77 @@ class LigneHistorique extends StatelessWidget {
     );
   }
 }
+
+/// Contestations ouvertes par les hanouts (document ou solde, §6), closes hors ligne par l'ambulant.
+class EcranContestations extends StatelessWidget {
+  const EcranContestations({super.key, this.hanoutId});
+  final String? hanoutId;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.t;
+    final daba = context.daba;
+    final liste = daba.m.contestations(hanoutId: hanoutId);
+    return Scaffold(
+      appBar: AppBar(title: Text(t.contestations)),
+      body: liste.isEmpty
+          ? Vide(t.aucuneContestation)
+          : ListView(children: [for (final c in liste) CarteContestation(c)]),
+    );
+  }
+}
+
+class CarteContestation extends StatelessWidget {
+  const CarteContestation(this.c, {super.key});
+  final Map<String, dynamic> c;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.t;
+    final daba = context.daba;
+    final doc = c['cible'] == 'DOCUMENT' ? daba.stockage.objet('DOCUMENT', c['cibleId'] as String) : null;
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: ListTile(
+        leading: Icon(Icons.gavel, color: Colors.orange.shade800),
+        title: Text('${c['hanout']['nom']} · ${nomMotif(t, c['motif'] as String)}'),
+        subtitle: Text([
+          if (c['cible'] == 'DOCUMENT') (doc?['numero'] ?? t.document) as String else t.compteCredit,
+          date(c['creeLe'] as String),
+          if (c['commentaire'] case final String x) x,
+        ].join(' · ')),
+        trailing: TextButton(onPressed: () => _clore(context), child: Text(t.clore)),
+        onTap: doc == null ? null : () => context.ouvrir(EcranDocument(doc['id'] as String)),
+      ),
+    );
+  }
+
+  Future<void> _clore(BuildContext context) async {
+    final t = context.t;
+    final daba = context.daba;
+    final commentaire = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: Text(t.clore),
+        content: TextField(controller: commentaire, maxLength: 500, decoration: InputDecoration(labelText: t.commentaire)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: Text(t.annuler)),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: Text(t.clore)),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final texte = commentaire.text.trim();
+    daba.m.resoudreContestation(c['id'] as String, commentaire: texte.isEmpty ? null : texte);
+    daba.apresGeste();
+  }
+}
+
+String nomMotif(T t, String motif) => switch (motif) {
+      'MONTANT' => t.motifMONTANT,
+      'QUANTITE' => t.motifQUANTITE,
+      'NON_RECU' => t.motifNON_RECU,
+      'DEJA_PAYE' => t.motifDEJA_PAYE,
+      _ => t.motifAUTRE,
+    };

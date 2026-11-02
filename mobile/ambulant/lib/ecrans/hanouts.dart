@@ -171,6 +171,7 @@ class EcranHanout extends StatelessWidget {
             label: Text(t.plafondCredit),
           ),
         ]),
+        for (final c in m.contestations(hanoutId: id)) CarteContestation(c),
         const Divider(),
         ListTile(title: Text(t.historique, style: Theme.of(context).textTheme.titleMedium)),
         if (historique.isEmpty) Vide(t.aucunMouvement),

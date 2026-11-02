@@ -21,6 +21,7 @@ Ambulant monter({Map<String, dynamic>? parametres}) {
   s.enregistrer('PRODUIT', coca, {
     'id': coca, 'ean': '6111000000017', 'libelle': {'fr': 'Coca 1L', 'ar': 'كوكا 1ل'}, 'marque': 'Coca-Cola',
     'categorie': {'code': 'BOISSONS', 'libelle': {'fr': 'Boissons'}}, 'conditionnement': 'UNITE', 'unitesParConditionnement': 1,
+    'tauxTva': 20,
   });
   s.enregistrer('STOCK', coca, {
     'produitId': coca, 'quantite': 100,
@@ -83,6 +84,52 @@ void main() {
       expect(() => m.emettre(hanoutId: hanoutId, lignes: [coca1(10)..remise = 900]),
           throwsA(isA<VenteRefusee>().having((e) => e.motif, 'motif', RefusVente.remiseHorsPlafond)));
     });
+  });
+
+  group('TVA (prix TTC, RG-F2)', () {
+    final assujetti = {
+      'politiqueDepassementCredit': 'AVERTIR', 'seuilEcartInventairePourcent': 5,
+      'mentionsLegales': {'ice': '001234567000089', 'identifiantFiscal': '1', 'registreCommerce': '2', 'assujettiTva': true},
+    };
+
+    test('formule du contrat : M × t / (100 + t), demi au-dessus en valeur absolue', () {
+      expect(Ambulant.tvaComprise(1200, 20), 200);
+      expect(Ambulant.tvaComprise(850, 7), 56);
+      expect(Ambulant.tvaComprise(3, 20), 1, reason: '0,5 arrondi au-dessus');
+      expect(Ambulant.tvaComprise(-3, 20), -1, reason: 'demi au-dessus en valeur absolue');
+      expect(Ambulant.tvaComprise(1000, 0), 0);
+    });
+
+    test("facture d'un assujetti : TVA = somme des lignes, remise comprise", () {
+      final m = monter(parametres: assujetti);
+      final f = m.emettre(hanoutId: hanoutId, lignes: [coca1(10)..remise = 500], type: 'FACTURE');
+      // 5 promo + 5 normaux = deux lignes de 4000 (667 chacune, arrondi par ligne), remise -500 (-83).
+      expect(f['tva'], 667 + 667 - 83);
+      expect(m.s.enAttente().single['donnees']['lignes'].every((l) => l['tauxTva'] == 20), isTrue);
+    });
+
+    test('taux inconnu : pas de facture pour un assujetti, bon de livraison accepté', () {
+      final m = monter(parametres: assujetti);
+      m.s.enregistrer('PRODUIT', coca, {...m.produit(coca)!}..remove('tauxTva'));
+      expect(m.tvaInconnue([coca1(1)]), isTrue);
+      expect(() => m.emettre(hanoutId: hanoutId, lignes: [coca1(1)], type: 'FACTURE'),
+          throwsA(isA<VenteRefusee>().having((e) => e.motif, 'motif', RefusVente.factureTvaInconnue)));
+      final bl = m.emettre(hanoutId: hanoutId, lignes: [coca1(1)]);
+      expect(bl.containsKey('tva'), isFalse);
+      expect(m.s.enAttente().single['donnees']['lignes'].single.containsKey('tauxTva'), isFalse);
+    });
+  });
+
+  test('contestation close hors ligne', () {
+    final m = monter();
+    m.s.enregistrer('CONTESTATION', 'c1', {
+      'id': 'c1', 'cible': 'DOCUMENT', 'cibleId': 'd1', 'motif': 'QUANTITE', 'statut': 'OUVERTE',
+      'creeLe': '2026-11-02T08:00:00Z', 'ambulant': {'id': moi, 'nom': ''}, 'hanout': {'id': hanoutId, 'nom': ''},
+    });
+    expect(m.contestations(hanoutId: hanoutId), hasLength(1));
+    m.resoudreContestation('c1', commentaire: 'Avoir émis');
+    expect(m.contestations(), isEmpty);
+    expect(m.s.enAttente().single, containsPair('type', 'RESOLUTION_CONTESTATION'));
   });
 
   group('karni', () {
@@ -160,7 +207,7 @@ void main() {
       }
       return http.Response(jsonEncode({'curseur': 'c', 'plusDeChangements': false, 'changements': []}), 200);
     });
-    final sync = Synchronisation(m.s, Api('http://serveur', client: client), appareilId: appareil);
+    final sync = Synchronisation(m.s, Api('http://serveur', client: client), appareilId: appareil, prefixe: 'K7Q2');
 
     for (var i = 0; i < 60; i++) {
       m.emettre(hanoutId: hanoutId, lignes: [coca1(1)], reglements: [if (i.isEven) const Reglement('ESPECES', 800)]);
@@ -184,6 +231,7 @@ void main() {
     final schemaDe = {
       'EMISSION_DOCUMENT': 'EmissionDocument', 'VERSEMENT': 'VersementSaisie', 'CHARGEMENT': 'Chargement',
       'HANOUT': 'NouveauHanout', 'CREDIT_HANOUT': 'CreditHanoutSaisie', 'PARAMETRES_AMBULANT': 'ParametresAmbulantSaisie',
+      'RESOLUTION_CONTESTATION': 'ResolutionContestation',
     };
 
     final m = monter(parametres: {
@@ -197,6 +245,7 @@ void main() {
     m.definirCredit(hanoutId, plafond: 100000, delaiMaxJours: 30);
     m.definirPolitique('BLOQUER');
     m.chargerManuel({coca: 12});
+    m.resoudreContestation('99999999-9999-4999-8999-999999999999', commentaire: 'Avoir émis');
 
     final champsSaisie = (schemas['LigneDocumentSaisie']['properties'] as YamlMap).keys.toSet();
     for (final op in m.s.enAttente()) {
@@ -210,8 +259,10 @@ void main() {
       expect((schema['properties'] as YamlMap).keys.toSet(), containsAll(donnees.keys), reason: '${op['type']} : champ hors contrat');
       if (op['type'] == 'EMISSION_DOCUMENT') {
         expect(RegExp(schemas['NumeroDocument']['pattern'] as String).hasMatch(donnees['numero'] as String), isTrue);
+        final taux = (schemas['TauxTva']['enum'] as YamlList).toSet();
         for (final l in (donnees['lignes'] as List).cast<Map>()) {
           expect(champsSaisie, containsAll(l.keys));
+          expect(taux, contains(l['tauxTva']), reason: 'taux de TVA figé sur chaque ligne');
         }
       }
     }

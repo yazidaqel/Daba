@@ -1,19 +1,17 @@
 import 'api.dart';
 import 'stockage.dart';
 
-/// L'appareil a été déconnecté à distance (§10, appareil perdu).
-class AppareilRevoque implements Exception {
-  const AppareilRevoque();
-}
-
 /// Rejoue la file d'opérations (`POST /v1/sync/operations`) puis tire les changements
 /// (`GET /v1/sync/changements`). Sans réseau, lève [HorsLigne] et ne perd rien.
 class Synchronisation {
-  Synchronisation(this.stockage, this.api, {required this.appareilId});
+  Synchronisation(this.stockage, this.api, {required this.appareilId, required this.prefixe});
 
   final Stockage stockage;
   final Api api;
   final String appareilId;
+
+  /// Préfixe de numérotation du couple (ambulant, appareil), RG-F1.
+  final String prefixe;
   Future<void>? _enCours;
 
   static const series = {'BON_LIVRAISON': 'BL', 'FACTURE': 'FA', 'AVOIR': 'AV'};
@@ -23,17 +21,10 @@ class Synchronisation {
   Future<void> synchroniser() => _enCours ??= _synchroniser().whenComplete(() => _enCours = null);
 
   Future<void> _synchroniser() async {
-    final bool complet;
-    try {
-      await pousser();
-      complet = await tirer();
-    } on ProblemeApi catch (e) {
-      // Seule une révocation explicite efface l'appareil : un autre 403 (rôle) ne doit jamais
-      // détruire des pièces de vente pas encore remontées (RG-C4).
-      if (e.appareilRevoque) throw const AppareilRevoque();
-      rethrow;
-    }
-    if (complet) stockage.oublierDeltasAcquittes();
+    // Une révocation (`appareil-revoque`) est signalée par l'Api sur n'importe quel appel ;
+    // tout autre refus laisse la file intacte (RG-C4).
+    await pousser();
+    if (await tirer()) stockage.oublierDeltasAcquittes();
   }
 
   /// Pages tirées au plus par synchronisation (500 changements chacune) ; la suite part
@@ -111,7 +102,8 @@ class Synchronisation {
     final donnees = (c['donnees'] as Map).cast<String, dynamic>();
     stockage.enregistrer(entite, id, donnees);
     switch (entite) {
-      case 'DOCUMENT' when donnees['appareilId'] == appareilId:
+      // Documents de cet ambulant sur ce téléphone (réinstallation, retour après un autre ambulant).
+      case 'DOCUMENT' when (donnees['numero'] as String? ?? '').startsWith('$prefixe-'):
         stockage.rattraperSequence(series[donnees['type']]!, donnees['sequence'] as int);
       case 'MOUVEMENT' when donnees['operationId'] != null:
         // Le mouvement affiché dès le geste est remplacé par celui du serveur.

@@ -75,6 +75,7 @@ String nomOperation(T t, String type) => switch (type) {
       'TARIF' => t.opTARIF,
       'HANOUT' => t.opHANOUT,
       'CREDIT_HANOUT' => t.opCREDIT_HANOUT,
+      'RESOLUTION_CONTESTATION' => t.opRESOLUTION_CONTESTATION,
       _ => t.opPARAMETRES_AMBULANT,
     };
 
@@ -88,6 +89,7 @@ String nomAnomalie(T t, String type) => switch (type) {
       'CHARGEMENT_EN_DOUBLE' => t.anoCHARGEMENT_EN_DOUBLE,
       'PROMO_SANS_RETRAIT' => t.anoPROMO_SANS_RETRAIT,
       'DEMANDE_NON_ATTRIBUEE' => t.anoDEMANDE_NON_ATTRIBUEE,
+      'TVA_INCONNUE' => t.anoTVA_INCONNUE,
       _ => t.anoREMISE_PLAFOND_DEPASSE,
     };
 

@@ -20,8 +20,14 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
     final session = stockage.lire('session');
     if (session != null) _ouvrir(jsonDecode(session) as Map<String, dynamic>);
     locale = localeDuCode(stockage.lire('langue'));
-    api.langue = codeLangue(locale);
+    api
+      ..langue = codeLangue(locale)
+      ..rafraichir = _rafraichir
+      ..surRevocation = () => deconnecter(effacer: true);
   }
+
+  /// Mock Prism du contrat : `Prefer: example=ambulant` choisit la Session d'exemple de l'ambulant.
+  static const _mock = bool.fromEnvironment('DABA_MOCK');
 
   static Future<Daba> demarrer() async {
     final dossier = await getApplicationSupportDirectory();
@@ -86,7 +92,7 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
         prefixe: session['prefixeNumerotation'] as String,
         utilisateurId: u['id'] as String,
         nom: (u['nom'] ?? '') as String);
-    _sync = Synchronisation(stockage, api, appareilId: appareilId);
+    _sync = Synchronisation(stockage, api, appareilId: appareilId, prefixe: session['prefixeNumerotation'] as String);
   }
 
   Future<int> demanderOtp(String telephone) async {
@@ -96,8 +102,8 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Vérifie l'OTP. Une reconnexion (jeton expiré) garde l'appareil et ses données locales.
   Future<void> verifierOtp(String telephone, String code) async {
-    final session = await api.post('/v1/auth/otp/verify', {'telephone': telephone, 'code': code, 'appareilId': appareilId})
-        as Map<String, dynamic>;
+    final session = await api.post('/v1/auth/otp/verify', {'telephone': telephone, 'code': code, 'appareilId': appareilId},
+        {if (_mock) 'Prefer': 'example=ambulant'}) as Map<String, dynamic>;
     if (!(session['utilisateur']['roles'] as List).contains('AMBULANT') || session['prefixeNumerotation'] == null) {
       throw ProblemeApi(403, {'type': 'role'});
     }
@@ -109,11 +115,7 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
       stockage.effacerTout();
       stockage.ecrire('appareilId', id);
     }
-    await _coffre.write(key: 'jeton', value: session['accessToken'] as String);
-    api.jeton = session['accessToken'] as String;
-    stockage.ecrire('session', jsonEncode({...session}..remove('accessToken')..remove('refreshToken')));
-    _ouvrir(session);
-    reconnexionRequise = false;
+    await _enregistrerSession(session);
     if (stockage.lire('consentement') == null) {
       try {
         final c = await api.get('/v1/moi/consentement') as Map<String, dynamic>;
@@ -127,6 +129,31 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
         : (await _coffre.read(key: 'pin') == null ? Etape.pinCreation : Etape.pret);
     if (etape == Etape.pret) _demarrerSync();
     notifyListeners();
+  }
+
+  /// Chaque connexion OTP ouvre une nouvelle session : seuls les jetons de la dernière servent.
+  Future<void> _enregistrerSession(Map<String, dynamic> session) async {
+    await _coffre.write(key: 'jeton', value: session['accessToken'] as String);
+    await _coffre.write(key: 'refresh', value: session['refreshToken'] as String);
+    api.jeton = session['accessToken'] as String;
+    stockage.ecrire('session', jsonEncode({...session}..remove('accessToken')..remove('refreshToken')));
+    _ouvrir(session);
+    reconnexionRequise = false;
+  }
+
+  /// Jeton expiré (24 h) : renouvelé sans OTP tant que le refreshToken (90 jours) est valable.
+  Future<bool> _rafraichir() async {
+    final refresh = await _coffre.read(key: 'refresh');
+    if (refresh == null) return false;
+    try {
+      await _enregistrerSession(await api.post('/v1/auth/refresh', {'refreshToken': refresh}) as Map<String, dynamic>);
+      return true;
+    } on ProblemeApi {
+      // Session fermée ou remplacée par une autre connexion : il faut repasser par l'OTP.
+      reconnexionRequise = true;
+      notifyListeners();
+      return false;
+    }
   }
 
   bool get consentGeolocalisation =>
@@ -184,12 +211,25 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// Ferme la session. Les opérations non remontées restent sur l'appareil, sauf `effacer`
-  /// (appareil déconnecté à distance).
+  /// Ferme la session : pousse d'abord la file, puis ferme la session côté serveur. Sans réseau,
+  /// les opérations restent sur l'appareil. `effacer` : appareil déconnecté à distance (§10),
+  /// aucun appel au serveur, tout est effacé.
   Future<void> deconnecter({bool effacer = false}) async {
     _minuteurSync?.cancel();
-    if (disponible) await changerDisponibilite(false).catchError((_) {});
+    _minuteurDispo?.cancel();
+    if (!effacer) {
+      try {
+        if (disponible) await changerDisponibilite(false);
+        await _sync?.pousser();
+        await api.post('/v1/auth/deconnexion');
+      } catch (_) {
+        // Hors ligne : la session expirera d'elle-même, la file attend sur le téléphone.
+      }
+    }
+    disponible = false;
+    position = null;
     await _coffre.delete(key: 'jeton');
+    await _coffre.delete(key: 'refresh');
     await _coffre.delete(key: 'pin');
     api.jeton = null;
     if (effacer) stockage.effacerTout();
@@ -221,8 +261,6 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
       }
     } on HorsLigne {
       horsLigne = true;
-    } on AppareilRevoque {
-      await deconnecter(effacer: true);
     } on ProblemeApi catch (e) {
       if (e.status == 401) reconnexionRequise = true;
       if (e.consentementRequis) {

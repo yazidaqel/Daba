@@ -391,5 +391,55 @@
   "docRejete": "Refusé par le serveur : voir Synchronisation",
   "tva": "TVA",
   "tvaAssujetti": "Assujetti à la TVA",
-  "tvaNonAssujetti": "Non assujetti à la TVA"
+  "tvaNonAssujetti": "Non assujetti à la TVA",
+  "erreurFactureTvaInconnue": "Facture impossible : un produit du panier n'a pas de taux de TVA connu. Émettez un bon de livraison.",
+  "tvaComprise": "Dont TVA",
+  "envoyerLienSms": "Envoyer le lien par SMS",
+  "erreurDocNonSynchronise": "Synchronisez d'abord la vente pour obtenir son lien.",
+  "erreurHanoutSansTelephone": "Ce hanout n'a pas de numéro de téléphone.",
+  "erreurAppareilRevoque": "Ce téléphone a été déconnecté à distance. Reconnectez-vous.",
+  "receptionConforme": "Réception confirmée par le hanout le {date}",
+  "@receptionConforme": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "receptionEcart": "Le hanout a signalé un écart à la réception",
+  "receptionEcartLigne": "{produit} : {recu} reçus sur {livre}",
+  "@receptionEcartLigne": {
+    "placeholders": {
+      "produit": {
+        "type": "String"
+      },
+      "recu": {
+        "type": "String"
+      },
+      "livre": {
+        "type": "String"
+      }
+    }
+  },
+  "contestations": "Contestations",
+  "contestationsOuvertes": "{n} contestations ouvertes",
+  "@contestationsOuvertes": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      }
+    }
+  },
+  "aucuneContestation": "Aucune contestation ouverte",
+  "clore": "Clore",
+  "commentaire": "Commentaire",
+  "document": "Document",
+  "compteCredit": "Solde du compte",
+  "motifMONTANT": "Montant",
+  "motifQUANTITE": "Quantité",
+  "motifNON_RECU": "Non reçu",
+  "motifDEJA_PAYE": "Déjà payé",
+  "motifAUTRE": "Autre",
+  "opRESOLUTION_CONTESTATION": "Contestation close",
+  "anoTVA_INCONNUE": "Taux de TVA inconnu"
 }
