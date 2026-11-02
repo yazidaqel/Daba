@@ -1,5 +1,6 @@
 import 'package:daba_shared/daba_shared.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../ui.dart';
@@ -20,13 +21,13 @@ class OngletPromos extends StatelessWidget {
       onRefresh: daba.synchroniser,
       child: ListView(children: [
         ListTile(
-          leading: const Icon(Icons.qr_code_2),
+          leading: const Ico(PhosphorIconsRegular.qrCode),
           title: Text(t.mesReservations),
-          trailing: nbReservees == 0 ? const Icon(Icons.chevron_right) : Badge(label: Text('$nbReservees')),
+          trailing: nbReservees == 0 ? const Icon(PhosphorIconsRegular.caretRight) : Badge(label: Text('$nbReservees')),
           onTap: () => context.ouvrir(const EcranReservations()),
         ),
         const Divider(height: 1),
-        if (offres.isEmpty) Vide(t.aucunePromo, icone: Icons.local_offer_outlined),
+        if (offres.isEmpty) Vide(t.aucunePromo, icone: PhosphorIconsRegular.tag),
         for (final o in offres)
           ListTile(
             leading: PhotoProduit(o['produit'] as Map<String, dynamic>),
@@ -111,33 +112,33 @@ class _EcranOffreState extends State<EcranOffre> {
           Expanded(child: Text(context.lib(o['produit']['libelle']), style: Theme.of(context).textTheme.titleLarge)),
         ]),
         const SizedBox(height: 12),
-        ListTile(leading: const Icon(Icons.sell_outlined), title: Text(descriptionRemise(context, o['remise'] as Map))),
+        ListTile(leading: const Ico(PhosphorIconsRegular.sealPercent), title: Text(descriptionRemise(context, o['remise'] as Map))),
         if (o['prixReventeConseille'] != null)
-          ListTile(leading: const Icon(Icons.storefront_outlined), title: Text(t.prixConseille(dh(o['prixReventeConseille'] as int)))),
+          ListTile(leading: const Ico(PhosphorIconsRegular.storefront), title: Text(t.prixConseille(dh(o['prixReventeConseille'] as int)))),
         ListTile(
-          leading: const Icon(Icons.warehouse_outlined),
+          leading: const Ico(PhosphorIconsRegular.warehouse),
           title: Text(g['nom'] as String),
           subtitle: Text([g['adresse'], g['ville'], ?distanceGrossiste(context, o)].whereType<String>().join(' · ')),
         ),
-        ListTile(leading: const Icon(Icons.inventory_outlined), title: Text(t.quantiteRestante('${o['quantiteDisponible']}'))),
+        ListTile(leading: const Ico(PhosphorIconsRegular.package), title: Text(t.quantiteRestante('${o['quantiteDisponible']}'))),
         ListTile(
-          leading: const Icon(Icons.person_outline),
+          leading: const Ico(PhosphorIconsRegular.user),
           title: Text(t.plafondAmbulant('${o['quantiteMaxParAmbulant']}', '${o['quantiteDejaReservee']}')),
         ),
-        ListTile(leading: const Icon(Icons.event), title: Text(t.jusquAu(date(o['fin'] as String)))),
-        ListTile(leading: const Icon(Icons.timer_outlined), title: Text(t.delaiRetrait('${o['delaiRetraitHeures']}'))),
+        ListTile(leading: const Ico(PhosphorIconsRegular.calendar), title: Text(t.jusquAu(date(o['fin'] as String)))),
+        ListTile(leading: const Ico(PhosphorIconsRegular.timer), title: Text(t.delaiRetrait('${o['delaiRetraitHeures']}'))),
         const Divider(),
         if (_max <= 0)
           Vide(t.plafondAtteint)
         else ...[
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            IconButton(onPressed: _quantite > 1 ? () => setState(() => _quantite--) : null, icon: const Icon(Icons.remove_circle_outline)),
+            IconButton(onPressed: _quantite > 1 ? () => setState(() => _quantite--) : null, icon: const Ico(PhosphorIconsRegular.minusCircle)),
             Text('$_quantite', style: Theme.of(context).textTheme.headlineSmall),
-            IconButton(onPressed: _quantite < _max ? () => setState(() => _quantite++) : null, icon: const Icon(Icons.add_circle_outline)),
+            IconButton(onPressed: _quantite < _max ? () => setState(() => _quantite++) : null, icon: const Ico(PhosphorIconsRegular.plusCircle)),
           ]),
           FilledButton.icon(
             onPressed: _occupe ? null : _reserver,
-            icon: const Icon(Icons.bookmark_add_outlined),
+            icon: const Ico(PhosphorIconsRegular.bookmarkSimple),
             label: Text(t.reserver),
           ),
           Padding(padding: const EdgeInsets.all(8), child: Text(t.reservationEnLigne, textAlign: TextAlign.center)),
@@ -162,7 +163,7 @@ class EcranReservations extends StatelessWidget {
           : ListView(children: [
               for (final r in reservations)
                 ListTile(
-                  leading: Icon(r['statut'] == 'RESERVEE' ? Icons.qr_code_2 : Icons.check_circle_outline),
+                  leading: Ico(r['statut'] == 'RESERVEE' ? PhosphorIconsRegular.qrCode : PhosphorIconsRegular.checkCircle),
                   title: Text(context.lib(daba.m.produit(r['produitId'] as String)?['libelle'])),
                   subtitle: Text('${statutReservation(context, r['statut'] as String)} · ${r['grossiste']['nom']} · ${r['quantiteReservee']}'),
                   onTap: () => context.ouvrir(EcranReservation(r)),

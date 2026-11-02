@@ -1,5 +1,6 @@
 import 'package:daba_shared/daba_shared.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import 'domaine.dart';
 import 'etat.dart';
@@ -85,8 +86,21 @@ class ChampMontant extends StatelessWidget {
       );
 }
 
+/// Icône Phosphor non directionnelle : jamais en miroir en arabe (Phosphor marque toutes ses
+/// icônes `matchTextDirection`). Les icônes de sens (flèche, chevron) restent des `Icon`.
+class Ico extends StatelessWidget {
+  const Ico(this.icone, {super.key, this.size, this.color});
+  final IconData icone;
+  final double? size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) =>
+      Directionality(textDirection: TextDirection.ltr, child: Icon(icone, size: size, color: color));
+}
+
 class Vide extends StatelessWidget {
-  const Vide(this.texte, {super.key, this.icone = Icons.inbox_outlined});
+  const Vide(this.texte, {super.key, this.icone = PhosphorIconsRegular.tray});
   final String texte;
   final IconData icone;
 
@@ -95,7 +109,7 @@ class Vide extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Icon(icone, size: 48, color: Theme.of(context).colorScheme.outline),
+            Ico(icone, size: 48, color: Theme.of(context).colorScheme.outline),
             const SizedBox(height: 12),
             Text(texte, textAlign: TextAlign.center),
           ]),
@@ -112,7 +126,7 @@ class PhotoProduit extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = produit?['photoUrl'] as String?;
-    final icone = Icon(Icons.inventory_2_outlined, size: taille * .7);
+    final icone = Ico(PhosphorIconsRegular.package, size: taille * .7);
     return SizedBox.square(
       dimension: taille,
       child: url == null

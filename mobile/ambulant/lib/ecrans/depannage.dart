@@ -1,5 +1,6 @@
 import 'package:daba_shared/daba_shared.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../domaine.dart';
 import '../ui.dart';
@@ -66,11 +67,11 @@ class _OngletDepannageState extends State<OngletDepannage> {
           onChanged: _occupe ? null : _basculer,
           title: Text(daba.disponible ? t.disponible : t.indisponible),
           subtitle: Text(t.disponibleExplication),
-          secondary: Icon(Icons.delivery_dining, color: daba.disponible ? Colors.green : null),
+          secondary: Ico(PhosphorIconsRegular.moped, color: daba.disponible ? Colors.green : null),
         ),
         if (_occupe) const LinearProgressIndicator(),
         const Divider(),
-        if (daba.demandes.isEmpty) Vide(daba.disponible ? t.aucuneDemande : t.activerPourRecevoir, icone: Icons.notifications_none),
+        if (daba.demandes.isEmpty) Vide(daba.disponible ? t.aucuneDemande : t.activerPourRecevoir, icone: PhosphorIconsRegular.bell),
         for (final d in daba.demandes) _carte(d),
       ]),
     );
@@ -118,7 +119,7 @@ class _OngletDepannageState extends State<OngletDepannage> {
                 OutlinedButton(onPressed: _occupe ? null : () => _faire(() => daba.agirDemande(id, 'refus')), child: Text(t.refuser)),
               ],
             'ACCEPTEE' => [FilledButton(onPressed: _occupe ? null : () => _faire(() => daba.agirDemande(id, 'en-route')), child: Text(t.enRoute))],
-            'EN_ROUTE' when h != null => [FilledButton.icon(onPressed: () => _livrer(d), icon: const Icon(Icons.point_of_sale), label: Text(t.livrer))],
+            'EN_ROUTE' when h != null => [FilledButton.icon(onPressed: () => _livrer(d), icon: const Ico(PhosphorIconsRegular.cashRegister), label: Text(t.livrer))],
             _ => const <Widget>[],
           }),
         ]),

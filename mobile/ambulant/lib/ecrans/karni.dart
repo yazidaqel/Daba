@@ -1,5 +1,6 @@
 import 'package:daba_shared/daba_shared.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../domaine.dart';
 import '../ui.dart';
@@ -20,9 +21,9 @@ class OngletKarni extends StatelessWidget {
     return ListView(children: [
       if (contestations > 0)
         ListTile(
-          leading: Icon(Icons.gavel, color: Colors.orange.shade800),
+          leading: Ico(PhosphorIconsRegular.gavel, color: Colors.orange.shade800),
           title: Text(t.contestationsOuvertes('$contestations')),
-          trailing: const Icon(Icons.chevron_right),
+          trailing: const Icon(PhosphorIconsRegular.caretRight),
           onTap: () => context.ouvrir(const EcranContestations()),
         ),
       Card(
@@ -32,7 +33,7 @@ class OngletKarni extends StatelessWidget {
           trailing: Text(dh(total), style: Theme.of(context).textTheme.headlineSmall),
         ),
       ),
-      if (comptes.isEmpty) Vide(t.aucuneCreance, icone: Icons.menu_book_outlined),
+      if (comptes.isEmpty) Vide(t.aucuneCreance, icone: PhosphorIconsRegular.notebook),
       for (final (h, solde) in comptes) _ligne(context, h['id'] as String, h['nom'] as String, solde),
     ]);
   }
@@ -43,7 +44,7 @@ class OngletKarni extends StatelessWidget {
     final alerte = m.controleCredit(id, 1) != Depassement.aucun;
     final plafond = m.compte(id)?['plafond'] as int?;
     return ListTile(
-      leading: Icon(alerte ? Icons.warning_amber : Icons.storefront, color: alerte ? Colors.orange.shade800 : null),
+      leading: Ico(alerte ? PhosphorIconsRegular.warning : PhosphorIconsRegular.storefront, color: alerte ? Colors.orange.shade800 : null),
       title: Text(nom),
       subtitle: plafond == null ? null : Text(context.t.plafondValeur(dh(plafond))),
       trailing: Text(dh(solde), style: Theme.of(context).textTheme.titleMedium),
@@ -124,7 +125,7 @@ class LigneHistorique extends StatelessWidget {
     final t = context.t;
     if (e['numero'] == null) {
       return ListTile(
-        leading: const Icon(Icons.payments_outlined, color: Colors.green),
+        leading: const Ico(PhosphorIconsRegular.money, color: Colors.green),
         title: Text('${t.versement} · ${e['mode'] == 'CHEQUE' ? t.cheque : t.especes}'),
         subtitle: Text(date(e['recuLe'] as String)),
         trailing: Text(dh(-(e['montant'] as int))),
@@ -132,7 +133,7 @@ class LigneHistorique extends StatelessWidget {
     }
     final rejete = e['rejete'] == true;
     return ListTile(
-      leading: Icon(rejete ? Icons.block : Icons.receipt_long_outlined, color: rejete ? Colors.red.shade700 : null),
+      leading: Ico(rejete ? PhosphorIconsRegular.prohibit : PhosphorIconsRegular.receipt, color: rejete ? Colors.red.shade700 : null),
       title: Text('${nomType(t, e['type'] as String)} ${e['numero']}'),
       subtitle: Text(rejete ? t.docRejete : '${date(e['emisLe'] as String)} · ${t.total} ${dh(e['total'] as int)}'),
       trailing: Text(dh(e['montantCredit'] as int)),
@@ -172,7 +173,7 @@ class CarteContestation extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: ListTile(
-        leading: Icon(Icons.gavel, color: Colors.orange.shade800),
+        leading: Ico(PhosphorIconsRegular.gavel, color: Colors.orange.shade800),
         title: Text('${c['hanout']['nom']} · ${nomMotif(t, c['motif'] as String)}'),
         subtitle: Text([
           if (c['cible'] == 'DOCUMENT') (doc?['numero'] ?? t.document) as String else t.compteCredit,

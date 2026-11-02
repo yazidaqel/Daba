@@ -1,5 +1,6 @@
 import 'package:daba_shared/daba_shared.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../domaine.dart';
@@ -120,10 +121,10 @@ class _EcranVenteState extends State<EcranVente> {
     final style = Theme.of(context).textTheme;
     return Scaffold(
       appBar: AppBar(title: Text(t.venteA(h?['nom'] as String? ?? ''))),
-      floatingActionButton: FloatingActionButton(heroTag: 'ajout', onPressed: _ajouterProduit, child: const Icon(Icons.add_shopping_cart)),
+      floatingActionButton: FloatingActionButton(heroTag: 'ajout', onPressed: _ajouterProduit, child: const Ico(PhosphorIconsRegular.shoppingCart)),
       body: ListView(padding: const EdgeInsets.only(bottom: 120), children: [
         ListTile(dense: true, title: Text(t.solde), trailing: Text(dh(m.solde(widget.hanoutId)))),
-        if (_lignes.isEmpty) Vide(t.panierVide, icone: Icons.add_shopping_cart),
+        if (_lignes.isEmpty) Vide(t.panierVide, icone: PhosphorIconsRegular.shoppingCart),
         for (final l in _lignes) _ligne(l),
         const Divider(),
         ListTile(title: Text(t.total, style: style.titleMedium), trailing: Text(dh(_total), style: style.titleLarge)),
@@ -181,7 +182,7 @@ class _EcranVenteState extends State<EcranVente> {
           padding: const EdgeInsets.all(16),
           child: FilledButton.icon(
             onPressed: _lignes.isEmpty ? null : _emettre,
-            icon: const Icon(Icons.receipt_long),
+            icon: const Ico(PhosphorIconsRegular.receipt),
             label: Text(_typeEffectif == 'FACTURE' ? t.emettreFacture : t.emettreBon),
           ),
         ),
@@ -205,11 +206,11 @@ class _EcranVenteState extends State<EcranVente> {
       onTap: () => _modifier(l),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         IconButton(
-          icon: const Icon(Icons.remove_circle_outline),
+          icon: const Ico(PhosphorIconsRegular.minusCircle),
           onPressed: () => setState(() => l.quantite > 1 ? l.quantite-- : _lignes.remove(l)),
         ),
         Text('${l.quantite}', style: Theme.of(context).textTheme.titleMedium),
-        IconButton(icon: const Icon(Icons.add_circle_outline), onPressed: () => setState(() => l.quantite++)),
+        IconButton(icon: const Ico(PhosphorIconsRegular.plusCircle), onPressed: () => setState(() => l.quantite++)),
       ]),
     );
   }
@@ -238,7 +239,7 @@ class ChoixProduitState extends State<ChoixProduit> {
           padding: const EdgeInsets.all(12),
           child: TextField(
             autofocus: true,
-            decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: context.t.rechercherProduit),
+            decoration: InputDecoration(prefixIcon: const Ico(PhosphorIconsRegular.magnifyingGlass), hintText: context.t.rechercherProduit),
             onChanged: (v) => setState(() => _q = v),
           ),
         ),
@@ -302,11 +303,11 @@ class EcranDocument extends StatelessWidget {
             final fichier = await documentPdf(doc, t, context.langue);
             await SharePlus.instance.share(ShareParams(files: [XFile(fichier.path, mimeType: 'application/pdf')], text: doc['numero'] as String));
           },
-          icon: const Icon(Icons.share),
+          icon: const Ico(PhosphorIconsRegular.shareNetwork),
           label: Text(t.partagerPdf),
         ),
         const SizedBox(height: 8),
-        OutlinedButton.icon(onPressed: () => _envoyerLien(context), icon: const Icon(Icons.sms_outlined), label: Text(t.envoyerLienSms)),
+        OutlinedButton.icon(onPressed: () => _envoyerLien(context), icon: const Ico(PhosphorIconsRegular.chatText), label: Text(t.envoyerLienSms)),
         const SizedBox(height: 8),
         Text(t.smsApresSync, style: style.bodySmall, textAlign: TextAlign.center),
       ]),

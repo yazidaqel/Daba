@@ -7,3 +7,4 @@ export 'src/format.dart';
 export 'src/langues.dart';
 export 'src/stockage.dart';
 export 'src/synchronisation.dart';
+export 'src/theme.dart';

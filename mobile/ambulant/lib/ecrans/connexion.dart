@@ -1,5 +1,6 @@
 import 'package:daba_shared/daba_shared.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../ui.dart';
 
@@ -12,7 +13,7 @@ class MenuLangue extends StatelessWidget {
     final t = context.t;
     final noms = [t.langueFr, t.langueAr, t.langueAryArab, t.langueAryLatn];
     return PopupMenuButton<Locale>(
-      icon: const Icon(Icons.translate),
+      icon: const Ico(PhosphorIconsRegular.translate),
       tooltip: t.langue,
       onSelected: context.daba.choisirLangue,
       itemBuilder: (_) => [
@@ -79,7 +80,7 @@ class _EcranConnexionState extends State<EcranConnexion> {
           enabled: !_codeEnvoye,
           keyboardType: TextInputType.phone,
           textDirection: TextDirection.ltr,
-          decoration: InputDecoration(labelText: t.telephone, hintText: '06 12 34 56 78', prefixIcon: const Icon(Icons.phone)),
+          decoration: InputDecoration(labelText: t.telephone, hintText: '06 12 34 56 78', prefixIcon: const Ico(PhosphorIconsRegular.phone)),
         ),
         if (_codeEnvoye) ...[
           const SizedBox(height: 16),
@@ -89,7 +90,7 @@ class _EcranConnexionState extends State<EcranConnexion> {
             keyboardType: TextInputType.number,
             maxLength: 6,
             textDirection: TextDirection.ltr,
-            decoration: InputDecoration(labelText: t.codeSms, prefixIcon: const Icon(Icons.sms_outlined)),
+            decoration: InputDecoration(labelText: t.codeSms, prefixIcon: const Ico(PhosphorIconsRegular.chatText)),
           ),
           TextButton(onPressed: () => setState(() => _codeEnvoye = false), child: Text(t.changerNumero)),
         ],

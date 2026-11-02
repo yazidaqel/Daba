@@ -1,5 +1,6 @@
 import 'package:daba_shared/daba_shared.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../domaine.dart';
@@ -22,24 +23,24 @@ class OngletStock extends StatelessWidget {
       Padding(
         padding: const EdgeInsets.all(12),
         child: Wrap(spacing: 8, runSpacing: 8, children: [
-          FilledButton.icon(onPressed: () => scannerBon(context), icon: const Icon(Icons.qr_code_scanner), label: Text(t.scannerBonSortie)),
+          FilledButton.icon(onPressed: () => scannerBon(context), icon: const Ico(PhosphorIconsRegular.scan), label: Text(t.scannerBonSortie)),
           OutlinedButton.icon(
-              onPressed: () => context.ouvrir(const EcranChargementManuel()), icon: const Icon(Icons.edit_note), label: Text(t.chargementManuel)),
+              onPressed: () => context.ouvrir(const EcranChargementManuel()), icon: const Ico(PhosphorIconsRegular.notePencil), label: Text(t.chargementManuel)),
           OutlinedButton.icon(
-              onPressed: () => context.ouvrir(const EcranMouvements()), icon: const Icon(Icons.swap_vert), label: Text(t.mouvements)),
+              onPressed: () => context.ouvrir(const EcranMouvements()), icon: const Ico(PhosphorIconsRegular.arrowsDownUp), label: Text(t.mouvements)),
         ]),
       ),
       for (final b in aCharger)
         Card(
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           child: ListTile(
-            leading: const Icon(Icons.local_shipping_outlined),
+            leading: const Ico(PhosphorIconsRegular.truck),
             title: Text(t.bonACharger(b['numero'] as String? ?? '')),
             subtitle: Text(date(b['emisLe'] as String?)),
             trailing: TextButton(onPressed: () => chargerBon(context, b['qrJeton'] as String), child: Text(t.charger)),
           ),
         ),
-      if (stock.isEmpty) Vide(t.stockVide, icone: Icons.inventory_2_outlined),
+      if (stock.isEmpty) Vide(t.stockVide, icone: PhosphorIconsRegular.package),
       for (final (p, q) in stock)
         ListTile(
           leading: PhotoProduit(p),
@@ -125,7 +126,7 @@ class _EcranChargementManuelState extends State<EcranChargementManuel> {
     final m = context.daba.m;
     return Scaffold(
       appBar: AppBar(title: Text(t.chargementManuel)),
-      floatingActionButton: FloatingActionButton(heroTag: 'ajout-chargement', onPressed: _ajouter, child: const Icon(Icons.add)),
+      floatingActionButton: FloatingActionButton(heroTag: 'ajout-chargement', onPressed: _ajouter, child: const Ico(PhosphorIconsRegular.plus)),
       body: ListView(children: [
         if (_quantites.isEmpty) Vide(t.ajouterProduits),
         for (final e in _quantites.entries)
@@ -183,7 +184,7 @@ class EcranMouvements extends StatelessWidget {
                 final mv = mouvements[i];
                 final q = mv['quantite'] as int;
                 return ListTile(
-                  leading: Icon(q >= 0 ? Icons.south_west : Icons.north_east, color: q >= 0 ? Colors.green : Colors.orange),
+                  leading: Ico(q >= 0 ? PhosphorIconsRegular.arrowDownLeft : PhosphorIconsRegular.arrowUpRight, color: q >= 0 ? Colors.green : Colors.orange),
                   title: Text(context.lib(m.produit(mv['produitId'] as String)?['libelle'])),
                   subtitle: Text('${types[mv['type']] ?? mv['type']} · ${date(mv['horodatage'] as String)}'),
                   trailing: Text(q > 0 ? '+$q' : '$q', style: Theme.of(context).textTheme.titleMedium),
