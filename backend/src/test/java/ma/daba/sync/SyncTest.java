@@ -214,13 +214,21 @@ class SyncTest extends TestIntegration {
 		var bl = lire(get(ambulant, "/v1/documents?type=BON_LIVRAISON")).get("contenu").get(0);
 		assertThat(bl.has("tva")).isFalse();
 
-		// Un taux inconnu rend la TVA absente plutôt que fausse.
+		// L'avoir qui annule la facture contre-passe sa TVA (RG-C4).
+		var avoirId = UUID.randomUUID();
+		pousser(ambulant, op("AVOIR", m("documentId", avoirId, "documentOrigineId", factureId,
+				"numero", ambulant.prefixe() + "-AV-000001", "sequence", 1, "motif", "ERREUR_SAISIE")));
+		assertThat(lire(get(ambulant, "/v1/documents/" + avoirId)).get("tva").asLong()).isEqualTo(480);
+
+		// Un taux inconnu rend la TVA absente plutôt que fausse, et la facture est signalée en anomalie.
 		var inconnu = produit();
 		var sansTaux = UUID.randomUUID();
-		pousser(ambulant, chargement(inconnu, 1), op("EMISSION_DOCUMENT", m("documentId", sansTaux, "type", "FACTURE",
+		var r = pousser(ambulant, chargement(inconnu, 1), op("EMISSION_DOCUMENT", m("documentId", sansTaux, "type", "FACTURE",
 				"numero", ambulant.prefixe() + "-FA-000002", "sequence", 2, "hanoutId", hanout,
 				"mentionsLegales", m("ice", "001234567000089", "identifiantFiscal", "1234567", "registreCommerce", "RC 123", "assujettiTva", true),
 				"lignes", List.of(m("nature", "ARTICLE", "produitId", inconnu, "quantite", 1, "prixUnitaire", 500)))));
+		assertThat(r.get(1).get("statut").asString()).isEqualTo("APPLIQUEE");
+		assertThat(types(r.get(1))).containsExactly("TVA_INCONNUE");
 		assertThat(lire(get(ambulant, "/v1/documents/" + sansTaux)).has("tva")).isFalse();
 	}
 

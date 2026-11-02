@@ -127,6 +127,18 @@ public class Referentiel {
 		produit(id).ifPresent(p -> journal.publier(null, "PRODUIT", id, p));
 	}
 
+	/** Code de ville de {@code GET /v1/regions} : « Fès », « fes » et « FES » désignent la même ville. */
+	public static String codeVille(String ville) {
+		return ville == null ? ""
+				: java.text.Normalizer.normalize(ville, java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "")
+					.toUpperCase(java.util.Locale.ROOT).trim().replaceAll("[^A-Z0-9]+", "_");
+	}
+
+	/** Région d'une ville du référentiel (ciblage, §5.1), à partir de son nom ou de son code. */
+	public Optional<String> region(String ville) {
+		return jdbc.sql("SELECT region_code FROM ville WHERE code = :c").param("c", codeVille(ville)).query(String.class).optional();
+	}
+
 	public Optional<Grossiste> grossiste(UUID id) {
 		return jdbc.sql(SELECT_GROSSISTE + ", null AS distance FROM grossiste g WHERE g.id = :id").param("id", id)
 			.query(this::ligneGrossiste).optional();

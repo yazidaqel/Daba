@@ -19,6 +19,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import ma.daba.commun.Acces;
 import ma.daba.commun.Appelant;
 import ma.daba.commun.Geste;
 import ma.daba.commun.Geste.Effet;
@@ -36,7 +37,7 @@ import ma.daba.referentiel.Referentiel;
  * document émis (RG-C4) : l'ambulant régularise par un avoir.
  */
 @Service
-public class AvisHanout {
+public class AvisHanout implements Acces.ContributeurExport {
 
 	record ReceptionSaisie(@NotNull UUID id, @NotNull Boolean conforme,
 			@Size(max = 100) List<Ventes.@Valid EcartReception> ecarts, @Size(max = 500) String commentaire) {
@@ -210,6 +211,21 @@ public class AvisHanout {
 				rs.getString("motif"), rs.getString("commentaire"), rs.getString("statut"), rs.getTimestamp("cree_le").toInstant(),
 				new Reference(a, comptes.nom(a)), new Reference(h, referentiel.hanout(h).map(Referentiel.Hanout::nom).orElse("—")),
 				resolue == null ? null : resolue.toInstant(), rs.getString("commentaire_resolution"));
+	}
+
+	@Override
+	public String cle() {
+		return "avisHanout";
+	}
+
+	/** Droit d'accès (loi 09-08) : réceptions saisies, contestations ouvertes ou reçues, avec leurs commentaires. */
+	@Override
+	public Object exporter(UUID utilisateurId) {
+		return Map.of(
+				"receptions", jdbc.sql("SELECT document_id, conforme, ecarts::text AS ecarts, commentaire, le FROM reception_hanout WHERE utilisateur_id = :u")
+					.param("u", utilisateurId).query().listOfRows(),
+				"contestations", jdbc.sql("SELECT * FROM contestation WHERE utilisateur_id = :u OR ambulant_id = :u")
+					.param("u", utilisateurId).query().listOfRows());
 	}
 
 	/** Livrée hors ligne à l'ambulant concerné (entité CONTESTATION). */

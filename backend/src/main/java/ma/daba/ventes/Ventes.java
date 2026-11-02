@@ -197,6 +197,10 @@ public class Ventes implements ProduitsHabituels {
 			anomalies.addAll(controleCredit(geste.ambulantId(), hanout.id(), credit));
 		}
 		anomalies.addAll(controleRemise(geste.ambulantId(), lignes));
+		if ("FACTURE".equals(e.type()) && e.mentionsLegales().assujettiTva() && tva(lignes) == null) {
+			// La facture existe sur le terrain : enregistrée, mais sans TVA calculable elle est signalée (RG-F2).
+			anomalies.add(Anomalie.de("TVA_INCONNUE", "RG-F2", "Facture assujettie dont un produit n'a pas de taux de TVA"));
+		}
 
 		jdbc.sql("""
 				INSERT INTO document (id, type, numero, serie, sequence, appareil_id, ambulant_id, organisation_id, hanout_id,
@@ -594,6 +598,13 @@ public class Ventes implements ProduitsHabituels {
 		var statut = "AVOIR".equals(type) || annule == 0 ? "EMIS" : annule >= total ? "ANNULE" : "PARTIELLEMENT_ANNULE";
 		var lignes = json.lire(rs.getString("lignes"), LIGNES);
 		var mentions = json.lire(rs.getString("mentions_legales"), MentionsLegales.class);
+		// Un avoir contre-passe la TVA de la facture assujettie qu'il annule (RG-C4, RG-F2), si ses lignes font son total.
+		var facturee = "AVOIR".equals(type)
+				? jdbc.sql("SELECT mentions_legales::text FROM document WHERE id = :o AND type = 'FACTURE'")
+					.param("o", rs.getObject("document_origine_id", UUID.class)).query(String.class).optional()
+					.map(m -> json.lire(m, MentionsLegales.class)).map(MentionsLegales::assujettiTva).orElse(false)
+						&& lignes.stream().mapToLong(LigneDocument::montant).sum() == total
+				: "FACTURE".equals(type) && mentions != null && mentions.assujettiTva();
 		var reception = jdbc.sql("SELECT conforme, ecarts::text, commentaire, le FROM reception_hanout WHERE document_id = :id")
 			.param("id", id)
 			.query((r, n) -> new ReceptionHanout(r.getBoolean(1), json.lire(r.getString(2), ECARTS), r.getString(3),
@@ -602,7 +613,7 @@ public class Ventes implements ProduitsHabituels {
 		return new Document(id, type, rs.getString("numero"), rs.getLong("sequence"), rs.getObject("appareil_id", UUID.class),
 				new Reference(a, comptes.nom(a)), new Reference(h, referentiel.hanout(h).map(Referentiel.Hanout::nom).orElse("—")),
 				rs.getTimestamp("emis_le").toInstant(), lignes, total,
-				"FACTURE".equals(type) && mentions != null && mentions.assujettiTva() ? tva(lignes) : null,
+				facturee ? tva(lignes) : null,
 				rs.getLong("montant_regle"), rs.getLong("montant_credit"), statut, rs.getObject("document_origine_id", UUID.class),
 				avoirs.isEmpty() ? null : avoirs.stream().map(Map.Entry::getKey).toList(), rs.getString("motif_avoir"),
 				rs.getObject("demande_depannage_id", UUID.class), mentions,

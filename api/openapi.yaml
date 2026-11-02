@@ -165,7 +165,9 @@ paths:
       description: |
         L'accessToken et le refreshToken de cette session deviennent invalides (401 ensuite) et
         l'appareil ne reçoit plus de push. Ce n'est pas une révocation : une nouvelle connexion OTP
-        sur le même appareil reste possible. Permis sans consentement CNDP.
+        sur le même appareil reste possible. Permis sans consentement CNDP. L'app ambulant pousse
+        d'abord sa file (`POST /v1/sync/operations`) : sinon les opérations restent sur le téléphone
+        et un autre ambulant qui s'y connecte ne pourra pas les rejouer.
         De même, chaque connexion OTP ouvre une nouvelle session sur l'appareil : les jetons de la
         précédente ne valent plus (seuls ceux de la dernière Session reçue servent).
       x-roles: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT, ADMIN]
@@ -513,8 +515,9 @@ paths:
       operationId: listerRegions
       summary: Les 12 régions du Maroc et leurs principales villes (ciblage d'une campagne, §5.1)
       description: |
-        `Ciblage.regions` et `Ciblage.villes` prennent les `code` renvoyés ici. Une ville ciblée
-        correspond à la ville du grossiste dépositaire, comparée sans casse, accents ni espaces.
+        `Ciblage.regions` et `Ciblage.villes` prennent les `code` renvoyés ici. Une offre est visible
+        si la ville du grossiste dépositaire (comparée sans casse, accents ni espaces) est ciblée, et
+        si elle appartient à une région ciblée. Libellés en fr, ar et darija (graphies arabe et latine).
       x-roles: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT, ADMIN]
       responses:
         '200':
@@ -858,8 +861,8 @@ paths:
       summary: Ambulants rattachés au grossiste connecté, avec leur volume et leur régularité (§4.3)
       description: |
         Rattaché = a reçu au moins un bon de sortie de ce grossiste (le rattachement déclaré au
-        profil de l'ambulant, §3.1, n'existe pas encore). Le grossiste y retrouve le téléphone à
-        saisir dans un nouveau bon de sortie.
+        profil de l'ambulant, §3.1, n'existe pas encore : dette du MVP). Le grossiste y retrouve le
+        téléphone, qu'il a lui-même saisi dans un bon de sortie.
       x-roles: [GROSSISTE]
       parameters:
         - $ref: '#/components/parameters/Page'
@@ -3508,7 +3511,10 @@ components:
             - PROMO_SANS_RETRAIT
             - DEMANDE_NON_ATTRIBUEE
             - REMISE_PLAFOND_DEPASSE
+            - TVA_INCONNUE
           description: |
+            TVA_INCONNUE (RG-F2, facture d'un ambulant assujetti dont un produit n'a pas de taux :
+            enregistrée, sans `tva` ; l'app ne devrait pas proposer FACTURE dans ce cas),
             STOCK_NEGATIF (RG-S1), ECART_SANS_MOTIF (RG-S4), NUMEROTATION_TROU et NUMERO_EN_DOUBLE
             (RG-F1), PLAFOND_CREDIT_DEPASSE et DELAI_CREDIT_DEPASSE (RG-C3),
             CHARGEMENT_EN_DOUBLE (bon de sortie déjà chargé),
@@ -3946,7 +3952,7 @@ components:
 
     AmbulantRattache:
       type: object
-      required: [id, nom, telephone, nombreBons, quantiteTotale, bons30Jours, premierBonLe, dernierBonLe]
+      required: [id, nom, nombreBons, quantiteTotale, bons30Jours, premierBonLe, dernierBonLe]
       properties:
         id:
           type: string
@@ -4031,7 +4037,8 @@ components:
           $ref: '#/components/schemas/Montant'
           description: |
             TVA comprise dans le total (formule de `TauxTva`), pour une FACTURE dont les mentions
-            légales portent `assujettiTva` ; absente si un taux de ligne est inconnu (RG-F2).
+            légales portent `assujettiTva`, et pour un AVOIR qui en annule une (TVA contre-passée) ;
+            absente si un taux de ligne est inconnu (anomalie TVA_INCONNUE, RG-F2).
         montantRegle:
           $ref: '#/components/schemas/Montant'
         montantCredit:

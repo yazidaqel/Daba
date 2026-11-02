@@ -570,8 +570,14 @@ public class Promos {
 			.single().split("\u0000");
 		var grossiste = referentiel.grossiste(rs.getObject("grossiste_id", UUID.class)).orElse(null);
 		var ciblage = json.lire("null".equals(campagne[3]) ? null : campagne[3], OBJET);
+		// Ciblage (§5.1) : ville ou région du grossiste dépositaire, avec les codes de GET /v1/regions.
+		var villeGrossiste = grossiste == null ? "" : Referentiel.codeVille(grossiste.ville());
 		if (ciblage != null && ciblage.get("villes") instanceof List<?> villes && !villes.isEmpty()
-				&& (grossiste == null || villes.stream().noneMatch(v -> codeVille(String.valueOf(v)).equals(codeVille(grossiste.ville()))))) {
+				&& villes.stream().noneMatch(v -> Referentiel.codeVille(String.valueOf(v)).equals(villeGrossiste))) {
+			return null;
+		}
+		if (ciblage != null && ciblage.get("regions") instanceof List<?> regions && !regions.isEmpty()
+				&& referentiel.region(villeGrossiste).filter(r -> regions.stream().anyMatch(c -> r.equals(String.valueOf(c)))).isEmpty()) {
 			return null;
 		}
 		var ligne = jdbc.sql("SELECT remise, quantite_max_par_ambulant, prix_revente_conseille FROM campagne_ligne WHERE campagne_id = :c AND produit_id = :p")
@@ -583,13 +589,6 @@ public class Promos {
 		return new OffrePromo(rs.getObject("id", UUID.class), campagneId, json.lire(campagne[0], LIBELLE),
 				rs.getObject("depot_id", UUID.class), referentiel.produit(produitId).orElseThrow(), remise, (Long) ligne[2],
 				grossiste, disponible, (int) ligne[1], 0, Instant.parse(campagne[2]), Integer.parseInt(campagne[1]));
-	}
-
-	/** Code de ville de {@code GET /v1/regions} : « Fès », « fes » et « FES » désignent la même ville. */
-	static String codeVille(String ville) {
-		return ville == null ? ""
-				: java.text.Normalizer.normalize(ville, java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "")
-					.toUpperCase(java.util.Locale.ROOT).trim().replaceAll("[^A-Z0-9]+", "_");
 	}
 
 	private OffrePromo avecDejaReserve(OffrePromo o, UUID ambulantId) {

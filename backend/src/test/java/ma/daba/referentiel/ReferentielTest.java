@@ -92,6 +92,8 @@ class ReferentielTest extends TestIntegration {
 			}
 		}
 		assertThat(casa.get("nom").get("ar").asString()).isEqualTo("الدار البيضاء سطات");
+		assertThat(casa.get("nom").get("ary-Arab").asString()).isEqualTo("الدار البيضاء سطات");
+		assertThat(casa.get("nom").get("ary-Latn").asString()).isEqualTo("Casablanca-Settat");
 		assertThat(casa.get("villes").findValues("code").stream().map(c -> c.asString())).contains("CASABLANCA", "MOHAMMEDIA");
 	}
 

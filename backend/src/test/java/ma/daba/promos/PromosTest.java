@@ -271,6 +271,29 @@ class PromosTest extends TestIntegration {
 		assertThat(get(grandClient(), "/v1/campagnes/" + campagneId)).hasStatus(404);
 	}
 
+	/** Offre visible d'un ambulant pour une campagne au ciblage donné, reçue chez un grossiste de Casablanca. */
+	boolean visibleAvecCiblage(Map<String, Object> ciblage) {
+		var marque = grandClient();
+		var grossiste = grossiste();
+		var produit = produit(marque.organisationId());
+		var saisie = campagne(produit, 50, 5);
+		saisie.put("ciblage", ciblage);
+		var campagneId = lire(post(marque, "/v1/campagnes", saisie)).get("id").asString();
+		var depotId = lire(post(marque, "/v1/campagnes/" + campagneId + "/depots", m("grossisteId", grossiste.organisationId(),
+				"lignes", List.of(m("produitId", produit, "quantite", 10))))).get("id").asString();
+		post(grossiste, "/v1/depots/" + depotId + "/reponse", m("decision", "ACCEPTER"));
+		recevoir(grossiste, depotId, produit, 10);
+		return offre(ambulant(), new Scenario(marque, grossiste, produit, campagneId, depotId)) != null;
+	}
+
+	@Test
+	void ciblageParRegionEtParVilleAvecLesCodesDuReferentiel() {
+		assertThat(visibleAvecCiblage(m("regions", List.of("CASABLANCA_SETTAT")))).isTrue();
+		assertThat(visibleAvecCiblage(m("regions", List.of("MARRAKECH_SAFI")))).isFalse();
+		assertThat(visibleAvecCiblage(m("villes", List.of("CASABLANCA")))).isTrue();
+		assertThat(visibleAvecCiblage(m("villes", List.of("FES")))).isFalse();
+	}
+
 	@Test
 	void rgP1_campagneFutureAnnonceeSeulementASonDebut() {
 		var marque = grandClient();
