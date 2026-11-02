@@ -27,7 +27,7 @@ Acteurs :
 - Données : PostgreSQL 18 + PostGIS (géociblage, dispatch des ruptures).
 - Mobile : Flutter 3.47 (apps ambulant et hanout), base locale SQLite, file d'opérations rejouée à la synchronisation, UUID générés côté appareil.
 - Web : React 19 + shadcn/ui (Tailwind CSS 4) pour les portails grossiste, grand client et admin.
-- Événements : Kafka 4.3 ou outbox PostgreSQL, **à trancher** ; ne pas introduire Kafka sans validation.
+- Événements : outbox PostgreSQL (tranché le 2 novembre 2026), via le registre de publication d'événements JDBC de Spring Modulith. Pas de Kafka au MVP ; il pourra être branché plus tard derrière la même outbox.
 
 ## Règles de travail
 

@@ -77,8 +77,8 @@
 			<artifactId>testcontainers-postgresql</artifactId>
 			<scope>test</scope>
 		</dependency>
-		<!-- Vérifie le découpage en modules (ModulesTest). Le registre d'événements de Modulith
-		     n'est pas ajouté : outbox ou Kafka reste à trancher. -->
+		<!-- Vérifie le découpage en modules (ModulesTest). Outbox PostgreSQL retenue : ajouter
+		     spring-modulith-starter-jdbc avec le premier module qui publie un événement. -->
 		<dependency>
 			<groupId>org.springframework.modulith</groupId>
 			<artifactId>spring-modulith-starter-test</artifactId>
