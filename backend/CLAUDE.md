@@ -19,6 +19,9 @@ Depuis `backend/`, avec un JDK 25 dans `JAVA_HOME` (le wrapper télécharge Mave
 - Un test : `./mvnw test -Dtest=ModulesTest`
 - Lancer contre la base du compose : `docker compose up -d db` (à la racine), puis `./mvnw spring-boot:run`
 - Image : `docker compose build backend` (à la racine)
-- Configuration : `DB_URL`, `DB_USER`, `DB_PASSWORD` (défaut : `jdbc:postgresql://localhost:5433/daba`, `daba`/`daba`).
+- Configuration : `DB_URL`, `DB_USER`, `DB_PASSWORD` (défaut : `jdbc:postgresql://localhost:5433/daba`, `daba`/`daba`) ; `DABA_JWT_SECRET` (obligatoire hors poste de dev), `DABA_ADMIN_TELEPHONES` (numéros administrateurs), `DABA_LIENS_BASE_URL`, `DABA_CANAUX_ACTIFS`. Le reste est dans `application.properties`.
+- Persistance : `JdbcClient` et SQL (pas de JPA). Les modules publient leurs événements dans l'outbox avec `@ApplicationModuleListener`.
+- Tout ce que l'app ambulant doit recevoir hors ligne passe par `Journal.publier` (commun) ; les tests d'intégration étendent `TestIntegration`.
+- En dev, les SMS (codes OTP compris) sont seulement écrits dans les logs (`FournisseursJournal`).
 - Nouvelle migration : `src/main/resources/db/migration/V<n>__<description>.sql`.
 - `ModulesTest` (Spring Modulith) échoue si un module utilise les classes internes d'un autre : l'API publique d'un module est son package racine, le reste va dans des sous-packages.
