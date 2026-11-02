@@ -19,3 +19,10 @@ test('réception : partie JSON typée application/json et photo jointe', async (
   expect(JSON.parse(await partie.text())).toEqual(reception)
   expect((fd.get('photoBonLivraison') as File).type).toBe('image/jpeg')
 })
+
+test('déconnexion : le cache du compte précédent est vidé', async () => {
+  const { ecrireSession, queryClient } = await import('@/api/client')
+  queryClient.setQueryData(['get', '/v1/moi/consentement', {}], { traitementDonnees: true })
+  ecrireSession(null)
+  expect(queryClient.getQueryCache().getAll()).toHaveLength(0)
+})

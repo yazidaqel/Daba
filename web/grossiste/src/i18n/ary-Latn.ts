@@ -12,6 +12,9 @@ export const aryLatn: Record<Cle, string> = {
   'app.precedent': 'Lli qbel',
   'app.suivant': 'Lli mn b3d',
   'app.page': 'Sfha {page} / {pages}',
+  'app.mesDonnees': 'L-ma3tayat dyali',
+  'app.retirerConsentement': 'Rje3 f l-mowafa9a dyali',
+  'app.retirerConfirmation': 'Ila rje3ti f l-mowafa9a ghadi tkhrej w ma tb9ach t9der tdkhol l l-portail. Nkemmlo?',
 
   'nav.depots': 'Dépôts dyal promo',
   'nav.stockPromo': 'Stock dyal promo',
@@ -33,7 +36,7 @@ export const aryLatn: Record<Cle, string> = {
 
   'consentement.titre': 'L-7imaya dyal l-ma3tayat dyalek (9anoun 09-08)',
   'consentement.texte':
-    'Daba katkhdem b n-nemra dyalek, smiytek w l-khedma dyal l-ma7al dyalek (stock dyal promo, tasslimat, bonat dyal sortie) bach tkhdem l-khidma. Had l-ma3tayat m7touta 3nd Daba, 3mmerha ma katba3, w ma katmchich l-marques ghir mjmou3a bla smiyat. T9der tetleb tchouf l-ma3tayat dyalek wla terje3 f l-mowafa9a dyalek f ay we9t (tasri7 3nd CNDP).',
+    'Daba katkhdem b n-nemra dyalek, smiytek w l-khedma dyal l-ma7al dyalek (stock dyal promo, tasslimat, bonat dyal sortie) bach tkhdem l-khidma. Had l-ma3tayat 3mmerha ma katba3. L-marques kaychoufo ghir l-7ala dyal d-dépôts dyal l-7amlat dyalhom 3ndek (l-kammiyat, l-wousoul, tsswira dyal bon dyal livraison), w 3mmerhom ma kaychoufo l-bey3a. Mn l-portail, t9der f ay we9t t7emmel l-ma3tayat dyalek wla terje3 f l-mowafa9a dyalek (9anoun 09-08, tasri7 3nd CNDP).',
   'consentement.accepter': 'Mwafe9 3la l-mo3alaja dyal l-ma3tayat dyali',
   'consentement.continuer': 'Kemmel',
 
@@ -53,6 +56,7 @@ export const aryLatn: Record<Cle, string> = {
   'depots.marque': 'L-marque',
   'depots.statut': 'L-7ala',
   'depots.fin': 'Katsali',
+  'depot.finLe': 'Katsali: {date}',
   'depots.produits': 'S-sel3a',
   'depots.ouvrir': '7ell',
 

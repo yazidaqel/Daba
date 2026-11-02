@@ -12,9 +12,12 @@ const APPAREIL = 'daba.appareilId'
 
 export const lireSession = (): S['Session'] | null => JSON.parse(localStorage.getItem(SESSION) ?? 'null')
 
+// Le refreshToken n'est pas conservé : le contrat n'a pas d'endpoint de rafraîchissement.
 export function ecrireSession(s: S['Session'] | null) {
-  if (s) localStorage.setItem(SESSION, JSON.stringify(s))
+  if (s) localStorage.setItem(SESSION, JSON.stringify({ ...s, refreshToken: '' }))
   else localStorage.removeItem(SESSION)
+  // Changement de compte : rien du compte précédent ne doit rester en cache (cloisonnement, consentement).
+  queryClient.clear()
   window.dispatchEvent(new Event('daba-session'))
 }
 

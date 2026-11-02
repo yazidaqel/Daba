@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, NavLink, Route, Routes } from 'react-router'
-import { $api, ecrireSession, lireSession } from '@/api/client'
+import { $api, ecrireSession, fetchClient, lireSession } from '@/api/client'
 import { messageErreur } from '@/api/erreurs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -90,7 +90,35 @@ function Cadre({ nav, children }: { nav?: boolean; children: ReactNode }) {
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+      {nav && <DroitsCndp />}
     </>
+  )
+}
+
+// Droit d'accès (GET /v1/moi/donnees) et retrait du consentement (loi 09-08).
+function DroitsCndp() {
+  const { t, langue } = useI18n()
+  async function telecharger() {
+    const { data } = await fetchClient.GET('/v1/moi/donnees')
+    if (!data) return
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }))
+    a.download = 'daba-mes-donnees.json'
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+  async function retirer() {
+    if (!window.confirm(t('app.retirerConfirmation'))) return
+    const { error } = await fetchClient.PUT('/v1/moi/consentement', {
+      body: { versionTexte: `${VERSION_TEXTE}-${langue}`, traitementDonnees: false, langue },
+    })
+    if (!error) ecrireSession(null)
+  }
+  return (
+    <footer className="no-print text-muted-foreground mx-auto flex max-w-6xl gap-2 px-4 pb-6 text-sm">
+      <Button variant="link" size="sm" onClick={telecharger}>{t('app.mesDonnees')}</Button>
+      <Button variant="link" size="sm" onClick={retirer}>{t('app.retirerConsentement')}</Button>
+    </footer>
   )
 }
 

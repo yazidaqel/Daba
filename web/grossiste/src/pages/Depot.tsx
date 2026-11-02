@@ -35,7 +35,7 @@ export default function Depot() {
               <h1 className="text-2xl font-semibold">{d.campagne.nom}</h1>
               <StatutDepot statut={d.statut} />
               {d.marque && <span className="text-muted-foreground">{d.marque.nom}</span>}
-              {d.finCampagne && <span className="text-muted-foreground text-sm">{t('depots.fin')} : {date(d.finCampagne)}</span>}
+              {d.finCampagne && <span className="text-muted-foreground text-sm">{t('depot.finLe', { date: date(d.finCampagne) })}</span>}
               {d.statut === 'RECU' && <Badge variant="outline">{t('depot.miseAJour')}</Badge>}
             </header>
             <Lignes depot={d} />
@@ -51,7 +51,7 @@ export default function Depot() {
             {d.statut === 'RECU' && (
               <>
                 <Reservations depotId={d.id} />
-                <Cloture depot={d} />
+                {cloturePossible(d) && <Cloture depot={d} />}
               </>
             )}
             {d.statut === 'CLOTURE' && d.cloture && <Succes>{t('cloture.faite', { issue: t(`cloture.${d.cloture.issueReliquat}`) })}</Succes>}
@@ -103,6 +103,11 @@ function Lignes({ depot }: { depot: S['Depot'] }) {
     </Table>
   )
 }
+
+// Le contrat répond 409 tant que la campagne n'est ni épuisée ni expirée ; le Depot ne porte pas son statut,
+// on s'en approche par la date de fin ou un dépôt vidé.
+const cloturePossible = (d: S['Depot']) =>
+  (d.finCampagne != null && new Date(d.finCampagne) < new Date()) || d.lignes.every((l) => l.quantiteRestante + l.quantiteReservee === 0)
 
 const invaliderTout = () => queryClient.invalidateQueries()
 
@@ -169,7 +174,7 @@ function Reponse({ depot }: { depot: S['Depot'] }) {
           ) : (
             <>
               <Button
-                disabled={repondre.isPending || depot.lignes.some((l) => !(quantites[l.produitId] >= 1))}
+                disabled={repondre.isPending || depot.lignes.some((l) => !(quantites[l.produitId] >= 1 && quantites[l.produitId] <= l.quantiteProposee))}
                 onClick={() => envoyer('CONTRE_PROPOSER')}
               >
                 {t('reponse.envoyerContre')}

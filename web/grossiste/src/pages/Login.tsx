@@ -17,8 +17,8 @@ export default function Login() {
   const demander = $api.useMutation('post', '/v1/auth/otp')
   const verifier = $api.useMutation('post', '/v1/auth/otp/verify')
 
-  function messageStatut(status?: number) {
-    return status === 429 ? t('login.tropDEssais') : status === 400 || status === 401 ? t('login.codeInvalide') : t('app.erreur')
+  function messageStatut(status: number | undefined, invalide: 'login.telephoneInvalide' | 'login.codeInvalide') {
+    return status === 429 ? t('login.tropDEssais') : status === 400 || status === 401 ? t(invalide) : t('app.erreur')
   }
 
   function envoyer(e: FormEvent) {
@@ -28,7 +28,7 @@ export default function Login() {
     setErreur(null)
     demander.mutate(
       { body: { telephone: tel, langue } },
-      { onSuccess: () => setTelephone(tel), onError: (p) => setErreur(messageStatut(p.status)) },
+      { onSuccess: () => setTelephone(tel), onError: (p) => setErreur(messageStatut(p.status, 'login.telephoneInvalide')) },
     )
   }
 
@@ -37,7 +37,7 @@ export default function Login() {
     setErreur(null)
     verifier.mutate(
       { body: { telephone: telephone!, code, appareilId: appareilId() } },
-      { onSuccess: ecrireSession, onError: (p) => setErreur(messageStatut(p.status)) },
+      { onSuccess: ecrireSession, onError: (p) => setErreur(messageStatut(p.status, 'login.codeInvalide')) },
     )
   }
 

@@ -11,6 +11,9 @@ export const fr = {
   'app.precedent': 'Précédent',
   'app.suivant': 'Suivant',
   'app.page': 'Page {page} / {pages}',
+  'app.mesDonnees': 'Mes données',
+  'app.retirerConsentement': 'Retirer mon consentement',
+  'app.retirerConfirmation': 'Retirer votre consentement vous déconnecte et bloque l’accès au portail. Continuer ?',
 
   'nav.depots': 'Dépôts promo',
   'nav.stockPromo': 'Stock promo',
@@ -32,7 +35,7 @@ export const fr = {
 
   'consentement.titre': 'Protection de vos données (loi 09-08)',
   'consentement.texte':
-    'Daba traite votre numéro de téléphone, votre nom et l’activité de votre dépôt (stock promo, retraits, bons de sortie) pour faire fonctionner le service. Ces données sont hébergées par Daba, ne sont jamais vendues et ne sont partagées avec les marques que sous forme agrégée. Vous pouvez demander l’accès à vos données ou retirer votre consentement à tout moment (déclaration CNDP).',
+    'Daba traite votre numéro de téléphone, votre nom et l’activité de votre dépôt (stock promo, retraits, bons de sortie) pour faire fonctionner le service. Ces données ne sont jamais vendues. Les marques voient l’état des dépôts de leurs campagnes chez vous (quantités, réception, photo du bon de livraison), jamais les ambulants. Depuis le portail, vous pouvez à tout moment télécharger vos données ou retirer votre consentement (loi 09-08, déclaration CNDP).',
   'consentement.accepter': 'J’accepte le traitement de mes données',
   'consentement.continuer': 'Continuer',
 
@@ -52,6 +55,7 @@ export const fr = {
   'depots.marque': 'Marque',
   'depots.statut': 'Statut',
   'depots.fin': 'Fin',
+  'depot.finLe': 'Fin : {date}',
   'depots.produits': 'Produits',
   'depots.ouvrir': 'Ouvrir',
 
