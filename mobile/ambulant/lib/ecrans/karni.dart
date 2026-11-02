@@ -21,7 +21,7 @@ class OngletKarni extends StatelessWidget {
     return ListView(children: [
       if (contestations > 0)
         ListTile(
-          leading: Ico(PhosphorIconsRegular.gavel, color: Colors.orange.shade800),
+          leading: Ico(PhosphorIconsRegular.gavel, color: Zellige.of(context).warning),
           title: Text(t.contestationsOuvertes('$contestations')),
           trailing: const Icon(PhosphorIconsRegular.caretRight),
           onTap: () => context.ouvrir(const EcranContestations()),
@@ -41,12 +41,15 @@ class OngletKarni extends StatelessWidget {
   Widget _ligne(BuildContext context, String id, String nom, int solde) {
     final m = context.daba.m;
     // Un crédit supplémentaire serait-il hors plafond ou hors délai ? (RG-C3)
-    final alerte = m.controleCredit(id, 1) != Depassement.aucun;
+    final t = context.t;
+    final depassement = m.controleCredit(id, 1);
     final plafond = m.compte(id)?['plafond'] as int?;
     return ListTile(
-      leading: Ico(alerte ? PhosphorIconsRegular.warning : PhosphorIconsRegular.storefront, color: alerte ? Colors.orange.shade800 : null),
+      leading: const Ico(PhosphorIconsRegular.storefront),
       title: Text(nom),
-      subtitle: plafond == null ? null : Text(context.t.plafondValeur(dh(plafond))),
+      subtitle: depassement == Depassement.aucun
+          ? (plafond == null ? null : Text(t.plafondValeur(dh(plafond))))
+          : Align(alignment: AlignmentDirectional.centerStart, child: Statut(Ton.danger, libelleDepassement(t, depassement))),
       trailing: Text(dh(solde), style: Theme.of(context).textTheme.titleMedium),
       onTap: () => context.ouvrir(EcranHanout(id)),
     );
@@ -125,7 +128,7 @@ class LigneHistorique extends StatelessWidget {
     final t = context.t;
     if (e['numero'] == null) {
       return ListTile(
-        leading: const Ico(PhosphorIconsRegular.money, color: Colors.green),
+        leading: Ico(PhosphorIconsRegular.money, color: Zellige.of(context).success),
         title: Text('${t.versement} · ${e['mode'] == 'CHEQUE' ? t.cheque : t.especes}'),
         subtitle: Text(date(e['recuLe'] as String)),
         trailing: Text(dh(-(e['montant'] as int))),
@@ -133,9 +136,11 @@ class LigneHistorique extends StatelessWidget {
     }
     final rejete = e['rejete'] == true;
     return ListTile(
-      leading: Ico(rejete ? PhosphorIconsRegular.prohibit : PhosphorIconsRegular.receipt, color: rejete ? Colors.red.shade700 : null),
+      leading: const Ico(PhosphorIconsRegular.receipt),
       title: Text('${nomType(t, e['type'] as String)} ${e['numero']}'),
-      subtitle: Text(rejete ? t.docRejete : '${date(e['emisLe'] as String)} · ${t.total} ${dh(e['total'] as int)}'),
+      subtitle: rejete
+          ? Align(alignment: AlignmentDirectional.centerStart, child: Statut(Ton.danger, t.docRejete))
+          : Text('${date(e['emisLe'] as String)} · ${t.total} ${dh(e['total'] as int)}'),
       trailing: Text(dh(e['montantCredit'] as int)),
       onTap: () => context.ouvrir(EcranDocument(e['id'] as String)),
     );
@@ -173,7 +178,7 @@ class CarteContestation extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: ListTile(
-        leading: Ico(PhosphorIconsRegular.gavel, color: Colors.orange.shade800),
+        leading: Ico(PhosphorIconsRegular.gavel, color: Zellige.of(context).warning),
         title: Text('${c['hanout']['nom']} · ${nomMotif(t, c['motif'] as String)}'),
         subtitle: Text([
           if (c['cible'] == 'DOCUMENT') (doc?['numero'] ?? t.document) as String else t.compteCredit,
@@ -207,6 +212,13 @@ class CarteContestation extends StatelessWidget {
     daba.apresGeste();
   }
 }
+
+/// RG-C3 : libellé du dépassement, affiché avec son icône (jamais par la couleur seule).
+String libelleDepassement(T t, Depassement d) => switch (d) {
+      Depassement.plafond => t.plafondDepasse,
+      Depassement.delai => t.delaiDepasse,
+      _ => '${t.plafondDepasse} · ${t.delaiDepasse}',
+    };
 
 String nomMotif(T t, String motif) => switch (motif) {
       'MONTANT' => t.motifMONTANT,

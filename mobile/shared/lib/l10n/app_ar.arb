@@ -238,5 +238,8 @@
   "motifAUTRE": "أخرى",
   "opRESOLUTION_CONTESTATION": "اعتراض مغلق",
   "anoTVA_INCONNUE": "نسبة الضريبة غير معروفة",
-  "erreurRoleNonAmbulant": "هذا الرقم ليس حساب بائع متجول."
+  "erreurRoleNonAmbulant": "هذا الرقم ليس حساب بائع متجول.",
+  "rupture": "نفاد",
+  "plafondDepasse": "تجاوز السقف",
+  "delaiDepasse": "تجاوز المهلة"
 }

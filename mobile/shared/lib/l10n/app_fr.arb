@@ -442,5 +442,8 @@
   "motifAUTRE": "Autre",
   "opRESOLUTION_CONTESTATION": "Contestation close",
   "anoTVA_INCONNUE": "Taux de TVA inconnu",
-  "erreurRoleNonAmbulant": "Ce numéro n'est pas un compte de vendeur ambulant."
+  "erreurRoleNonAmbulant": "Ce numéro n'est pas un compte de vendeur ambulant.",
+  "rupture": "Rupture",
+  "plafondDepasse": "Plafond dépassé",
+  "delaiDepasse": "Délai dépassé"
 }

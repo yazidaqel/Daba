@@ -1533,6 +1533,24 @@ abstract class T {
   /// In fr, this message translates to:
   /// **'Ce numéro n\'est pas un compte de vendeur ambulant.'**
   String get erreurRoleNonAmbulant;
+
+  /// No description provided for @rupture.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rupture'**
+  String get rupture;
+
+  /// No description provided for @plafondDepasse.
+  ///
+  /// In fr, this message translates to:
+  /// **'Plafond dépassé'**
+  String get plafondDepasse;
+
+  /// No description provided for @delaiDepasse.
+  ///
+  /// In fr, this message translates to:
+  /// **'Délai dépassé'**
+  String get delaiDepasse;
 }
 
 class _TDelegate extends LocalizationsDelegate<T> {

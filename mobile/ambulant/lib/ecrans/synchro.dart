@@ -50,14 +50,14 @@ class _EcranSynchroState extends State<EcranSynchro> {
         if (signalees.isNotEmpty) ListTile(title: Text(t.operationsRefusees, style: Theme.of(context).textTheme.titleMedium)),
         for (final o in signalees)
           ListTile(
-            leading: Ico(o['statut'] == 'REJETEE' ? PhosphorIconsRegular.prohibit : PhosphorIconsRegular.arrowsSplit, color: Colors.red.shade700),
+            leading: Ico(o['statut'] == 'REJETEE' ? PhosphorIconsRegular.prohibit : PhosphorIconsRegular.arrowsSplit, color: Zellige.of(context).danger),
             title: Text('${nomOperation(t, o['type'] as String)} · ${date(o['creeLe'] as String)}'),
             subtitle: Text((o['resultat']['erreur']?['detail'] ?? o['resultat']['conflit']?['detail'] ?? o['statut']) as String),
           ),
         if (anomalies.isNotEmpty) ListTile(title: Text(t.anomalies, style: Theme.of(context).textTheme.titleMedium)),
         for (final a in anomalies)
           ListTile(
-            leading: const Ico(PhosphorIconsRegular.warningCircle, color: Colors.orange),
+            leading: Ico(PhosphorIconsRegular.warning, color: Zellige.of(context).warning),
             title: Text('${a['regle']} · ${nomAnomalie(t, a['type'] as String)}'),
             subtitle: Text('${a['detail'] ?? ''} ${date(a['detecteeLe'] as String)}'),
           ),

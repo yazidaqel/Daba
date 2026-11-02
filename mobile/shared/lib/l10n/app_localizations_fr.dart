@@ -812,4 +812,13 @@ class TFr extends T {
   @override
   String get erreurRoleNonAmbulant =>
       'Ce numéro n\'est pas un compte de vendeur ambulant.';
+
+  @override
+  String get rupture => 'Rupture';
+
+  @override
+  String get plafondDepasse => 'Plafond dépassé';
+
+  @override
+  String get delaiDepasse => 'Délai dépassé';
 }

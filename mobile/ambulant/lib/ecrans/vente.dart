@@ -161,7 +161,7 @@ class _EcranVenteState extends State<EcranVente> {
             const SizedBox(height: 8),
             Row(children: [
               Expanded(child: Text(t.resteACredit, style: style.titleMedium)),
-              Text(dh(_credit), style: style.titleMedium?.copyWith(color: _credit > 0 ? Colors.orange.shade800 : null)),
+              Text(dh(_credit), style: style.titleMedium),
             ]),
             Wrap(spacing: 8, children: [
               ActionChip(label: Text(t.toutEspeces), onPressed: () => setState(() {
@@ -278,18 +278,19 @@ class EcranDocument extends StatelessWidget {
         Text(nomType(t, doc['type'] as String), style: style.titleLarge),
         Text('${doc['hanout']['nom']} · ${date(doc['emisLe'] as String)}'),
         if (doc['statut'] != 'EMIS')
-          Text(doc['statut'] == 'ANNULE' ? t.docAnnule : t.docPartiellementAnnule, style: TextStyle(color: Colors.red.shade700)),
-        if (doc['rejete'] == true) Text(t.docRejete, style: TextStyle(color: Colors.red.shade700)),
+          Statut(Ton.danger, doc['statut'] == 'ANNULE' ? t.docAnnule : t.docPartiellementAnnule),
+        if (doc['rejete'] == true) Statut(Ton.danger, t.docRejete),
         ..._reception(context, doc),
         const Divider(),
         for (final l in (doc['lignes'] as List).cast<Map>())
           ListTile(
             dense: true,
             title: Text(context.lib(l['libelle'])),
-            subtitle: Text([
-              if (l['nature'] == 'ARTICLE') '${l['quantite']} × ${dh(l['prixUnitaire'] as int)}' else nomNature(t, l['nature'] as String),
-              if (l['campagneNom'] != null) '${t.promo} ${context.lib(l['campagneNom'])}',
-            ].join(' · ')),
+            subtitle: Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              Text(l['nature'] == 'ARTICLE' ? '${l['quantite']} × ${dh(l['prixUnitaire'] as int)}' : nomNature(t, l['nature'] as String)),
+              // Ligne promo d'un BL : badge safran avec la référence de la campagne (RG-F3).
+              if (l['campagneNom'] != null) BadgePromo('${t.promo} ${context.lib(l['campagneNom'])}'),
+            ]),
             trailing: Text(dh(l['montant'] as int)),
           ),
         const Divider(),
@@ -337,10 +338,10 @@ class EcranDocument extends StatelessWidget {
     final r = doc['receptionHanout'] as Map?;
     if (r == null) return const [];
     final t = context.t;
-    if (r['conforme'] == true) return [Text(t.receptionConforme(date(r['le'] as String)), style: const TextStyle(color: Colors.green))];
+    if (r['conforme'] == true) return [Statut(Ton.succes, t.receptionConforme(date(r['le'] as String)))];
     final lignes = (doc['lignes'] as List).cast<Map>();
     return [
-      Text(t.receptionEcart, style: TextStyle(color: Colors.orange.shade800)),
+      Statut(Ton.avertissement, t.receptionEcart),
       for (final e in ((r['ecarts'] as List?) ?? const []).cast<Map>())
         if ((e['ligne'] as int) < lignes.length)
           Text(t.receptionEcartLigne(context.lib(lignes[e['ligne'] as int]['libelle']), '${e['quantiteRecue']}',

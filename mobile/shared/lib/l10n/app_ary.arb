@@ -238,5 +238,8 @@
   "motifAUTRE": "شي حاجة أخرى",
   "opRESOLUTION_CONTESTATION": "شكاية تسدات",
   "anoTVA_INCONNUE": "نسبة TVA ما معروفاش",
-  "erreurRoleNonAmbulant": "هاد النمرة ماشي ديال بياع متجول."
+  "erreurRoleNonAmbulant": "هاد النمرة ماشي ديال بياع متجول.",
+  "rupture": "سالات",
+  "plafondDepasse": "فات الحد",
+  "delaiDepasse": "فاتت المدة"
 }

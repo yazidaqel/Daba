@@ -795,6 +795,15 @@ class TAry extends T {
 
   @override
   String get erreurRoleNonAmbulant => 'هاد النمرة ماشي ديال بياع متجول.';
+
+  @override
+  String get rupture => 'سالات';
+
+  @override
+  String get plafondDepasse => 'فات الحد';
+
+  @override
+  String get delaiDepasse => 'فاتت المدة';
 }
 
 /// The translations for Moroccan Arabic, using the Latin script (`ary_Latn`).
@@ -1593,4 +1602,13 @@ class TAryLatn extends TAry {
 
   @override
   String get erreurRoleNonAmbulant => 'Had nmra machi dyal bya3 mtjowel.';
+
+  @override
+  String get rupture => 'Salat';
+
+  @override
+  String get plafondDepasse => 'Fat l7ed';
+
+  @override
+  String get delaiDepasse => 'Fatet lmodda';
 }

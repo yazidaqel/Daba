@@ -45,13 +45,15 @@ class OngletStock extends StatelessWidget {
         ListTile(
           leading: PhotoProduit(p),
           title: Text(context.lib(p['libelle'])),
-          subtitle: Text([
-            p['marque'],
-            if (m.stockPromo(p['id'] as String).any((x) => x.quantite > 0))
-              '${t.promo} ${m.stockPromo(p['id'] as String).fold(0, (a, x) => a + x.quantite)}',
-          ].join(' · ')),
-          trailing: Text('$q',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(color: q <= 0 ? Theme.of(context).colorScheme.error : null)),
+          subtitle: Row(children: [
+            Flexible(child: Text(p['marque'] as String? ?? '')),
+            if (m.stockPromo(p['id'] as String).any((x) => x.quantite > 0)) ...[
+              const SizedBox(width: 8),
+              BadgePromo('${t.promo} ${m.stockPromo(p['id'] as String).fold(0, (a, x) => a + x.quantite)}'),
+            ],
+          ]),
+          // Rupture : icône et libellé, pas seulement la couleur (charte).
+          trailing: q <= 0 ? Statut(Ton.danger, '${t.rupture} · $q') : Text('$q', style: Theme.of(context).textTheme.titleLarge),
         ),
     ]);
   }
@@ -184,7 +186,7 @@ class EcranMouvements extends StatelessWidget {
                 final mv = mouvements[i];
                 final q = mv['quantite'] as int;
                 return ListTile(
-                  leading: Ico(q >= 0 ? PhosphorIconsRegular.arrowDownLeft : PhosphorIconsRegular.arrowUpRight, color: q >= 0 ? Colors.green : Colors.orange),
+                  leading: Ico(q >= 0 ? PhosphorIconsRegular.arrowDownLeft : PhosphorIconsRegular.arrowUpRight, color: q >= 0 ? Zellige.of(context).success : Zellige.of(context).textMuted),
                   title: Text(context.lib(m.produit(mv['produitId'] as String)?['libelle'])),
                   subtitle: Text('${types[mv['type']] ?? mv['type']} · ${date(mv['horodatage'] as String)}'),
                   trailing: Text(q > 0 ? '+$q' : '$q', style: Theme.of(context).textTheme.titleMedium),

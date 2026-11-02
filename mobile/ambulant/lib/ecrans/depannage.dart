@@ -67,7 +67,7 @@ class _OngletDepannageState extends State<OngletDepannage> {
           onChanged: _occupe ? null : _basculer,
           title: Text(daba.disponible ? t.disponible : t.indisponible),
           subtitle: Text(t.disponibleExplication),
-          secondary: Ico(PhosphorIconsRegular.moped, color: daba.disponible ? Colors.green : null),
+          secondary: Ico(PhosphorIconsRegular.moped, color: daba.disponible ? Zellige.of(context).success : null),
         ),
         if (_occupe) const LinearProgressIndicator(),
         const Divider(),
@@ -115,11 +115,11 @@ class _OngletDepannageState extends State<OngletDepannage> {
           const SizedBox(height: 8),
           Wrap(spacing: 8, children: switch (statut) {
             'EN_ATTENTE' => [
-                FilledButton(onPressed: _occupe ? null : () => _accepter(id), child: Text(t.accepter)),
+                FilledButton.tonal(onPressed: _occupe ? null : () => _accepter(id), child: Text(t.accepter)),
                 OutlinedButton(onPressed: _occupe ? null : () => _faire(() => daba.agirDemande(id, 'refus')), child: Text(t.refuser)),
               ],
-            'ACCEPTEE' => [FilledButton(onPressed: _occupe ? null : () => _faire(() => daba.agirDemande(id, 'en-route')), child: Text(t.enRoute))],
-            'EN_ROUTE' when h != null => [FilledButton.icon(onPressed: () => _livrer(d), icon: const Ico(PhosphorIconsRegular.cashRegister), label: Text(t.livrer))],
+            'ACCEPTEE' => [FilledButton.tonal(onPressed: _occupe ? null : () => _faire(() => daba.agirDemande(id, 'en-route')), child: Text(t.enRoute))],
+            'EN_ROUTE' when h != null => [FilledButton.tonalIcon(onPressed: () => _livrer(d), icon: const Ico(PhosphorIconsRegular.cashRegister), label: Text(t.livrer))],
             _ => const <Widget>[],
           }),
         ]),

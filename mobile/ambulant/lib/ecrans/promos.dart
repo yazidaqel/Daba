@@ -23,7 +23,7 @@ class OngletPromos extends StatelessWidget {
         ListTile(
           leading: const Ico(PhosphorIconsRegular.qrCode),
           title: Text(t.mesReservations),
-          trailing: nbReservees == 0 ? const Icon(PhosphorIconsRegular.caretRight) : Badge(label: Text('$nbReservees')),
+          trailing: nbReservees == 0 ? const Icon(PhosphorIconsRegular.caretRight) : BadgePromo('$nbReservees'),
           onTap: () => context.ouvrir(const EcranReservations()),
         ),
         const Divider(height: 1),
@@ -32,12 +32,15 @@ class OngletPromos extends StatelessWidget {
           ListTile(
             leading: PhotoProduit(o['produit'] as Map<String, dynamic>),
             title: Text(context.lib(o['produit']['libelle'])),
-            subtitle: Text([
-              descriptionRemise(context, o['remise'] as Map),
+            // Fil promo : la remise en badge safran (charte : le safran est réservé aux promos).
+            subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: BadgePromo(descriptionRemise(context, o['remise'] as Map))),
+              Text([
               o['grossiste']['nom'],
               ?distanceGrossiste(context, o),
               t.jusquAu(date(o['fin'] as String)),
             ].join(' · ')),
+            ]),
             trailing: Text('${o['quantiteDisponible']}'),
             onTap: () => context.ouvrir(EcranOffre(o)),
           ),
@@ -112,7 +115,10 @@ class _EcranOffreState extends State<EcranOffre> {
           Expanded(child: Text(context.lib(o['produit']['libelle']), style: Theme.of(context).textTheme.titleLarge)),
         ]),
         const SizedBox(height: 12),
-        ListTile(leading: const Ico(PhosphorIconsRegular.sealPercent), title: Text(descriptionRemise(context, o['remise'] as Map))),
+        ListTile(
+          leading: Ico(PhosphorIconsRegular.sealPercent, color: Zellige.of(context).promo),
+          title: Align(alignment: AlignmentDirectional.centerStart, child: BadgePromo(descriptionRemise(context, o['remise'] as Map))),
+        ),
         if (o['prixReventeConseille'] != null)
           ListTile(leading: const Ico(PhosphorIconsRegular.storefront), title: Text(t.prixConseille(dh(o['prixReventeConseille'] as int)))),
         ListTile(
@@ -199,7 +205,16 @@ class EcranReservation extends StatelessWidget {
       appBar: AppBar(title: Text(t.reservation)),
       body: ListView(padding: const EdgeInsets.all(24), children: [
         if (qr != null && r['statut'] == 'RESERVEE')
-          Center(child: QrImageView(data: qr, size: 260, backgroundColor: Colors.white)),
+          Center(
+            child: QrImageView(
+              data: qr,
+              size: 260,
+              // Toujours sombre sur clair, même en mode sombre, pour le scan du grossiste.
+              backgroundColor: Zellige.clair.surface,
+              eyeStyle: QrEyeStyle(eyeShape: QrEyeShape.square, color: Zellige.clair.text),
+              dataModuleStyle: QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Zellige.clair.text),
+            ),
+          ),
         const SizedBox(height: 16),
         Text(context.lib(context.daba.m.produit(r['produitId'] as String)?['libelle']),
             style: Theme.of(context).textTheme.titleLarge, textAlign: TextAlign.center),

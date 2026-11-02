@@ -795,4 +795,13 @@ class TAr extends T {
 
   @override
   String get erreurRoleNonAmbulant => 'هذا الرقم ليس حساب بائع متجول.';
+
+  @override
+  String get rupture => 'نفاد';
+
+  @override
+  String get plafondDepasse => 'تجاوز السقف';
+
+  @override
+  String get delaiDepasse => 'تجاوز المهلة';
 }

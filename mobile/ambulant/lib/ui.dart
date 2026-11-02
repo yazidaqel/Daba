@@ -99,6 +99,46 @@ class Ico extends StatelessWidget {
       Directionality(textDirection: TextDirection.ltr, child: Icon(icone, size: size, color: color));
 }
 
+enum Ton { succes, avertissement, danger }
+
+/// Un état s'affiche toujours avec une icône et un libellé, jamais par la couleur seule (charte).
+class Statut extends StatelessWidget {
+  const Statut(this.ton, this.libelle, {super.key});
+  final Ton ton;
+  final String libelle;
+
+  @override
+  Widget build(BuildContext context) {
+    final z = Zellige.of(context);
+    final (couleur, icone) = switch (ton) {
+      Ton.succes => (z.success, PhosphorIconsRegular.checkCircle),
+      Ton.avertissement => (z.warning, PhosphorIconsRegular.warning),
+      Ton.danger => (z.danger, PhosphorIconsRegular.warningCircle),
+    };
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Ico(icone, size: 18, color: couleur),
+      const SizedBox(width: 6),
+      Flexible(child: Text(libelle, style: TextStyle(color: couleur, fontWeight: FontWeight.w500))),
+    ]);
+  }
+}
+
+/// Badge safran, réservé aux promotions (charte : jamais pour un avertissement).
+class BadgePromo extends StatelessWidget {
+  const BadgePromo(this.texte, {super.key});
+  final String texte;
+
+  @override
+  Widget build(BuildContext context) {
+    final z = Zellige.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(color: z.promo, borderRadius: BorderRadius.circular(8)),
+      child: Text(texte, style: TextStyle(color: z.onPromo, fontWeight: FontWeight.w500, fontSize: 12)),
+    );
+  }
+}
+
 class Vide extends StatelessWidget {
   const Vide(this.texte, {super.key, this.icone = PhosphorIconsRegular.tray});
   final String texte;
@@ -109,7 +149,7 @@ class Vide extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Ico(icone, size: 48, color: Theme.of(context).colorScheme.outline),
+            Ico(icone, size: 48, color: Zellige.of(context).textMuted),
             const SizedBox(height: 12),
             Text(texte, textAlign: TextAlign.center),
           ]),

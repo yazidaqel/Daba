@@ -94,7 +94,7 @@ class _Carte extends StatelessWidget {
         children: [
           TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'ma.daba.daba_ambulant'),
           MarkerLayer(markers: [
-            if (centre != null) Marker(point: centre!, child: const Ico(PhosphorIconsRegular.crosshairSimple, color: Colors.blue)),
+            if (centre != null) Marker(point: centre!, child: Ico(PhosphorIconsRegular.crosshairSimple, color: Zellige.of(context).text)),
             for (final h in hanouts)
               if (h['position'] case {'lat': final num lat, 'lon': final num lon} when lat.abs() <= 90 && lon.abs() <= 180)
                 Marker(
