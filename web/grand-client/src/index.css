@@ -4,6 +4,23 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Typographie commune Daba (src/fonts.css) : IBM Plex Sans pour le latin, IBM Plex Sans Arabic pour l'arabe. */
+@theme {
+  --font-sans: "IBM Plex Sans", "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
+  --font-arabe: "IBM Plex Sans Arabic", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Écriture arabe (ar, darija en graphie arabe) : la face arabe passe devant, chiffres et latin compris. */
+:root:lang(ar),
+:root:lang(ary-Arab) {
+  font-family: var(--font-arabe);
+}
+
+/* Contrôles et attribution de MapLibre (sa feuille impose Helvetica). */
+.maplibregl-map {
+  font-family: inherit;
+}
+
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);

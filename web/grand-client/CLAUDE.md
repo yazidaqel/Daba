@@ -4,6 +4,7 @@ Référence : cahier des charges §5 et §7.2. Lot 1 : connexion OTP, consenteme
 
 - Vite + React 19 + TypeScript, shadcn/ui (composants copiés dans `src/components/ui/`), Tailwind CSS 4, MapLibre GL avec les tuiles libres OpenFreeMap (sans clé).
 - Client d'API typé : `src/api/schema.d.ts` est généré depuis `../../api/openapi.yaml` (`npm run api`), ne pas l'éditer à la main. Appels via `api` (openapi-fetch) et `ok()` dans `src/api/client.ts`.
+- Typographie : IBM Plex Sans (latin) et IBM Plex Sans Arabic (arabe, darija en graphie arabe), auto-hébergées (`@fontsource`, OFL), woff2 seulement, graisses 400, 500 et 600 (`src/fonts.css`) : pas de `font-bold`. Les étiquettes WebGL de MapLibre gardent les glyphes du style OpenFreeMap. Icônes : Lucide.
 - Textes : `src/messages.ts` (fr, ar, ary-Arab, ary-Latn), typés : une clé manquante dans une langue casse la compilation. Mise en page RTL par propriétés logiques (`ms-`, `pe-`, `text-start`, `inline-size`).
 - Session : sur 401, `src/api/client.ts` renouvelle le jeton (`POST /v1/auth/refresh`) et rejoue l'appel, sinon retour à la connexion ; 403 `appareil-revoque` efface la session. Les décisions se prennent sur le code de `Problem.type`, jamais sur `detail`.
 - Ciblage : codes de `GET /v1/regions` et `GET /v1/categories`. Produits : `mesProduits=true` pour choisir, `ids=` pour les libellés.

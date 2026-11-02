@@ -99,7 +99,7 @@ export function App() {
   return (
     <div className="min-h-screen">
       <header className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
-        <span className="me-4 text-lg font-bold text-primary">{t('app.titre')}</span>
+        <span className="me-4 text-lg font-semibold text-primary">{t('app.titre')}</span>
         {lien('#/campagnes', section !== 'ruptures' && section !== 'donnees', t('nav.campagnes'))}
         {lien('#/ruptures', section === 'ruptures', t('nav.ruptures'))}
         <span className="ms-auto" />

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import { api, ok, type S } from '@/api/client'
 import { useI18n, type Cle } from '@/i18n'
 import { useCharge } from '@/lib/useCharge'
@@ -64,7 +65,8 @@ export function CampagneDetail({ id }: { id: string }) {
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <a href="#/campagnes" className="text-sm text-muted-foreground hover:underline">
+        <a href="#/campagnes" className="flex items-center gap-1 text-sm text-muted-foreground hover:underline">
+          <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden />
           {t('commun.retour')}
         </a>
         <h1 className="me-auto text-xl font-semibold">{libelle(c.nom)}</h1>
