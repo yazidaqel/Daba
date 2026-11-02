@@ -1,0 +1,395 @@
+{
+  "@@locale": "fr",
+  "titreApp": "Daba",
+  "langue": "Langue",
+  "langueFr": "Français",
+  "langueAr": "العربية",
+  "langueAryArab": "الدارجة",
+  "langueAryLatn": "Darija (latin)",
+  "connexionExplication": "Entrez votre numéro de téléphone : vous recevrez un code par SMS.",
+  "reconnexionExplication": "Votre session a expiré. Reconnectez-vous : vos ventes enregistrées restent sur le téléphone.",
+  "telephone": "Téléphone",
+  "telephoneInvalide": "Numéro de téléphone invalide",
+  "codeSms": "Code reçu par SMS",
+  "changerNumero": "Changer de numéro",
+  "recevoirCode": "Recevoir le code",
+  "seConnecter": "Se connecter",
+  "consentementTitre": "Vos données personnelles",
+  "consentementTexte": "Daba enregistre vos ventes, votre stock et le crédit de vos clients pour vous rendre service (loi 09-08, déclaration CNDP). Aucune donnée nominative n'est transmise aux marques. Votre position n'est collectée que si vous l'acceptez, et seulement quand vous êtes « disponible » pour le dépannage. Vous pouvez retirer votre accord et demander vos données à tout moment.",
+  "consentementDonnees": "J'accepte le traitement de mes données",
+  "consentementGeo": "J'accepte la géolocalisation quand je suis disponible",
+  "consentementGeoDemande": "Pour recevoir les demandes de dépannage, Daba doit connaître votre position, seulement quand vous êtes disponible. Acceptez-vous ?",
+  "accepter": "Accepter",
+  "refuser": "Refuser",
+  "annuler": "Annuler",
+  "confirmer": "Confirmer",
+  "valider": "Valider",
+  "enregistrer": "Enregistrer",
+  "voir": "Voir",
+  "pinCreer": "Choisissez un code PIN à 4 chiffres",
+  "pinConfirmer": "Confirmez le code PIN",
+  "pinSaisir": "Entrez votre code PIN",
+  "pinFaux": "Code PIN incorrect",
+  "pinDifferent": "Les deux codes sont différents",
+  "pinOublie": "Code oublié ? Se reconnecter par SMS",
+  "ongletHanouts": "Hanouts",
+  "ongletStock": "Stock",
+  "ongletKarni": "Karni",
+  "ongletPromos": "Promos",
+  "ongletDepannage": "Dépannage",
+  "synchronisation": "Synchronisation",
+  "parametres": "Paramètres",
+  "deconnexion": "Se déconnecter",
+  "deconnexionConfirmer": "Se déconnecter de ce téléphone ?",
+  "deconnexionAvecAttente": "{n} opérations ne sont pas encore envoyées. Elles restent sur le téléphone et partiront à votre prochaine connexion. Se déconnecter ?",
+  "@deconnexionAvecAttente": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      }
+    }
+  },
+  "reconnexionRequise": "Session expirée : reconnectez-vous pour envoyer vos ventes. Vous pouvez continuer à vendre.",
+  "alerteDemande": "Rupture près de vous : {produit} × {quantite}",
+  "@alerteDemande": {
+    "placeholders": {
+      "produit": {
+        "type": "String"
+      },
+      "quantite": {
+        "type": "String"
+      }
+    }
+  },
+  "nouveauHanout": "Nouveau hanout",
+  "rechercherHanout": "Nom, gérant ou téléphone",
+  "liste": "Liste",
+  "carte": "Carte",
+  "aucunHanout": "Aucun hanout. Synchronisez ou créez-en un.",
+  "vendre": "Vendre",
+  "solde": "Solde",
+  "soldeActuel": "Solde actuel : {montant}",
+  "@soldeActuel": {
+    "placeholders": {
+      "montant": {
+        "type": "String"
+      }
+    }
+  },
+  "plafondValeur": "Plafond {montant}",
+  "@plafondValeur": {
+    "placeholders": {
+      "montant": {
+        "type": "String"
+      }
+    }
+  },
+  "delaiValeur": "Délai {jours} j",
+  "@delaiValeur": {
+    "placeholders": {
+      "jours": {
+        "type": "String"
+      }
+    }
+  },
+  "derniereCommande": "Dernière commande",
+  "versement": "Versement",
+  "plafondCredit": "Plafond de crédit",
+  "historique": "Historique",
+  "aucunMouvement": "Rien pour l'instant",
+  "nomHanout": "Nom du hanout",
+  "gerant": "Gérant",
+  "adresse": "Adresse",
+  "ville": "Ville",
+  "ice": "ICE",
+  "iceInvalide": "L'ICE compte 15 chiffres",
+  "champObligatoire": "{champ} est obligatoire",
+  "@champObligatoire": {
+    "placeholders": {
+      "champ": {
+        "type": "String"
+      }
+    }
+  },
+  "positionActuelle": "Enregistrer ma position actuelle comme position du hanout",
+  "venteA": "Vente · {hanout}",
+  "@venteA": {
+    "placeholders": {
+      "hanout": {
+        "type": "String"
+      }
+    }
+  },
+  "panierVide": "Ajoutez des produits",
+  "total": "Total",
+  "bonLivraison": "Bon de livraison",
+  "facture": "Facture",
+  "avoir": "Avoir",
+  "factureIndisponible": "La facture demande un ICE et vos mentions légales dans votre profil.",
+  "especes": "Espèces",
+  "cheque": "Chèque",
+  "chequeNumero": "N° du chèque",
+  "chequeBanque": "Banque",
+  "resteACredit": "Reste à crédit",
+  "toutEspeces": "Tout en espèces",
+  "toutCredit": "Tout à crédit",
+  "confirmationHanout": "Le hanout a confirmé la livraison",
+  "emettreBon": "Émettre le bon de livraison",
+  "emettreFacture": "Émettre la facture",
+  "reglementSuperieur": "Le règlement dépasse le total",
+  "prixUnitaire": "Prix unitaire",
+  "remise": "Remise",
+  "remisePromo": "Remise promo",
+  "tarifNegocie": "tarif négocié",
+  "stockInsuffisant": "stock {n}",
+  "@stockInsuffisant": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      }
+    }
+  },
+  "rechercherProduit": "Produit, marque ou code-barres",
+  "aucunProduit": "Aucun produit",
+  "regle": "Réglé",
+  "partagerPdf": "Partager le PDF (WhatsApp…)",
+  "smsApresSync": "Le hanout reçoit aussi un lien par SMS dès que la vente est synchronisée.",
+  "docAnnule": "Annulé par avoir",
+  "docPartiellementAnnule": "Partiellement annulé par avoir",
+  "promo": "promo",
+  "vendeur": "Vendeur",
+  "client": "Client",
+  "produit": "Produit",
+  "produitEnPhoto": "Produit en photo",
+  "quantite": "Quantité",
+  "montant": "Montant",
+  "statut": "Statut",
+  "scannerBonSortie": "Scanner un bon de sortie",
+  "chargementManuel": "Chargement manuel",
+  "mouvements": "Mouvements",
+  "bonACharger": "Bon {numero} à charger",
+  "@bonACharger": {
+    "placeholders": {
+      "numero": {
+        "type": "String"
+      }
+    }
+  },
+  "charger": "Charger",
+  "chargerCeBon": "Charger ce bon dans votre stock ?",
+  "stockCharge": "Stock chargé",
+  "stockVide": "Stock vide : scannez un bon de sortie.",
+  "ajouterProduits": "Ajoutez les produits chargés",
+  "mvtChargement": "Chargement",
+  "mvtVente": "Vente",
+  "mvtRetour": "Retour",
+  "mvtAjustement": "Ajustement",
+  "mvtPromo": "Promo",
+  "totalCreances": "Total des créances",
+  "aucuneCreance": "Aucun crédit en cours",
+  "plafond": "Plafond",
+  "delaiJours": "Délai maximal (jours)",
+  "avertissementCredit": "Ce hanout dépasse son plafond ou son délai de crédit. Vendre quand même à crédit ?",
+  "politiqueCredit": "Dépassement de crédit",
+  "politiqueCreditExplication": "Quand un hanout dépasse son plafond ou son délai",
+  "politiqueAvertir": "M'avertir, je décide",
+  "politiqueBloquer": "Bloquer la vente à crédit",
+  "mesReservations": "Mes réservations",
+  "aucunePromo": "Aucune promo pour l'instant",
+  "aucuneReservation": "Aucune réservation",
+  "jusquAu": "jusqu'au {date}",
+  "@jusquAu": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "remisePourcent": "-{pourcentage} %",
+  "@remisePourcent": {
+    "placeholders": {
+      "pourcentage": {
+        "type": "String"
+      }
+    }
+  },
+  "remisePrixNet": "Prix net {prix}",
+  "@remisePrixNet": {
+    "placeholders": {
+      "prix": {
+        "type": "String"
+      }
+    }
+  },
+  "remiseOfferte": "{achetee} achetés + {offerte} offerts",
+  "@remiseOfferte": {
+    "placeholders": {
+      "achetee": {
+        "type": "String"
+      },
+      "offerte": {
+        "type": "String"
+      }
+    }
+  },
+  "remisePalier": "Paliers : {paliers}",
+  "@remisePalier": {
+    "placeholders": {
+      "paliers": {
+        "type": "String"
+      }
+    }
+  },
+  "prixConseille": "Prix de revente conseillé : {prix} (indicatif)",
+  "@prixConseille": {
+    "placeholders": {
+      "prix": {
+        "type": "String"
+      }
+    }
+  },
+  "quantiteRestante": "{n} disponibles",
+  "@quantiteRestante": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      }
+    }
+  },
+  "plafondAmbulant": "Maximum {max} par vendeur, déjà réservé : {deja}",
+  "@plafondAmbulant": {
+    "placeholders": {
+      "max": {
+        "type": "String"
+      },
+      "deja": {
+        "type": "String"
+      }
+    }
+  },
+  "delaiRetrait": "À retirer sous {heures} h",
+  "@delaiRetrait": {
+    "placeholders": {
+      "heures": {
+        "type": "String"
+      }
+    }
+  },
+  "plafondAtteint": "Vous avez atteint le maximum autorisé, ou l'offre est épuisée.",
+  "reserver": "Réserver",
+  "reservationEnLigne": "La réservation exige une connexion internet.",
+  "reservation": "Réservation",
+  "statutReservee": "Réservée",
+  "statutRetiree": "Retirée",
+  "statutExpiree": "Expirée",
+  "statutRevendue": "Revendue",
+  "aRetirerAvant": "À retirer avant le {date}",
+  "@aRetirerAvant": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "disponible": "Disponible pour le dépannage",
+  "indisponible": "Indisponible",
+  "disponibleExplication": "Activez pendant la tournée pour recevoir les ruptures des hanouts proches. Votre position n'est envoyée que pendant que c'est activé.",
+  "aucuneDemande": "Aucune demande pour l'instant",
+  "activerPourRecevoir": "Activez la disponibilité pour recevoir les demandes",
+  "demandePriseParAutre": "Un autre vendeur a déjà pris cette demande",
+  "derniereVente": "dernière vente {date}",
+  "@derniereVente": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "repondreAvant": "Répondre avant {date}",
+  "@repondreAvant": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "enRoute": "Je suis en route",
+  "livrer": "Livrer et encaisser",
+  "statutEnAttente": "En attente",
+  "statutAcceptee": "Acceptée",
+  "statutEnRoute": "En route",
+  "statutLivree": "Livrée",
+  "statutSansReponse": "Sans réponse",
+  "horsLigne": "Hors ligne : vos gestes sont gardés sur le téléphone",
+  "enLigne": "En ligne",
+  "jamaisSynchronise": "Jamais synchronisé",
+  "derniereSync": "Dernière synchronisation : {date}",
+  "@derniereSync": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "operationsEnAttente": "{n} opérations en attente d'envoi",
+  "@operationsEnAttente": {
+    "placeholders": {
+      "n": {
+        "type": "String"
+      }
+    }
+  },
+  "synchroniserMaintenant": "Synchroniser maintenant",
+  "operationsRefusees": "Opérations refusées par le serveur",
+  "anomalies": "Anomalies signalées",
+  "appareil": "Appareil",
+  "versionCndp": "Version du texte CNDP accepté",
+  "erreurHorsLigne": "Pas de connexion internet. Réessayez quand le réseau revient.",
+  "erreurPermissionPosition": "Autorisez l'accès à la position dans les réglages du téléphone.",
+  "erreurFactureSansMentions": "Facture impossible : ICE et mentions légales manquants dans votre profil.",
+  "erreurCreditBloque": "Vente à crédit bloquée : plafond ou délai dépassé. Encaissez en espèces ou par chèque.",
+  "erreurRemisePlafond": "Remise au-delà du plafond autorisé",
+  "erreurQrAutreAmbulant": "Ce bon de sortie est adressé à un autre vendeur",
+  "erreurQrIllisible": "QR code illisible",
+  "erreurBonDejaCharge": "Ce bon est déjà chargé",
+  "erreurConflit": "Action impossible : la situation a changé (quantité épuisée, demande déjà prise…)",
+  "erreurPlafondPromo": "Maximum par vendeur dépassé pour cette promo",
+  "erreurTropDEssais": "Trop d'essais. Patientez quelques minutes.",
+  "erreurCodeInvalide": "Code incorrect",
+  "erreurCodeExpire": "Code expiré, demandez-en un nouveau",
+  "erreurConsentement": "Votre accord sur les données personnelles est nécessaire",
+  "erreurServeur": "Erreur du serveur ({code})",
+  "@erreurServeur": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "erreurInconnue": "Erreur inattendue",
+  "opCHARGEMENT": "Chargement",
+  "opRETOUR": "Retour",
+  "opINVENTAIRE": "Inventaire",
+  "opEMISSION_DOCUMENT": "Vente",
+  "opAVOIR": "Avoir",
+  "opVERSEMENT": "Versement",
+  "opTARIF": "Tarif",
+  "opHANOUT": "Nouveau hanout",
+  "opCREDIT_HANOUT": "Plafond de crédit",
+  "opPARAMETRES_AMBULANT": "Paramètres",
+  "anoSTOCK_NEGATIF": "Stock négatif",
+  "anoECART_SANS_MOTIF": "Écart d'inventaire sans motif",
+  "anoNUMEROTATION_TROU": "Trou dans la numérotation",
+  "anoNUMERO_EN_DOUBLE": "Numéro en double",
+  "anoPLAFOND_CREDIT_DEPASSE": "Plafond de crédit dépassé",
+  "anoDELAI_CREDIT_DEPASSE": "Délai de crédit dépassé",
+  "anoCHARGEMENT_EN_DOUBLE": "Bon de sortie chargé deux fois",
+  "anoPROMO_SANS_RETRAIT": "Vente promo au-delà de la quantité retirée",
+  "anoDEMANDE_NON_ATTRIBUEE": "Livraison d'une demande prise par un autre",
+  "anoREMISE_PLAFOND_DEPASSE": "Remise au-delà du plafond",
+  "erreurAutreAmbulant": "Un autre vendeur a des ventes pas encore envoyées sur ce téléphone. Il doit se reconnecter et synchroniser d'abord.",
+  "docRejete": "Refusé par le serveur : voir Synchronisation",
+  "tva": "TVA",
+  "tvaAssujetti": "Assujetti à la TVA",
+  "tvaNonAssujetti": "Non assujetti à la TVA"
+}
