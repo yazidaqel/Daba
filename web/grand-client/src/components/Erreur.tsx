@@ -1,3 +1,4 @@
+import { CircleAlert } from 'lucide-react'
 import { ApiError, codeProbleme } from '@/api/client'
 import { useI18n, type Cle } from '@/i18n'
 
@@ -26,15 +27,18 @@ export function Erreur({ erreur }: { erreur: unknown }) {
     details = (p.erreurs ?? []).map((e) => e.message)
   } else texte = t('erreur.reseau')
   return (
-    <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-      <p>{texte}</p>
-      {details.length > 0 && (
-        <ul className="mt-1 list-disc ps-5">
-          {details.map((d) => (
-            <li key={d}>{d}</li>
-          ))}
-        </ul>
-      )}
+    <div role="alert" className="flex gap-2 rounded-md border border-destructive/40 bg-destructive-soft p-3 text-sm text-destructive">
+      <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+      <div>
+        <p>{texte}</p>
+        {details.length > 0 && (
+          <ul className="mt-1 list-disc ps-5">
+            {details.map((d) => (
+              <li key={d}>{d}</li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { versCentimes, versDirhams, versE164 } from './format'
 import { ciblerRegions, remiseParDefaut, validerCampagne } from './campagne'
+import { bornes, classe, echelle, lisible } from './jetons'
 import { MESSAGES } from '@/messages'
 
 describe('format', () => {
@@ -46,5 +47,22 @@ describe('validerCampagne', () => {
 describe('messages', () => {
   it('aucun texte vide dans aucune langue', () => {
     for (const dico of Object.values(MESSAGES)) for (const v of Object.values(dico)) expect(v.trim()).not.toBe('')
+  })
+})
+
+describe('jetons de la carte', () => {
+  it('échelle séquentielle, classes et légende', () => {
+    expect(echelle('#FDECEA', '#B42318', 3)).toEqual(['#fdecea', '#d98881', '#b42318'])
+    expect([0, 1, 2, 3, 4, 5, 6, 7, 8].map((v) => classe(v, 8, 4))).toEqual([0, 0, 0, 1, 1, 2, 2, 3, 3])
+    expect(bornes(8, 4)).toEqual([
+      { classe: 0, de: 1, a: 2 },
+      { classe: 1, de: 3, a: 4 },
+      { classe: 2, de: 5, a: 6 },
+      { classe: 3, de: 7, a: 8 },
+    ])
+    // Moins de valeurs que de classes : les classes vides disparaissent, chaque valeur garde la sienne.
+    for (const b of bornes(2, 4)) for (let v = b.de; v <= b.a; v++) expect(classe(v, 2, 4)).toBe(b.classe)
+    expect(lisible('#B42318', ['#1D2B2A', '#FFFDF8'])).toBe('#FFFDF8')
+    expect(lisible('#FDECEA', ['#1D2B2A', '#FFFDF8'])).toBe('#1D2B2A')
   })
 })

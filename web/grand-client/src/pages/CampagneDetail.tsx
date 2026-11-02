@@ -98,7 +98,7 @@ export function CampagneDetail({ id }: { id: string }) {
         {CYCLE.map((etape, i) => (
           <li
             key={etape.join()}
-            className={`rounded-full border px-3 py-1 ${i === rangActuel ? 'border-primary bg-primary text-primary-foreground' : i < rangActuel ? 'bg-secondary' : 'text-muted-foreground'}`}
+            className={`rounded-full border px-3 py-1 ${i === rangActuel ? 'border-promo bg-promo font-medium text-promo-foreground' : i < rangActuel ? 'border-promo-soft bg-promo-soft text-promo-soft-foreground' : 'text-muted-foreground'}`}
           >
             {etape.map((s) => t(`statut.${s}`)).join(' / ')}
           </li>
@@ -202,6 +202,7 @@ export function CampagneDetail({ id }: { id: string }) {
                               <div className="mt-2 flex gap-1">
                                 <Button
                                   size="sm"
+                                  variant="outline"
                                   onClick={() =>
                                     action(async () =>
                                       ok(await api.POST('/v1/depots/{depotId}/reponse-marque', { params: { path: { depotId: d.id } }, body: { decision: 'ACCEPTER' } })),
@@ -289,8 +290,8 @@ function Barres({ e }: { e: S['EtapesEntonnoir'] }) {
       {ETAPES.map((k) => (
         <div key={k} className="grid grid-cols-[8rem_1fr_auto] items-center gap-2 text-sm">
           <span>{t(`entonnoir.${k}`)}</span>
-          <div className="h-5 rounded bg-secondary">
-            <div className="h-5 rounded bg-primary" style={{ inlineSize: `${Math.min(100, (100 * e[k]) / base)}%` }} />
+          <div className="h-5 rounded bg-promo-soft">
+            <div className="h-5 rounded bg-promo" style={{ inlineSize: `${Math.min(100, (100 * e[k]) / base)}%` }} />
           </div>
           <span className="tabular-nums">
             {nombre(e[k])} · {t('unite.pourcent', { n: nombre(Math.round((100 * e[k]) / base)) })}
@@ -401,7 +402,7 @@ function Affectation({
               id: g.id,
               lat: g.position.lat,
               lon: g.position.lon,
-              couleur: g.id === choisi?.id ? '#0f766e' : dejaProposes.has(g.id) ? '#b45309' : undefined,
+              couleur: g.id === choisi?.id ? 'primary' : dejaProposes.has(g.id) ? 'promo' : undefined,
             }))}
             onPoint={(gid) => setChoisi(liste.find((g) => g.id === gid))}
           />
