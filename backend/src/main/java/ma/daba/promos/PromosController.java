@@ -153,7 +153,7 @@ class PromosController {
 	@ResponseStatus(HttpStatus.CREATED)
 	@Roles(Role.GROSSISTE)
 	Promos.Reservation validerRetrait(Appelant appelant, @Valid @RequestBody Promos.RetraitSaisie saisie) {
-		return promos.retirer(appelant.organisationId(), appelant.utilisateurId(), saisie);
+		return promos.retirer(appelant.organisationId(), appelant.utilisateurId(), appelant.appareilId(), saisie);
 	}
 
 	// ---------------------------------------------------------------- ambulant

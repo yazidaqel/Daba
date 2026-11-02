@@ -176,7 +176,7 @@ public class Ventes implements ProduitsHabituels {
 		verifierNouveau(e.documentId());
 		var hanout = referentiel.hanout(e.hanoutId()).orElseThrow(() -> Probleme.regle(null, "Hanout inconnu"));
 		var lignes = lignes(e.lignes(), nomsCampagnes);
-		var anomalies = new ArrayList<>(numerotation(e.type(), e.numero(), e.sequence()));
+		var anomalies = new ArrayList<>(numerotation(geste, e.type(), e.numero(), e.sequence()));
 
 		long total = lignes.stream().mapToLong(LigneDocument::montant).sum();
 		long regle = e.reglements() == null ? 0 : e.reglements().stream().mapToLong(Reglement::montant).sum();
@@ -244,7 +244,7 @@ public class Ventes implements ProduitsHabituels {
 		if (total <= 0 || total > restant) {
 			throw Probleme.regle("RG-C4", "Avoir de " + total + " pour un restant à annuler de " + restant);
 		}
-		var anomalies = numerotation("AVOIR", a.numero(), a.sequence());
+		var anomalies = numerotation(geste, "AVOIR", a.numero(), a.sequence());
 		var compte = compteId(geste.ambulantId(), geste.organisationId(), hanoutId);
 		jdbc.sql("""
 				INSERT INTO document (id, type, numero, serie, sequence, appareil_id, ambulant_id, organisation_id, hanout_id,
@@ -305,13 +305,17 @@ public class Ventes implements ProduitsHabituels {
 	}
 
 	/**
-	 * RG-F1 : numéro {@code PREFIXE-SERIE-SEQUENCE} cohérent avec le type ; un doublon ou un trou dans
-	 * la série de l'émetteur est signalé, jamais refusé (la pièce existe sur le terrain).
+	 * RG-F1 : numéro {@code PREFIXE-SERIE-SEQUENCE} cohérent avec le type et le préfixe attribué à
+	 * l'appareil ; un doublon ou un trou dans la série de l'émetteur est signalé, jamais refusé (la
+	 * pièce existe sur le terrain).
 	 */
-	List<Anomalie> numerotation(String type, String numero, long sequence) {
+	List<Anomalie> numerotation(Geste geste, String type, String numero, long sequence) {
 		var m = NUMERO.matcher(numero);
 		if (!m.matches() || !m.group(2).equals(SERIES.get(type)) || Long.parseLong(m.group(3)) != sequence) {
 			throw Probleme.requete("Numéro " + numero + " incohérent avec le type " + type + " et la séquence " + sequence);
+		}
+		if (!comptes.prefixe(geste.appareilId()).map(m.group(1)::equals).orElse(false)) {
+			throw Probleme.regle("RG-F1", "Le préfixe " + m.group(1) + " n'est pas celui attribué à cet appareil");
 		}
 		var anomalies = new ArrayList<Anomalie>();
 		var serie = serie(numero);

@@ -515,8 +515,10 @@ paths:
         l'appareil : la rejouer renvoie `DEJA_APPLIQUEE` sans nouvel effet (idempotence).
         Une opération qui reflète un fait terrain (vente, versement, chargement) n'est jamais refusée
         pour une règle de gestion : elle est appliquée et signalée en anomalie (RG-S1, RG-C3, RG-F1…).
-        Seule une opération mal formée (dont une FACTURE sans `mentionsLegales`, RG-F2) ou qui
-        référence un objet inconnu est `REJETEE` ; elle est journalisée et
+        Seule une opération mal formée (dont une FACTURE sans `mentionsLegales`, RG-F2, un numéro
+        dont le préfixe n'est pas celui de l'appareil, RG-F1, ou un AVOIR supérieur au restant à
+        annuler du document d'origine, RG-C4) ou qui référence un objet inconnu est `REJETEE` ;
+        elle est journalisée et
         l'appareil doit l'afficher. Aucun écrasement silencieux : tout conflit est
         résolu côté serveur, journalisé et décrit dans le résultat.
       x-roles: [AMBULANT]
@@ -1242,6 +1244,7 @@ paths:
       description: |
         Pivot du flux promo (§7.2, RG-P1) : le dépôt passe à RECU, la campagne à ACTIVE si c'est
         le premier dépôt confirmé, et les ambulants ciblés sont notifiés (moins de 2 minutes, §10).
+        Si la campagne n'a pas encore commencé, l'offre est publiée et notifiée à son début.
         Seulement à l'état ACCEPTE (sinon 409).
       x-roles: [GROSSISTE]
       parameters:
@@ -2698,6 +2701,7 @@ components:
         qu'elle les connaît au moment de l'émission, dans `mentionsLegales` : une facture émise
         hors ligne reste valable même si le profil change avant la synchronisation (RG-F1, RG-C4).
         Un document rejeté (référence inconnue) laisse un trou qui remonte en NUMEROTATION_TROU.
+        Le préfixe du numéro doit être `Session.prefixeNumerotation` de l'appareil qui pousse (sinon REJETEE, RG-F1).
         Une FACTURE sans `mentionsLegales` ne peut venir que d'une app non conforme : REJETEE.
         Le reste à payer (total − règlements) passe au crédit du hanout. Avec `demandeDepannageId`,
         la vente est liée à la demande, qui passe à LIVREE (RG-D4).
@@ -2852,7 +2856,9 @@ components:
       type: object
       description: |
         Seul moyen d'annuler tout ou partie d'un document (RG-C4). Sans `lignes`, annule le
-        document entier. Numéroté dans la série AV de l'appareil (RG-F1).
+        restant du document (ses lignes sont reprises pour la traçabilité promo). Numéroté dans la
+        série AV de l'appareil (RG-F1). Un avoir dont le total dépasse le restant à annuler (total du
+        document moins les avoirs déjà émis) est REJETE (`regle` RG-C4) : l'app ne doit pas le proposer.
       required: [documentId, documentOrigineId, numero, sequence, motif]
       properties:
         documentId:
@@ -4175,7 +4181,7 @@ components:
             appareilId:
               type: string
               format: uuid
-              description: Appareil (ou navigateur) du grossiste qui scanne ; porté par le mouvement PROMO (RG-S2)
+              description: Appareil (ou navigateur) du grossiste qui scanne, celui de la session (403 sinon) ; porté par le mouvement PROMO (RG-S2)
             quantiteRemise:
               type: integer
               minimum: 1

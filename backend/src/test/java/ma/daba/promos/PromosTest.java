@@ -153,10 +153,12 @@ class PromosTest extends TestIntegration {
 		var autre = grossiste();
 		assertThat(post(autre, "/v1/retraits", m("qrJeton", qr, "appareilId", autre.appareilId(), "quantiteRemise", 5)))
 			.hasStatus(422).bodyJson().extractingPath("$.regle").isEqualTo("RG-P4");
-		assertThat(post(s.grossiste(), "/v1/retraits", m("qrJeton", "faux.qr.jeton", "appareilId", UUID.randomUUID(), "quantiteRemise", 1)))
+		assertThat(post(s.grossiste(), "/v1/retraits", m("qrJeton", "faux.qr.jeton", "appareilId", s.grossiste().appareilId(), "quantiteRemise", 1)))
 			.hasStatus(422);
 		assertThat(lire(post(s.grossiste(), "/v1/retraits/apercu", m("qrJeton", qr))).get("quantiteReservee").asInt()).isEqualTo(5);
 
+		assertThat(post(s.grossiste(), "/v1/retraits", m("qrJeton", qr, "appareilId", UUID.randomUUID(), "quantiteRemise", 4)))
+			.hasStatus(403);
 		var retrait = lire(post(s.grossiste(), "/v1/retraits", m("qrJeton", qr, "appareilId", s.grossiste().appareilId(), "quantiteRemise", 4)));
 		assertThat(retrait.get("statut").asString()).isEqualTo("RETIREE");
 		assertThat(post(s.grossiste(), "/v1/retraits", m("qrJeton", qr, "appareilId", s.grossiste().appareilId(), "quantiteRemise", 1)))
@@ -211,10 +213,10 @@ class PromosTest extends TestIntegration {
 		var ambulant = ambulant();
 		var r1 = lire(post(ambulant, "/v1/reservations", m("id", UUID.randomUUID(), "offreId", offre(ambulant, s), "quantite", 3)));
 		var r2 = lire(post(ambulant, "/v1/reservations", m("id", UUID.randomUUID(), "offreId", offre(ambulant, s), "quantite", 2)));
-		post(s.grossiste(), "/v1/retraits", m("qrJeton", r1.get("qrJeton").asString(), "appareilId", UUID.randomUUID(), "quantiteRemise", 3));
+		post(s.grossiste(), "/v1/retraits", m("qrJeton", r1.get("qrJeton").asString(), "appareilId", s.grossiste().appareilId(), "quantiteRemise", 3));
 		// Le plafond de la ligne est abaissé entre-temps par la marque (cas limite) : le retrait est recontrôlé.
 		jdbc.sql("UPDATE campagne_ligne SET quantite_max_par_ambulant = 4 WHERE campagne_id = :c").param("c", UUID.fromString(s.campagneId())).update();
-		assertThat(post(s.grossiste(), "/v1/retraits", m("qrJeton", r2.get("qrJeton").asString(), "appareilId", UUID.randomUUID(), "quantiteRemise", 2)))
+		assertThat(post(s.grossiste(), "/v1/retraits", m("qrJeton", r2.get("qrJeton").asString(), "appareilId", s.grossiste().appareilId(), "quantiteRemise", 2)))
 			.hasStatus(422).bodyJson().extractingPath("$.regle").isEqualTo("RG-P3");
 	}
 
@@ -242,6 +244,33 @@ class PromosTest extends TestIntegration {
 		assertThat(get(grandClient(), "/v1/depots/" + d1)).hasStatus(404);
 		assertThat(get(g2, "/v1/depots/" + d1)).hasStatus(404);
 		assertThat(get(grandClient(), "/v1/campagnes/" + campagneId)).hasStatus(404);
+	}
+
+	@Test
+	void rgP1_campagneFutureAnnonceeSeulementASonDebut() {
+		var marque = grandClient();
+		var grossiste = grossiste();
+		var produit = produit(marque.organisationId());
+		var saisie = campagne(produit, 50, 5);
+		saisie.put("debut", Instant.now().plus(2, ChronoUnit.HOURS).toString());
+		var campagneId = lire(post(marque, "/v1/campagnes", saisie)).get("id").asString();
+		var depotId = lire(post(marque, "/v1/campagnes/" + campagneId + "/depots", m("grossisteId", grossiste.organisationId(),
+				"lignes", List.of(m("produitId", produit, "quantite", 10))))).get("id").asString();
+		post(grossiste, "/v1/depots/" + depotId + "/reponse", m("decision", "ACCEPTER"));
+		recevoir(grossiste, depotId, produit, 10);
+		var ambulant = ambulant();
+		assertThat(lire(get(ambulant, "/v1/promos")).findValuesAsString("depotId")).doesNotContain(depotId);
+		assertThat(jdbc.sql("SELECT annonce_le FROM depot WHERE id = :d").param("d", UUID.fromString(depotId))
+			.query(java.sql.Timestamp.class).optional()).isEmpty();
+
+		jdbc.sql("UPDATE campagne SET debut = now() - interval '1 minute' WHERE id = :c").param("c", UUID.fromString(campagneId)).update();
+		promos.echeances();
+		assertThat(lire(get(ambulant, "/v1/promos")).findValuesAsString("depotId")).contains(depotId);
+		var offres = lire(get(ambulant, "/v1/sync/changements?limite=1000")).get("changements").findParents("entite").stream()
+			.filter(c -> c.get("entite").asString().equals("PROMO") && c.get("action").asString().equals("UPSERT")
+					&& c.get("donnees").get("depotId").asString().equals(depotId))
+			.count();
+		assertThat(offres).isEqualTo(1);
 	}
 
 	@Test

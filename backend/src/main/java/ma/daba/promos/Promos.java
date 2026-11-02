@@ -499,8 +499,7 @@ public class Promos {
 			.param("photo", photoId).param("c", reception.commentaire()).param("id", depotId).update();
 		jdbc.sql("UPDATE campagne SET statut = 'ACTIVE' WHERE id = (SELECT campagne_id FROM depot WHERE id = :id) AND statut IN ('PROPOSEE', 'EPUISEE')")
 			.param("id", depotId).update();
-		publierOffres(depotId);
-		evenements.publishEvent(new ReceptionConfirmee(depotId));
+		annoncer("d.id = :id", depotId);
 		return depot(depotId);
 	}
 
@@ -723,7 +722,10 @@ public class Promos {
 	 * remise au disponible et crée le mouvement PROMO du stock embarqué (RG-S3).
 	 */
 	@Transactional
-	Reservation retirer(UUID grossisteOrganisation, UUID grossisteUtilisateur, RetraitSaisie saisie) {
+	Reservation retirer(UUID grossisteOrganisation, UUID grossisteUtilisateur, UUID appareilSession, RetraitSaisie saisie) {
+		if (!saisie.appareilId().equals(appareilSession)) {
+			throw Probleme.interdit("appareil-different", "appareilId différent de l'appareil de la session (RG-S2)");
+		}
 		var r = reservationDuQr(grossisteOrganisation, saisie.qrJeton());
 		if (saisie.quantiteRemise() > r.quantiteReservee()) {
 			throw Probleme.regle("RG-P4", "Quantité remise supérieure à la quantité réservée");
@@ -813,6 +815,22 @@ public class Promos {
 
 	// ---------------------------------------------------------------- journal et échéances
 
+	/**
+	 * Dépôts reçus d'une campagne en cours : offres publiées aux ambulants et notification, une seule
+	 * fois. Une campagne qui commence plus tard est annoncée par {@link #echeances()} à son début.
+	 */
+	private void annoncer(String filtre, UUID depotId) {
+		jdbc.sql("""
+				UPDATE depot d SET annonce_le = now() FROM campagne c
+				WHERE c.id = d.campagne_id AND d.statut = 'RECU' AND d.annonce_le IS NULL
+				  AND c.statut = 'ACTIVE' AND c.debut <= now() AND c.fin > now()""" + " AND " + filtre + " RETURNING d.id")
+			.param("id", depotId).query(UUID.class).list()
+			.forEach(id -> {
+				publierOffres(id);
+				evenements.publishEvent(new ReceptionConfirmee(id));
+			});
+	}
+
 	private void publierOffres(UUID depotId) {
 		jdbc.sql("SELECT id FROM depot_ligne WHERE depot_id = :d").param("d", depotId).query(UUID.class).list()
 			.forEach(this::publierOffre);
@@ -836,6 +854,7 @@ public class Promos {
 	@Scheduled(fixedDelay = 60_000)
 	@Transactional
 	public void echeances() {
+		annoncer("d.annonce_le IS NULL", null);
 		jdbc.sql("UPDATE reservation SET statut = 'EXPIREE' WHERE statut = 'RESERVEE' AND expire_le <= now() RETURNING id, offre_id")
 			.query((rs, i) -> Map.entry(rs.getObject(1, UUID.class), rs.getObject(2, UUID.class))).list()
 			.forEach(r -> {

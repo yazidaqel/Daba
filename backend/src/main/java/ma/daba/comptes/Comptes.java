@@ -84,6 +84,11 @@ public class Comptes implements Acces.VerificationCompte {
 			.optional().orElse("—");
 	}
 
+	/** Préfixe de numérotation attribué à l'appareil d'un ambulant (RG-F1). */
+	public Optional<String> prefixe(UUID appareilId) {
+		return jdbc.sql("SELECT prefixe FROM appareil WHERE id = :a").param("a", appareilId).query(String.class).optional();
+	}
+
 	public String nomOrganisation(UUID organisationId) {
 		return jdbc.sql("SELECT nom FROM organisation WHERE id = :o").param("o", organisationId).query(String.class)
 			.optional().orElse("—");

@@ -158,6 +158,17 @@ class SyncTest extends TestIntegration {
 	}
 
 	@Test
+	void rgF1_prefixeDUnAutreAppareilRejete() {
+		var ambulant = ambulant();
+		var produit = produit();
+		var r = pousser(ambulant, chargement(produit, 5), op("EMISSION_DOCUMENT", m("documentId", UUID.randomUUID(),
+				"type", "BON_LIVRAISON", "numero", "ZZZZ-BL-000001", "sequence", 1, "hanoutId", hanout(33.5, -7.6),
+				"lignes", List.of(m("nature", "ARTICLE", "produitId", produit, "quantite", 1, "prixUnitaire", 100)))));
+		assertThat(r.get(1).get("statut").asString()).isEqualTo("REJETEE");
+		assertThat(r.get(1).get("erreur").get("regle").asString()).isEqualTo("RG-F1");
+	}
+
+	@Test
 	void rgF2_factureSansMentionsLegalesRejetee() {
 		var ambulant = ambulant();
 		var produit = produit();
