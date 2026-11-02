@@ -49,8 +49,9 @@ export default defineConfig({
         lang: 'fr',
         start_url: '/',
         display: 'standalone',
-        theme_color: '#0f766e',
-        background_color: '#ffffff',
+        // Palette Zellige (docs/charte-graphique.md) : primary et background.
+        theme_color: '#0F5E59',
+        background_color: '#F6F1E7',
       },
       workbox: {
         navigateFallback: '/index.html',

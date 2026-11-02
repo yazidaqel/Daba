@@ -1,7 +1,7 @@
-import { CircleCheck, Download, FileText, Minus, PackageCheck, PackageX, Plus, Scale, Undo2 } from 'lucide-react'
+import { Ban, CircleCheck, Download, FileText, Minus, PackageCheck, PackageX, Plus, Scale, Tag, Undo2 } from 'lucide-react'
 import { useState } from 'react'
 import { api, type S } from '@/api/client'
-import { Alerte, carte, cleErreur, Etat, Vide } from '@/components/commun'
+import { Alerte, carte, cleErreur, Etat, MontantDu, Vide } from '@/components/commun'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -59,7 +59,10 @@ export function Documents({ ambulantId }: { ambulantId?: string }) {
                       <bdi>{d.numero}</bdi> · {date(d.emisLe)}
                     </span>
                     {d.statut !== 'EMIS' && (
-                      <span className="block text-sm font-semibold text-destructive">{t(`doc.${d.statut}`)}</span>
+                      <span className="flex items-center gap-1 text-sm font-semibold text-danger">
+                        <Ban className="size-4" aria-hidden />
+                        {t(`doc.${d.statut}`)}
+                      </span>
                     )}
                   </span>
                   <span className="font-bold">{montant(d.total)}</span>
@@ -138,7 +141,12 @@ export function DocumentDetail({ id }: { id: string }) {
           <bdi>{d.numero}</bdi> · {date(d.emisLe)}
         </p>
         <p className="font-semibold">{d.ambulant.nom}</p>
-        {d.statut !== 'EMIS' && <p className="font-semibold text-destructive">{t(`doc.${d.statut}`)}</p>}
+        {d.statut !== 'EMIS' && (
+          <p className="flex items-center gap-2 font-semibold text-danger">
+            <Ban className="shrink-0" aria-hidden />
+            {t(`doc.${d.statut}`)}
+          </p>
+        )}
         {d.documentOrigineId && (
           <Lien vers={`/documents/${d.documentOrigineId}`} className="block font-semibold text-primary underline">
             {t('doc.origine')}
@@ -148,11 +156,18 @@ export function DocumentDetail({ id }: { id: string }) {
 
       <ul className="divide-y divide-border">
         {d.lignes.map((l, i) => (
-          <li key={i} className="flex items-center gap-3 py-3">
+          <li key={i} className={cn('flex items-center gap-3 py-3', l.campagneNom && 'bg-promo-soft px-2')}>
             <span className="flex-1">
               <span className="block font-semibold">
                 {l.nature === 'ARTICLE' ? libelle(l.libelle) : libelle(l.campagneNom) || t('doc.remise')}
               </span>
+              {/* Ligne promo (RG-F3) : le safran est réservé aux promotions. */}
+              {l.campagneNom && (
+                <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-promo px-2 text-sm font-semibold text-promo-foreground">
+                  <Tag className="size-4" aria-hidden />
+                  {libelle(l.campagneNom)}
+                </span>
+              )}
               {l.nature === 'ARTICLE' && l.prixUnitaire !== undefined && (
                 <span className="block text-sm text-muted-foreground">
                   {l.quantite} × {montant(l.prixUnitaire)}
@@ -170,18 +185,20 @@ export function DocumentDetail({ id }: { id: string }) {
         <dt>{t('doc.regle')}</dt>
         <dd className="text-end">{montant(d.montantRegle)}</dd>
         <dt>{t('doc.credit')}</dt>
-        <dd className="text-end">{montant(d.montantCredit)}</dd>
+        <dd className="text-end">
+          <MontantDu du={d.montantCredit > 0}>{montant(d.montantCredit)}</MontantDu>
+        </dd>
       </dl>
 
       {d.confirmationHanout && (
-        <p className="flex items-center gap-2 text-succes">
+        <p className="flex items-center gap-2 text-success">
           <CircleCheck />
           {t('doc.confirmeLe', { date: date(d.confirmationHanout.le) })}
         </p>
       )}
 
       {reception && (
-        <p className={cn('flex items-center gap-2', reception.conforme ? 'text-succes' : 'text-destructive')}>
+        <p className={cn('flex items-center gap-2', reception.conforme ? 'text-success' : 'text-danger')}>
           {reception.conforme ? <CircleCheck /> : <PackageX />}
           {t(reception.conforme ? 'doc.confirmeLe' : 'doc.ecartLe', { date: date(reception.le) })}
         </p>

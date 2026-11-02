@@ -79,7 +79,8 @@ export function Contestation({
           <label
             key={m}
             className={cn(
-              buttonVariants({ variant: motif === m ? 'default' : 'outline' }),
+              buttonVariants({ variant: 'outline' }),
+              motif === m && 'border-primary bg-primary-soft text-primary',
               'cursor-pointer justify-start has-focus-visible:ring-[3px] has-focus-visible:ring-ring/50',
             )}
           >

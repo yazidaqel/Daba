@@ -1,4 +1,4 @@
-import { CircleCheck, CircleDashed, FileText, Phone, SearchX } from 'lucide-react'
+import { CircleDashed, Clock, FileText, PackageCheck, Phone, SearchX, Truck, UserCheck } from 'lucide-react'
 import { useEffect } from 'react'
 import { api, type S } from '@/api/client'
 import { carte, Etat, PhotoProduit } from '@/components/commun'
@@ -14,18 +14,21 @@ const TERMINAUX: Statut[] = ['LIVREE', 'SANS_REPONSE']
 // Pas de push dans la PWA (§6) : on interroge le serveur tant que la demande avance.
 const SONDAGE_MS = 15_000
 
-const couleurs: Record<Statut, string> = {
-  EN_ATTENTE: 'bg-muted text-foreground',
-  ACCEPTEE: 'bg-secondary text-secondary-foreground',
-  EN_ROUTE: 'bg-secondary text-secondary-foreground',
-  LIVREE: 'bg-succes text-white',
-  SANS_REPONSE: 'bg-destructive text-white',
+// Un état = une icône et un libellé, jamais la couleur seule (charte graphique).
+const ETATS: Record<Statut, { Icone: typeof Clock; couleur: string }> = {
+  EN_ATTENTE: { Icone: Clock, couleur: 'bg-muted text-foreground' },
+  ACCEPTEE: { Icone: UserCheck, couleur: 'bg-primary-soft text-primary' },
+  EN_ROUTE: { Icone: Truck, couleur: 'bg-primary-soft text-primary' },
+  LIVREE: { Icone: PackageCheck, couleur: 'bg-success-soft text-success' },
+  SANS_REPONSE: { Icone: SearchX, couleur: 'bg-danger-soft text-danger' },
 }
 
 export function BadgeStatut({ statut }: { statut: Statut }) {
   const { t } = useI18n()
+  const { Icone, couleur } = ETATS[statut]
   return (
-    <span className={cn('shrink-0 rounded-full px-3 py-1 text-sm font-semibold', couleurs[statut])}>
+    <span className={cn('inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold', couleur)}>
+      <Icone className="size-4" aria-hidden />
       {t(`statut.${statut}`)}
     </span>
   )
@@ -59,8 +62,8 @@ export function Demande({ id }: { id: string }) {
       </div>
 
       {d.statut === 'SANS_REPONSE' ? (
-        <output className={cn(carte, 'block space-y-3 border-destructive')}>
-          <p className="flex items-center gap-2 text-lg font-bold text-destructive">
+        <output className={cn(carte, 'block space-y-3 border-danger')}>
+          <p className="flex items-center gap-2 text-lg font-bold text-danger">
             <SearchX />
             {t('statut.SANS_REPONSE')}
           </p>
@@ -75,9 +78,10 @@ export function Demande({ id }: { id: string }) {
             const fait = i <= rang
             const le = d.historique.find((h) => h.statut === s)?.le ?? (i === 0 ? d.creeLe : undefined)
             const libelleEtape = i === 0 && rang > 0 ? t('demande.envoyee') : t(`statut.${s}`)
+            const { Icone } = ETATS[s]
             return (
               <li key={s} className={cn('flex items-center gap-3', !fait && 'text-muted-foreground')}>
-                {fait ? <CircleCheck className="size-8 text-succes" /> : <CircleDashed className="size-8" />}
+                {fait ? <Icone className="size-8 shrink-0 text-success" /> : <CircleDashed className="size-8 shrink-0" />}
                 <span className="flex-1 font-semibold">
                   {libelleEtape}
                   {i === 0 && rang === 0 && d.rayonElargi && (

@@ -53,33 +53,108 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
-  --color-succes: var(--succes);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
+  --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-promo: var(--promo);
+  --color-promo-soft: var(--promo-soft);
+  --color-promo-foreground: var(--promo-foreground);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-foreground: var(--danger-foreground);
+}
+
+/* Palette Zellige : valeurs de docs/charte-graphique.md, seule source des couleurs.
+   Les variables shadcn/ui en dérivent ; les écrans n'utilisent que ces jetons. */
+:root {
+  color-scheme: light;
+  --primary: #0f5e59;
+  --primary-hover: #0b4a46;
+  --primary-soft: #e6f2f1;
+  --primary-foreground: #ffffff; /* on-primary */
+  --promo: #e0a526;
+  --promo-soft: #fbefd3;
+  --promo-foreground: #3d2a02; /* on-promo */
+  --background: #f6f1e7;
+  --card: #fffdf8; /* surface */
+  --border: #e4dccb;
+  --foreground: #1d2b2a; /* text */
+  --muted-foreground: #6b6559; /* text-muted */
+  --success: #2e7d32;
+  --success-soft: #e6f2e6;
+  --warning: #b45309;
+  --warning-soft: #fdebd8;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  /* Texte sur un état plein : absent de la charte, blanc en clair (≥ 4,5:1 sur les trois). */
+  --success-foreground: #ffffff;
+  --warning-foreground: #ffffff;
+  --danger-foreground: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --primary: #4fb3a9;
+    --primary-hover: #6cc4bb;
+    --primary-soft: #123b38;
+    --primary-foreground: #062b29;
+    --promo: #efc764;
+    --promo-soft: #3a2c0a;
+    --promo-foreground: #3d2a02;
+    --background: #121a19;
+    --card: #1a2423;
+    --border: #2c3a38;
+    --foreground: #ece7dc;
+    --muted-foreground: #a39d90;
+    --success: #6bbf6f;
+    --success-soft: #16301a;
+    --warning: #f0a060;
+    --warning-soft: #3a2410;
+    --danger: #f2867a;
+    --danger-soft: #3a1714;
+    /* En sombre, les états pleins sont clairs : texte au ton du fond. */
+    --success-foreground: #121a19;
+    --warning-foreground: #121a19;
+    --danger-foreground: #121a19;
+  }
 }
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --primary: #0f766e;
-  --primary-foreground: #ffffff;
-  --secondary: #f0fdfa;
-  --secondary-foreground: #134e4a;
-  --muted: #f5f5f5;
-  --muted-foreground: #525252;
-  --accent: #f5f5f5;
-  --destructive: #b91c1c;
-  --succes: #15803d;
-  --border: #d4d4d4;
-  --ring: #0f766e;
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--primary-soft);
+  --secondary-foreground: var(--primary);
+  --muted: var(--background);
+  --accent: var(--primary-soft);
+  --accent-foreground: var(--foreground);
+  --destructive: var(--danger);
+  --destructive-foreground: var(--danger-foreground);
+  --input: var(--border);
+  --ring: var(--primary);
 }
 
 body {
