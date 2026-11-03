@@ -41,6 +41,10 @@ public class Comptes implements Acces.VerificationCompte, Acces.Organisations {
 	public record ConsentementEnregistre(UUID utilisateurId, boolean traitementDonnees, boolean geolocalisation) {
 	}
 
+	/** Compte désactivé ou appareil révoqué par l'administrateur : la disponibilité de dépannage est coupée. */
+	public record AccesRetire(UUID utilisateurId) {
+	}
+
 	public enum CibleLien {
 		DOCUMENT, RELEVE, DEMANDE_DEPANNAGE
 	}
@@ -77,27 +81,37 @@ public class Comptes implements Acces.VerificationCompte, Acces.Organisations {
 
 	@Override
 	public void verifier(Appelant appelant, boolean consentementExige) {
-		record Etat(boolean revoque, boolean sessionOuverte, boolean consenti) {
+		record Etat(boolean revoque, boolean desactive, boolean sessionOuverte, boolean consenti) {
 		}
 		var etat = jdbc.sql("""
-				SELECT a.revoque, a.session IS NOT NULL AND a.session = :session AS ouverte,
+				SELECT a.revoque, u.desactive_le IS NOT NULL AS desactive, a.session IS NOT NULL AND a.session = :session AS ouverte,
 				  (SELECT c.traitement_donnees FROM consentement c
 				   WHERE c.utilisateur_id = a.utilisateur_id ORDER BY c.id DESC LIMIT 1) AS consenti
-				FROM appareil a WHERE a.id = :appareil AND a.utilisateur_id = :u
+				FROM appareil a JOIN utilisateur u ON u.id = a.utilisateur_id WHERE a.id = :appareil AND a.utilisateur_id = :u
 				""")
 			.param("appareil", appelant.appareilId()).param("u", appelant.utilisateurId()).param("session", appelant.sessionId())
-			.query((rs, i) -> new Etat(rs.getBoolean("revoque"), rs.getBoolean("ouverte"),
+			.query((rs, i) -> new Etat(rs.getBoolean("revoque"), rs.getBoolean("desactive"), rs.getBoolean("ouverte"),
 					Boolean.TRUE.equals(rs.getObject("consenti"))))
 			.optional();
 		if (etat.isEmpty() || etat.get().revoque()) {
 			throw Probleme.interdit("appareil-revoque", "Appareil déconnecté : reconnectez-vous");
 		}
+		if (etat.get().desactive()) {
+			throw desactive();
+		}
 		if (!etat.get().sessionOuverte()) {
 			throw Probleme.nonAuthentifie();
 		}
+		// Dernier appel authentifié, pour le support (à 5 minutes près : une écriture au plus par fenêtre).
+		jdbc.sql("UPDATE appareil SET vu_le = now() WHERE id = :a AND (vu_le IS NULL OR vu_le < now() - interval '5 minutes')")
+			.param("a", appelant.appareilId()).update();
 		if (consentementExige && !etat.get().consenti() && !appelant.a(Appelant.Role.ADMIN)) {
 			throw Probleme.interdit("consentement-requis", "Consentement CNDP requis (PUT /v1/moi/consentement)");
 		}
+	}
+
+	static Probleme desactive() {
+		return Probleme.interdit("utilisateur-desactive", "Compte désactivé par l'administrateur");
 	}
 
 	/** Téléphone, jetons push des appareils ni révoqués ni déconnectés (session ouverte) et langue du dernier appareil. */
@@ -258,13 +272,27 @@ public class Comptes implements Acces.VerificationCompte, Acces.Organisations {
 	}
 
 	public List<UUID> ambulants() {
-		return jdbc.sql("SELECT id FROM utilisateur WHERE role = 'AMBULANT'").query(UUID.class).list();
+		return jdbc.sql("SELECT id FROM utilisateur WHERE role = 'AMBULANT' AND desactive_le IS NULL").query(UUID.class).list();
 	}
 
-	/** Membres d'une organisation (grossiste, grand client) à notifier. */
+	/** Membres actifs d'une organisation (grossiste, grand client) à notifier. */
 	public List<UUID> membres(UUID organisationId) {
-		return jdbc.sql("SELECT id FROM utilisateur WHERE organisation_id = :o").param("o", organisationId)
+		return jdbc.sql("SELECT id FROM utilisateur WHERE organisation_id = :o AND desactive_le IS NULL").param("o", organisationId)
 			.query(UUID.class).list();
+	}
+
+	/** Inscrit un utilisateur d'un grossiste ou d'un grand client (rôle = type de l'organisation) ; 409 si le numéro est pris. */
+	UUID inscrireMembre(UUID organisationId, String role, String telephone, String nom) {
+		var u = UUID.randomUUID();
+		var inscrit = jdbc.sql("""
+				INSERT INTO utilisateur (id, organisation_id, telephone, nom, role) VALUES (:id, :org, :t, :nom, :role)
+				ON CONFLICT (telephone) DO NOTHING
+				""").param("id", u).param("org", organisationId).param("t", telephone).param("nom", nom).param("role", role)
+			.update();
+		if (inscrit == 0) {
+			throw Probleme.conflit("Numéro déjà inscrit : " + telephone);
+		}
+		return u;
 	}
 
 	/** Utilisateur hanout lié à une fiche hanout, s'il s'est déjà connecté. */

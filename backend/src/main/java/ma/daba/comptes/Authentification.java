@@ -100,17 +100,30 @@ class Authentification {
 
 		var existant = comptes.utilisateurParTelephone(telephone);
 		var utilisateurId = existant.orElseGet(() -> inscrire(telephone));
-		var role = jdbc.sql("SELECT role FROM utilisateur WHERE id = :u").param("u", utilisateurId).query(String.class).single();
+		var compte = jdbc.sql("SELECT role, desactive_le IS NOT NULL AS desactive FROM utilisateur WHERE id = :u FOR UPDATE")
+			.param("u", utilisateurId)
+			.query((rs, i) -> Map.entry(rs.getString("role"), rs.getBoolean("desactive"))).single();
+		// Appareil révoqué d'abord : c'est la seule réponse qui fait effacer les données du téléphone.
+		if (jdbc.sql("SELECT revoque FROM appareil WHERE id = :a").param("a", appareilId).query(Boolean.class).optional()
+			.orElse(false)) {
+			throw revoque();
+		}
+		if (compte.getValue()) {
+			throw Comptes.desactive();
+		}
+		var role = compte.getKey();
 		// Chaque connexion ouvre une nouvelle session sur l'appareil ; les jetons de la précédente ne valent plus.
-		var revoque = jdbc.sql("""
+		// Un appareil révoqué ne se rouvre jamais : la ligne reste telle quelle (aucune session, aucun jeton push).
+		var ouverte = jdbc.sql("""
 				INSERT INTO appareil (id, utilisateur_id, derniere_connexion, session) VALUES (:id, :u, now(), gen_random_uuid())
 				ON CONFLICT (id) DO UPDATE SET derniere_connexion = now(), session = excluded.session,
 				  jeton_push = CASE WHEN appareil.utilisateur_id = excluded.utilisateur_id THEN appareil.jeton_push END,
 				  utilisateur_id = excluded.utilisateur_id
-				RETURNING revoque
-				""").param("id", appareilId).param("u", utilisateurId).query(Boolean.class).single();
-		if (revoque) {
-			throw new Probleme(HttpStatus.UNAUTHORIZED, "appareil-revoque", null, "Appareil déconnecté à distance");
+				WHERE NOT appareil.revoque
+				RETURNING id
+				""").param("id", appareilId).param("u", utilisateurId).query(UUID.class).optional();
+		if (ouverte.isEmpty()) {
+			throw revoque();
 		}
 		if ("AMBULANT".equals(role)) {
 			attribuerPrefixe(utilisateurId, appareilId);
@@ -129,11 +142,16 @@ class Authentification {
 		}
 		var utilisateurId = UUID.fromString(claims.get("sub").toString());
 		var appareilId = UUID.fromString(claims.get("app").toString());
-		var actif = jdbc.sql("""
-				SELECT count(*) FROM appareil WHERE id = :a AND utilisateur_id = :u AND NOT revoque AND session::text = :ses
+		var etat = jdbc.sql("""
+				SELECT revoque, session IS NOT NULL AND session::text = :ses AS ouverte
+				FROM appareil WHERE id = :a AND utilisateur_id = :u
 				""").param("a", appareilId).param("u", utilisateurId).param("ses", String.valueOf(claims.get("ses")))
-			.query(Long.class).single() > 0;
-		if (!actif) {
+			.query((rs, i) -> Map.entry(rs.getBoolean("revoque"), rs.getBoolean("ouverte"))).optional();
+		// Révoqué : 403 pour que l'app d'un téléphone perdu efface ses données même quand son accessToken a expiré (§10).
+		if (etat.isPresent() && etat.get().getKey()) {
+			throw Probleme.interdit("appareil-revoque", "Appareil déconnecté : reconnectez-vous");
+		}
+		if (etat.isEmpty() || !etat.get().getValue()) {
 			throw Probleme.nonAuthentifie();
 		}
 		return session(utilisateurId, appareilId, false);
@@ -236,6 +254,10 @@ class Authentification {
 
 	private String empreinte(String telephone, String code) {
 		return jetons.empreinte("otp:" + telephone + ":" + code);
+	}
+
+	private static Probleme revoque() {
+		return new Probleme(HttpStatus.UNAUTHORIZED, "appareil-revoque", null, "Appareil déconnecté à distance");
 	}
 
 	private static Probleme codeInvalide() {

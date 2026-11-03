@@ -1,15 +1,20 @@
 openapi: 3.1.0
 info:
   title: Daba API
-  version: 0.6.0
+  version: 0.7.0
   description: |
     Contrat unique entre le back-end, les apps mobiles (ambulant, hanout) et les portails web.
     Changement incompatible = nouvelle version de l'endpoint (/v2/...), jamais de rupture silencieuse.
 
     **Sessions.** Tout appel authentifié peut répondre 401 (`…/non-authentifie` : jeton expiré, ou
     session fermée par `POST /v1/auth/deconnexion` ; l'app rafraîchit ou redemande l'OTP) ou 403
-    `…/appareil-revoque` (appareil déconnecté à distance, §10 : l'app efface ses données locales).
-    Seul ce `type` autorise l'effacement ; un autre 403 ne doit jamais détruire la file hors ligne.
+    `…/appareil-revoque` (appareil déconnecté à distance, §10 : l'app efface ses données locales),
+    y compris `POST /v1/auth/refresh` (v0.7.0) : un téléphone perdu dont l'accessToken a expiré
+    s'efface aussi au renouvellement. Seul ce `type` autorise l'effacement ; un autre 403 ne doit
+    jamais détruire la file hors ligne. La révocation vaut pour cet `appareilId` à jamais : après
+    l'effacement, l'app tire un nouvel `appareilId` et la connexion OTP y refonctionne.
+    Un compte désactivé par l'administrateur répond 403 `…/utilisateur-desactive` (sur tout appel
+    authentifié et à `POST /v1/auth/otp/verify`) : l'app n'efface rien, sa file attend la réactivation.
     Pour le mock Prism, `POST /v1/auth/otp/verify` a un exemple de Session par rôle, à choisir avec
     l'en-tête `Prefer: example=grossiste` (ou ambulant, grandClient, hanout).
 
@@ -33,6 +38,17 @@ info:
     hanouts avec qui l'ambulant travaille ; le texte de consentement de l'ambulant le dit. Aucune
     réponse à un GRAND_CLIENT ne contient de donnée nominative d'un ambulant ou d'un hanout (nom,
     téléphone, gérant, CIN, position) : seulement des agrégats et ses propres grossistes dépositaires.
+
+    **Administration (CNDP, §2, §10).** Les opérations `/v1/admin/*` (tag `administration`) sont
+    réservées au rôle ADMIN, c'est-à-dire aux administrateurs de la plateforme chez RED et l'éditeur ;
+    tout autre rôle reçoit 403. Elles exposent des données personnelles (téléphone complet, nom,
+    organisation, état du consentement, appareils) pour l'onboarding, la modération et le support
+    seulement, jamais aux marques ni aux grossistes. Aucune réponse ne contient de code OTP,
+    d'accessToken, de refreshToken, de jeton push (seulement `pushActif`), de session ni de secret de
+    fournisseur. Chaque écriture (organisation créée, utilisateur ajouté, désactivé ou réactivé,
+    appareil révoqué, import du référentiel, configuration des canaux) est inscrite au journal
+    d'audit (`GET /v1/admin/audit`), que la base refuse de modifier ou d'effacer. Les lectures ne
+    sont pas journalisées.
 
     **Langues.** Les clients affichent à partir des codes (enums, `Problem.type`, `regle`) ; les
     textes libres renvoyés par le serveur suivent l'en-tête `Accept-Language` (fr, ar, ary-Arab, ary-Latn).
@@ -94,6 +110,8 @@ tags:
     description: Données agrégées et anonymisées pour les grands clients (§5.4)
   - name: canaux
     description: Couche canaux (push, SMS, WhatsApp) paramétrée par l'administrateur (§9)
+  - name: administration
+    description: Back-office RED / éditeur (§2) — organisations, utilisateurs, appareils, journal d'audit (§10)
 
 paths:
   # ---------------------------------------------------------------- comptes
@@ -155,6 +173,12 @@ paths:
           $ref: '#/components/responses/Problem'
         '401':
           $ref: '#/components/responses/Problem'
+        '403':
+          description: Compte désactivé par l'administrateur (`…/utilisateur-desactive`), code juste
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '410':
           $ref: '#/components/responses/LienExpire'
         '429':
@@ -167,7 +191,9 @@ paths:
       summary: Renouvelle la session de l'appareil avec le refreshToken (valable 90 jours)
       description: |
         L'accessToken vaut 24 h ; l'app le renouvelle ici, sans nouvel OTP, tant que l'appareil
-        n'est pas déconnecté à distance. 401 si le refreshToken est invalide ou l'appareil révoqué.
+        n'est pas déconnecté à distance. 401 si le refreshToken est invalide, ou si la session a été
+        fermée (déconnexion, nouvelle connexion, compte désactivé). 403 `…/appareil-revoque` (v0.7.0,
+        avant : 401) si l'appareil a été révoqué : l'app efface ses données locales.
       security: []
       requestBody:
         required: true
@@ -190,6 +216,8 @@ paths:
           $ref: '#/components/responses/Problem'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/AppareilRevoque'
 
   /v1/auth/deconnexion:
     post:
@@ -332,14 +360,51 @@ paths:
           $ref: '#/components/responses/Unauthorized'
 
   /v1/admin/organisations:
+    get:
+      tags: [administration]
+      operationId: listerOrganisations
+      summary: Liste les grossistes et les grands clients inscrits (back-office)
+      description: |
+        Seules les organisations GROSSISTE et GRAND_CLIENT sont listées ; les ambulants, hanouts et
+        administrateurs ont chacun leur organisation personnelle, qu'on retrouve par
+        `GET /v1/admin/utilisateurs`. Tri par nom.
+      x-roles: [ADMIN]
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [GROSSISTE, GRAND_CLIENT]
+        - name: q
+          in: query
+          description: Partie du nom de l'organisation (sans casse)
+          schema:
+            type: string
+            minLength: 2
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
+      responses:
+        '200':
+          description: Page d'organisations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganisationAdminPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
-      tags: [comptes]
+      tags: [administration]
       operationId: creerOrganisation
       summary: L'administrateur inscrit un grossiste ou un grand client et ses utilisateurs
       description: |
         Les ambulants s'inscrivent seuls par OTP ; un numéro présent dans la base POS devient un
         compte HANOUT à sa première connexion. Grossistes et grands clients sont créés ici ; leurs
-        utilisateurs se connectent ensuite par OTP. 409 si un numéro est déjà inscrit.
+        utilisateurs se connectent ensuite par OTP. 409 si un numéro est déjà inscrit. Inscrit au
+        journal d'audit (ORGANISATION_CREEE, v0.7.0).
       x-roles: [ADMIN]
       requestBody:
         required: true
@@ -362,6 +427,234 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+
+  /v1/admin/organisations/{organisationId}:
+    get:
+      tags: [administration]
+      operationId: lireOrganisation
+      summary: Détail d'une organisation et de ses utilisateurs (back-office)
+      description: |
+        Toute organisation, y compris l'organisation personnelle d'un ambulant, d'un hanout ou d'un
+        administrateur (`UtilisateurAdmin.organisation.id`).
+      x-roles: [ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/OrganisationId'
+      responses:
+        '200':
+          description: Organisation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganisationDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/admin/organisations/{organisationId}/utilisateurs:
+    post:
+      tags: [administration]
+      operationId: ajouterUtilisateurOrganisation
+      summary: Ajoute un utilisateur à un grossiste ou à un grand client existant
+      description: |
+        L'utilisateur prend le rôle de l'organisation (GROSSISTE ou GRAND_CLIENT) et se connecte
+        ensuite par OTP ; aucun SMS ne part à l'ajout. 409 si le numéro est déjà inscrit (quel que
+        soit le rôle), ou si l'organisation n'est ni un grossiste ni un grand client (les
+        organisations personnelles n'ont qu'un utilisateur, et les administrateurs viennent de la
+        configuration du serveur). Inscrit au journal d'audit (UTILISATEUR_AJOUTE).
+      x-roles: [ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/OrganisationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MembreSaisie'
+      responses:
+        '201':
+          description: Utilisateur ajouté
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UtilisateurAdmin'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /v1/admin/utilisateurs:
+    get:
+      tags: [administration]
+      operationId: chercherUtilisateurs
+      summary: Recherche d'utilisateurs, tous rôles (support)
+      description: |
+        `q` cherche dans le téléphone (chiffres, sous toute forme : 0612…, 212612…, +212612…, ou une
+        partie), dans le nom de l'utilisateur et dans celui de son organisation. Chaque résultat
+        porte ses rôles, son organisation, son dernier consentement CNDP et ses appareils. Tri du
+        plus récent au plus ancien inscrit.
+      x-roles: [ADMIN]
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+            minLength: 2
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT, ADMIN]
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
+      responses:
+        '200':
+          description: Page d'utilisateurs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UtilisateurAdminPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /v1/admin/utilisateurs/{utilisateurId}/desactivation:
+    post:
+      tags: [administration]
+      operationId: desactiverUtilisateur
+      summary: Désactive un compte (modération) ; ses sessions se ferment
+      description: |
+        Toutes les sessions de l'utilisateur se ferment, ses jetons push sont effacés, sa
+        disponibilité de dépannage est coupée, il n'est plus ciblé par les notifications (promos,
+        propositions de dépôt) et ne peut plus se connecter : `POST /v1/auth/otp/verify` répond 403
+        `…/utilisateur-desactive`. Rien n'est effacé : ses pièces, son karni et la file hors ligne de
+        son téléphone attendent une réactivation. Un administrateur ne peut pas se désactiver
+        lui-même (409). Sans effet sur un compte déjà désactivé. Inscrit au journal d'audit
+        (UTILISATEUR_DESACTIVE).
+      x-roles: [ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/UtilisateurId'
+      responses:
+        '200':
+          description: Utilisateur désactivé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UtilisateurAdmin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /v1/admin/utilisateurs/{utilisateurId}/reactivation:
+    post:
+      tags: [administration]
+      operationId: reactiverUtilisateur
+      summary: Réactive un compte désactivé ; l'utilisateur se reconnecte par OTP
+      description: |
+        Les sessions fermées ne se rouvrent pas : l'utilisateur repasse par l'OTP, et un ambulant
+        réactive lui-même sa disponibilité. Sans effet sur un compte actif. Inscrit au journal
+        d'audit (UTILISATEUR_REACTIVE).
+      x-roles: [ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/UtilisateurId'
+      responses:
+        '200':
+          description: Utilisateur actif
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UtilisateurAdmin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/admin/appareils/{appareilId}/revocation:
+    post:
+      tags: [administration]
+      operationId: revoquerAppareil
+      summary: Déconnexion à distance d'un appareil perdu ou volé (§10)
+      description: |
+        L'appareil est révoqué, définitivement pour cet `appareilId` : sa session se ferme, son jeton
+        push est effacé, et son prochain appel (`POST /v1/sync/operations`, `POST /v1/auth/refresh`
+        ou tout autre) répond 403 `…/appareil-revoque`, sur quoi l'app efface ses données locales.
+        Les opérations hors ligne pas encore synchronisées sur ce téléphone sont perdues. Une
+        connexion OTP sur un autre appareil (ou après effacement, avec un nouvel `appareilId`)
+        fonctionne, avec un nouveau préfixe de numérotation (RG-F1). La disponibilité de dépannage
+        de l'utilisateur est coupée (sa dernière position venait peut-être de ce téléphone). Sans
+        effet sur un appareil déjà révoqué. Inscrit au journal d'audit (APPAREIL_REVOQUE).
+      x-roles: [ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/AppareilId'
+      responses:
+        '200':
+          description: Appareil révoqué ; renvoie son utilisateur et tous ses appareils
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UtilisateurAdmin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/admin/audit:
+    get:
+      tags: [administration]
+      operationId: lireJournalAudit
+      summary: Journal d'audit des opérations sensibles (§10), en lecture seule
+      description: |
+        Du plus récent au plus ancien. Le journal est en ajout seul : la base refuse toute
+        modification ou suppression, et l'API n'offre aucune écriture.
+      x-roles: [ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/Depuis'
+        - $ref: '#/components/parameters/Jusqua'
+        - name: auteurId
+          in: query
+          description: Utilisateur qui a fait l'opération
+          schema:
+            type: string
+            format: uuid
+        - name: operation
+          in: query
+          schema:
+            $ref: '#/components/schemas/OperationAudit'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Taille'
+      responses:
+        '200':
+          description: Page d'entrées du journal
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntreeAuditPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /v1/admin/canaux:
     get:
@@ -692,6 +985,8 @@ paths:
         CSV UTF-8, séparateur « ; » ou « , », première ligne d'en-têtes : code_pos, nom, gerant,
         telephone, lat, lon, adresse, ville, ice. Clé : code_pos (réimporter met à jour). Téléphones
         06…, 2126… ou 002126… acceptés. Une ligne invalide est rejetée avec son numéro, les autres passent.
+        Bilan inscrit au journal d'audit (IMPORT_HANOUTS, v0.7.0). Pour consulter la base importée,
+        l'administrateur utilise `GET /v1/hanouts` (toute la base, sans cloisonnement).
       x-roles: [ADMIN]
       requestBody:
         required: true
@@ -727,6 +1022,8 @@ paths:
         categorie_libelle_ary_arab, categorie_libelle_ary_latn. Une valeur non vide crée ou remplace
         ce libellé de la catégorie (les autres langues sont gardées) ; une catégorie créée sans
         libellé français prend son code. Les produits de la catégorie sont republiés (entité PRODUIT).
+        Bilan inscrit au journal d'audit (IMPORT_PRODUITS, v0.7.0). Pour consulter le référentiel,
+        l'administrateur utilise `GET /v1/produits` (tous les produits, toutes marques).
       x-roles: [ADMIN]
       requestBody:
         required: true
@@ -2292,6 +2589,20 @@ components:
       schema:
         type: string
         format: uuid
+    OrganisationId:
+      name: organisationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UtilisateurId:
+      name: utilisateurId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     DocumentId:
       name: documentId
       in: path
@@ -2336,8 +2647,8 @@ components:
             $ref: '#/components/schemas/Problem'
     Forbidden:
       description: |
-        Rôle non autorisé (`…/role-non-autorise`), consentement CNDP manquant (`…/consentement-requis`)
-        ou appareil déconnecté à distance (`…/appareil-revoque`)
+        Rôle non autorisé (`…/role-non-autorise`), consentement CNDP manquant (`…/consentement-requis`),
+        appareil déconnecté à distance (`…/appareil-revoque`) ou compte désactivé (`…/utilisateur-desactive`)
       content:
         application/problem+json:
           schema:
@@ -2573,8 +2884,10 @@ components:
             - `requete-invalide` (400, détail par champ dans `erreurs`)
             - `non-authentifie` (401 : jeton absent, invalide, expiré, ou session fermée)
             - `code-invalide` (401, OTP faux ou expiré)
-            - `appareil-revoque` (403 sur tout appel authentifié, 401 à `POST /v1/auth/otp/verify` :
-              appareil déconnecté à distance, l'app efface ses données locales)
+            - `appareil-revoque` (403 sur tout appel authentifié et à `POST /v1/auth/refresh`, 401 à
+              `POST /v1/auth/otp/verify` : appareil déconnecté à distance, l'app efface ses données locales)
+            - `utilisateur-desactive` (403 sur tout appel authentifié et à `POST /v1/auth/otp/verify` :
+              compte désactivé par l'administrateur ; rien n'est effacé)
             - `consentement-requis` (403 : consentement CNDP à recueillir, `PUT /v1/moi/consentement`)
             - `role-non-autorise` (403)
             - `appareil-different` (403 : `appareilId` du corps différent de celui de la session)
@@ -2813,6 +3126,210 @@ components:
                 format: uuid
               telephone:
                 $ref: '#/components/schemas/Telephone'
+
+    # ---------------------------------------------------------- administration
+    MembreSaisie:
+      type: object
+      required: [telephone]
+      properties:
+        telephone:
+          $ref: '#/components/schemas/Telephone'
+        nom:
+          type: string
+
+    OrganisationAdmin:
+      type: object
+      required: [id, type, nom, creeLe, nombreUtilisateurs]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Pour un grossiste, c'est aussi son grossisteId
+        type:
+          $ref: '#/components/schemas/TypeOrganisation'
+        nom:
+          type: string
+        creeLe:
+          type: string
+          format: date-time
+        nombreUtilisateurs:
+          type: integer
+        grossiste:
+          $ref: '#/components/schemas/Grossiste'
+          description: Fiche du grossiste (position, adresse, ville) ; présente pour le type GROSSISTE
+
+    TypeOrganisation:
+      type: string
+      enum: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT, PLATEFORME]
+      description: PLATEFORME = organisation d'un administrateur
+
+    OrganisationAdminPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/OrganisationAdmin'
+
+    OrganisationDetail:
+      allOf:
+        - $ref: '#/components/schemas/OrganisationAdmin'
+        - type: object
+          required: [utilisateurs]
+          properties:
+            utilisateurs:
+              type: array
+              items:
+                $ref: '#/components/schemas/UtilisateurAdmin'
+
+    UtilisateurAdmin:
+      type: object
+      description: |
+        Fiche de support d'un utilisateur (ADMIN seulement, CNDP). Jamais de code OTP, de jeton
+        (accès, refresh, push) ni de session.
+      required: [id, telephone, roles, organisation, actif, creeLe, appareils]
+      properties:
+        id:
+          type: string
+          format: uuid
+        telephone:
+          $ref: '#/components/schemas/Telephone'
+        nom:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT, ADMIN]
+        organisation:
+          type: object
+          required: [id, type, nom]
+          properties:
+            id:
+              type: string
+              format: uuid
+            type:
+              $ref: '#/components/schemas/TypeOrganisation'
+            nom:
+              type: string
+        hanoutId:
+          type: string
+          format: uuid
+          description: Fiche hanout (base POS), pour le rôle HANOUT
+        actif:
+          type: boolean
+          description: Faux si l'administrateur a désactivé le compte
+        desactiveLe:
+          type: string
+          format: date-time
+          description: Présent si le compte est désactivé
+        creeLe:
+          type: string
+          format: date-time
+        consentement:
+          $ref: '#/components/schemas/Consentement'
+          description: Dernier consentement CNDP enregistré ; absent s'il n'en a jamais donné
+        appareils:
+          type: array
+          description: Du plus récemment vu au plus ancien
+          items:
+            $ref: '#/components/schemas/AppareilAdmin'
+
+    AppareilAdmin:
+      type: object
+      required: [appareilId, creeLe, sessionOuverte, pushActif, revoque]
+      properties:
+        appareilId:
+          type: string
+          format: uuid
+        plateforme:
+          type: string
+          enum: [ANDROID, IOS]
+          description: Connue dès que l'appareil a déclaré un jeton push
+        langue:
+          $ref: '#/components/schemas/Langue'
+        prefixeNumerotation:
+          $ref: '#/components/schemas/PrefixeNumerotation'
+        creeLe:
+          type: string
+          format: date-time
+          description: Première connexion de cet appareil
+        derniereConnexion:
+          type: string
+          format: date-time
+          description: Dernière connexion par OTP
+        vuLe:
+          type: string
+          format: date-time
+          description: Dernier appel authentifié (à 5 minutes près)
+        sessionOuverte:
+          type: boolean
+        pushActif:
+          type: boolean
+          description: Un jeton push est enregistré pour la session ouverte (le jeton n'est jamais renvoyé)
+        revoque:
+          type: boolean
+        revoqueLe:
+          type: string
+          format: date-time
+
+    UtilisateurAdminPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/UtilisateurAdmin'
+
+    OperationAudit:
+      type: string
+      description: |
+        Opération inscrite au journal d'audit : CONFIGURATION_CANAUX, ORGANISATION_CREEE,
+        UTILISATEUR_AJOUTE, UTILISATEUR_DESACTIVE, UTILISATEUR_REACTIVE, APPAREIL_REVOQUE,
+        IMPORT_HANOUTS, IMPORT_PRODUITS. Liste ouverte : une valeur inconnue s'affiche telle quelle.
+      pattern: '^[A-Z_]{1,64}$'
+      examples: [APPAREIL_REVOQUE]
+
+    EntreeAudit:
+      type: object
+      required: [id, le, operation]
+      properties:
+        id:
+          type: integer
+          format: int64
+        le:
+          type: string
+          format: date-time
+        auteur:
+          $ref: '#/components/schemas/Reference'
+          description: Utilisateur qui a fait l'opération (`nom`, ou son téléphone s'il n'a pas de nom)
+        appareilId:
+          type: string
+          format: uuid
+        operation:
+          $ref: '#/components/schemas/OperationAudit'
+        details:
+          type: object
+          description: |
+            Contexte de l'opération : identifiants (`utilisateurId`, `organisationId`, `appareilId`),
+            bilan d'un import, configuration enregistrée. Jamais de téléphone, de code ni de secret.
+
+    EntreeAuditPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMeta'
+        - type: object
+          required: [contenu]
+          properties:
+            contenu:
+              type: array
+              items:
+                $ref: '#/components/schemas/EntreeAudit'
 
     # ---------------------------------------------------------------- canaux
     Canal:

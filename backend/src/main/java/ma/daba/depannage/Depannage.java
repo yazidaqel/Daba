@@ -154,6 +154,12 @@ public class Depannage implements Acces.ContributeurExport {
 		}
 	}
 
+	/** Compte désactivé ou appareil révoqué : plus de demande de dépannage, position effacée. */
+	@ApplicationModuleListener
+	void accesRetire(Comptes.AccesRetire evenement) {
+		couper(evenement.utilisateurId());
+	}
+
 	@Override
 	public String cle() {
 		return "disponibilite";

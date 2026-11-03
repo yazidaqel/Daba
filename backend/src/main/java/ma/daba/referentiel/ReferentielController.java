@@ -24,6 +24,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import ma.daba.commun.Acces.Roles;
 import ma.daba.commun.Appelant;
+import ma.daba.commun.Audit;
 import ma.daba.commun.Appelant.Role;
 import ma.daba.commun.Json;
 import ma.daba.commun.Page;
@@ -42,9 +43,11 @@ class ReferentielController {
 	private final Referentiel referentiel;
 	private final ImportReferentiel imports;
 	private final ObjectProvider<ProduitsHabituels> habituels;
+	private final Audit audit;
 
 	ReferentielController(JdbcClient jdbc, Json json, Referentiel referentiel, ImportReferentiel imports,
-			ObjectProvider<ProduitsHabituels> habituels) {
+			ObjectProvider<ProduitsHabituels> habituels, Audit audit) {
+		this.audit = audit;
 		this.jdbc = jdbc;
 		this.json = json;
 		this.referentiel = referentiel;
@@ -172,14 +175,20 @@ class ReferentielController {
 
 	@PostMapping(path = "/v1/admin/hanouts/import", consumes = "multipart/form-data")
 	@Roles(Role.ADMIN)
-	ImportReferentiel.Bilan importerHanouts(@RequestPart MultipartFile fichier) {
-		return imports.hanouts(fichier);
+	ImportReferentiel.Bilan importerHanouts(Appelant appelant, @RequestPart MultipartFile fichier) {
+		return consigner(appelant, "IMPORT_HANOUTS", imports.hanouts(fichier));
 	}
 
 	@PostMapping(path = "/v1/admin/produits/import", consumes = "multipart/form-data")
 	@Roles(Role.ADMIN)
-	ImportReferentiel.Bilan importerProduits(@RequestPart MultipartFile fichier) {
-		return imports.produits(fichier);
+	ImportReferentiel.Bilan importerProduits(Appelant appelant, @RequestPart MultipartFile fichier) {
+		return consigner(appelant, "IMPORT_PRODUITS", imports.produits(fichier));
+	}
+
+	/** Bilan au journal d'audit (§10) : des compteurs seulement, jamais le contenu du fichier. */
+	private ImportReferentiel.Bilan consigner(Appelant appelant, String operation, ImportReferentiel.Bilan bilan) {
+		audit.consigner(appelant, operation, Map.of("crees", bilan.crees(), "misAJour", bilan.misAJour(), "rejets", bilan.rejets().size()));
+		return bilan;
 	}
 
 	private static boolean proche(Double lat, Double lon) {

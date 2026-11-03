@@ -28,6 +28,7 @@ import ma.daba.commun.Acces.Public;
 import ma.daba.commun.Acces.Roles;
 import ma.daba.commun.Acces.SansConsentement;
 import ma.daba.commun.Appelant;
+import ma.daba.commun.Audit;
 import ma.daba.commun.Appelant.Role;
 import ma.daba.commun.Jetons;
 import ma.daba.commun.Position;
@@ -86,9 +87,12 @@ class ComptesController {
 	private final Referentiel referentiel;
 	private final ApplicationEventPublisher evenements;
 	private final List<Acces.ContributeurExport> contributeurs;
+	private final Audit audit;
 
 	ComptesController(JdbcClient jdbc, Comptes comptes, Authentification authentification, Jetons jetons,
-			Referentiel referentiel, ApplicationEventPublisher evenements, List<Acces.ContributeurExport> contributeurs) {
+			Referentiel referentiel, ApplicationEventPublisher evenements, List<Acces.ContributeurExport> contributeurs,
+			Audit audit) {
+		this.audit = audit;
 		this.jdbc = jdbc;
 		this.comptes = comptes;
 		this.authentification = authentification;
@@ -233,28 +237,22 @@ class ComptesController {
 	@ResponseStatus(HttpStatus.CREATED)
 	@Roles(Role.ADMIN)
 	@Transactional
-	OrganisationCreee creerOrganisation(@Valid @RequestBody OrganisationSaisie saisie) {
+	OrganisationCreee creerOrganisation(Appelant appelant, @Valid @RequestBody OrganisationSaisie saisie) {
 		if ("GROSSISTE".equals(saisie.type()) && saisie.position() == null) {
 			throw Probleme.requete("position requise pour un grossiste");
 		}
 		var id = UUID.randomUUID();
 		jdbc.sql("INSERT INTO organisation (id, type, nom) VALUES (:id, :type, :nom)")
 			.param("id", id).param("type", saisie.type()).param("nom", saisie.nom()).update();
-		var utilisateurs = saisie.utilisateurs().stream().map(m -> {
-			var deja = jdbc.sql("SELECT count(*) FROM utilisateur WHERE telephone = :t").param("t", m.telephone())
-				.query(Long.class).single();
-			if (deja > 0) {
-				throw Probleme.conflit("Numéro déjà inscrit : " + m.telephone());
-			}
-			var u = UUID.randomUUID();
-			jdbc.sql("INSERT INTO utilisateur (id, organisation_id, telephone, nom, role) VALUES (:id, :org, :t, :nom, :role)")
-				.param("id", u).param("org", id).param("t", m.telephone()).param("nom", m.nom()).param("role", saisie.type())
-				.update();
-			return Map.<String, Object>of("id", u, "telephone", m.telephone());
-		}).toList();
+		var utilisateurs = saisie.utilisateurs().stream()
+			.map(m -> Map.<String, Object>of("id", comptes.inscrireMembre(id, saisie.type(), m.telephone(), m.nom()),
+					"telephone", m.telephone()))
+			.toList();
 		if ("GROSSISTE".equals(saisie.type())) {
 			referentiel.enregistrerGrossiste(id, saisie.nom(), saisie.position(), saisie.adresse(), saisie.ville());
 		}
+		audit.consigner(appelant, "ORGANISATION_CREEE", Map.of("organisationId", id, "type", saisie.type(),
+				"utilisateurIds", utilisateurs.stream().map(u -> u.get("id")).toList()));
 		return new OrganisationCreee(id, saisie.type(), saisie.nom(), utilisateurs);
 	}
 
