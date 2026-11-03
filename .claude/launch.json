@@ -21,6 +21,13 @@
       "runtimeArgs": ["run", "dev", "--prefix", "web/hanout"],
       "env": { "API_URL": "http://localhost:8080" },
       "port": 5173
+    },
+    {
+      "name": "admin",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "web/admin"],
+      "env": { "API_URL": "http://localhost:8080" },
+      "port": 5179
     }
   ]
 }

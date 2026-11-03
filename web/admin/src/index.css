@@ -1,0 +1,134 @@
+@import "tailwindcss";
+@import "./polices.css";
+
+@theme inline {
+  --font-sans: var(--police);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-promo: var(--promo);
+  --color-promo-soft: var(--promo-soft);
+  --color-promo-foreground: var(--promo-foreground);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-foreground: var(--destructive-foreground);
+}
+
+/* Palette Zellige : docs/charte-graphique.md est la source ; ne pas ajouter de couleur ici sans elle.
+   Le mode sombre suit le réglage du système. */
+:root {
+  --radius: 0.625rem;
+  --primary: #0F5E59;
+  --primary-hover: #0B4A46;
+  --primary-soft: #E6F2F1;
+  --primary-foreground: #FFFFFF;
+  --promo: #E0A526;
+  --promo-soft: #FBEFD3;
+  --promo-foreground: #3D2A02;
+  --background: #F6F1E7;
+  --card: #FFFDF8;
+  --border: #E4DCCB;
+  --foreground: #1D2B2A;
+  --muted-foreground: #6B6559;
+  --success: #2E7D32;
+  --success-soft: #E6F2E6;
+  --warning: #B45309;
+  --warning-soft: #FDEBD8;
+  --destructive: #B42318;
+  --destructive-soft: #FDECEA;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary: #4FB3A9;
+    --primary-hover: #6CC4BB;
+    --primary-soft: #123B38;
+    --primary-foreground: #062B29;
+    --promo: #EFC764;
+    --promo-soft: #3A2C0A;
+    --promo-foreground: #3D2A02;
+    --background: #121A19;
+    --card: #1A2423;
+    --border: #2C3A38;
+    --foreground: #ECE7DC;
+    --muted-foreground: #A39D90;
+    --success: #6BBF6F;
+    --success-soft: #16301A;
+    --warning: #F0A060;
+    --warning-soft: #3A2410;
+    --destructive: #F2867A;
+    --destructive-soft: #3A1714;
+  }
+}
+
+/* Variables shadcn/ui dérivées des jetons ci-dessus. Texte sur un fond plein d'état : la surface. */
+:root {
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--primary-soft);
+  --secondary-foreground: var(--primary);
+  --muted: var(--primary-soft);
+  --accent: var(--primary-soft);
+  --accent-foreground: var(--foreground);
+  --input: var(--border);
+  --ring: var(--primary);
+  --success-foreground: var(--card);
+  --warning-foreground: var(--card);
+  --destructive-foreground: var(--card);
+}
+
+@layer base {
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--primary);
+  }
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@media print {
+  header, .no-print {
+    display: none;
+  }
+}
+
+/* IBM Plex : la face latine d'abord en français et en darija latin ; la face arabe d'abord en arabe et en
+   darija arabe. Chaque face comble les glyphes que l'autre n'a pas (mots arabes dans le sélecteur de langue). */
+:root {
+  --police: "IBM Plex Sans", "IBM Plex Sans Arabic", system-ui, sans-serif;
+}
+:root:lang(ar),
+:root:lang(ary-Arab) {
+  --police: "IBM Plex Sans Arabic", "IBM Plex Sans", system-ui, sans-serif;
+}
