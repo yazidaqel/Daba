@@ -34,7 +34,8 @@ export default function Depots() {
           <Button
             key={f.cle}
             size="sm"
-            variant={(f.statut ?? 'TOUS') === statut ? 'default' : 'outline'}
+            variant={(f.statut ?? 'TOUS') === statut ? 'secondary' : 'outline'}
+            aria-pressed={(f.statut ?? 'TOUS') === statut}
             onClick={() => setParams({ statut: f.statut ?? 'TOUS' })}
           >
             {t(f.cle)}

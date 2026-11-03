@@ -1,9 +1,8 @@
 @import "tailwindcss";
-
-@custom-variant dark (&:is(.dark *));
+@import "./polices.css";
 
 @theme inline {
-  --font-sans: system-ui, "Segoe UI", Roboto, "Noto Sans Arabic", Tahoma, sans-serif;
+  --font-sans: var(--police);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -26,75 +25,88 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-promo: var(--promo);
+  --color-promo-soft: var(--promo-soft);
+  --color-promo-foreground: var(--promo-foreground);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-qr-fond: var(--qr-fond);
+  --color-qr-encre: var(--qr-encre);
 }
 
+/* Palette Zellige : docs/charte-graphique.md est la source ; ne pas ajouter de couleur ici sans elle.
+   Le mode sombre suit le réglage du système. */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --primary: #0F5E59;
+  --primary-hover: #0B4A46;
+  --primary-soft: #E6F2F1;
+  --primary-foreground: #FFFFFF;
+  --promo: #E0A526;
+  --promo-soft: #FBEFD3;
+  --promo-foreground: #3D2A02;
+  --background: #F6F1E7;
+  --card: #FFFDF8;
+  --border: #E4DCCB;
+  --foreground: #1D2B2A;
+  --muted-foreground: #6B6559;
+  --success: #2E7D32;
+  --success-soft: #E6F2E6;
+  --warning: #B45309;
+  --warning-soft: #FDEBD8;
+  --destructive: #B42318;
+  --destructive-soft: #FDECEA;
+  /* Le QR reste sombre sur clair dans les deux modes, pour toute caméra (surface et encre claires). */
+  --qr-fond: #FFFDF8;
+  --qr-encre: #1D2B2A;
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary: #4FB3A9;
+    --primary-hover: #6CC4BB;
+    --primary-soft: #123B38;
+    --primary-foreground: #062B29;
+    --promo: #EFC764;
+    --promo-soft: #3A2C0A;
+    --promo-foreground: #3D2A02;
+    --background: #121A19;
+    --card: #1A2423;
+    --border: #2C3A38;
+    --foreground: #ECE7DC;
+    --muted-foreground: #A39D90;
+    --success: #6BBF6F;
+    --success-soft: #16301A;
+    --warning: #F0A060;
+    --warning-soft: #3A2410;
+    --destructive: #F2867A;
+    --destructive-soft: #3A1714;
+  }
+}
+
+/* Variables shadcn/ui dérivées des jetons ci-dessus. Texte sur un fond plein d'état : la surface. */
+:root {
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--primary-soft);
+  --secondary-foreground: var(--primary);
+  --muted: var(--primary-soft);
+  --accent: var(--primary-soft);
+  --accent-foreground: var(--foreground);
+  --input: var(--border);
+  --ring: var(--primary);
+  --success-foreground: var(--card);
+  --warning-foreground: var(--card);
+  --destructive-foreground: var(--card);
 }
 
 @layer base {
@@ -110,4 +122,14 @@
   header, .no-print {
     display: none;
   }
+}
+
+/* IBM Plex : la face latine d'abord en français et en darija latin ; la face arabe d'abord en arabe et en
+   darija arabe. Chaque face comble les glyphes que l'autre n'a pas (mots arabes dans le sélecteur de langue). */
+:root {
+  --police: "IBM Plex Sans", "IBM Plex Sans Arabic", system-ui, sans-serif;
+}
+:root:lang(ar),
+:root:lang(ary-Arab) {
+  --police: "IBM Plex Sans Arabic", "IBM Plex Sans", system-ui, sans-serif;
 }

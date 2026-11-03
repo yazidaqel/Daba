@@ -2,8 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { renderSVG } from 'uqr'
 import { $api, queryClient, type S } from '@/api/client'
 import { libelle, useNomProduit } from '@/api/produits'
-import { Erreur, Etat, Pagination } from '@/components/communs'
-import { Badge } from '@/components/ui/badge'
+import { Charge, Erreur, Etat, Pagination } from '@/components/communs'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -51,7 +50,7 @@ export default function BonsSortie() {
                     <TableCell>{date(b.emisLe)}</TableCell>
                     <TableCell className="text-end">{b.lignes.length}</TableCell>
                     <TableCell>
-                      <Badge variant={b.chargeLe ? 'secondary' : 'outline'}>{b.chargeLe ? t('bons.charge') : t('bons.nonCharge')}</Badge>
+                      <Charge charge={!!b.chargeLe} />
                     </TableCell>
                     <TableCell className="text-end">
                       <Button size="sm" variant="outline" onClick={() => setAffiche(b)}>{t('bons.voir')}</Button>
@@ -70,7 +69,6 @@ export default function BonsSortie() {
 
 function NouveauBon({ onEmis, onAnnuler }: { onEmis: (b: S['BonSortie']) => void; onAnnuler: () => void }) {
   const { t, langue } = useI18n()
-  const nom = useNomProduit()
   // Clé d'idempotence : un double clic ou un renvoi ne crée pas un second bon.
   const [id] = useState(() => crypto.randomUUID())
   const [telephone, setTelephone] = useState('')
@@ -86,6 +84,7 @@ function NouveauBon({ onEmis, onAnnuler }: { onEmis: (b: S['BonSortie']) => void
     { params: { query: ean ? { ean: q, taille: 20 } : { q, taille: 20 } } },
     { enabled: q.length >= 2 },
   )
+  const ambulants = $api.useQuery('get', '/v1/ambulants', { params: { query: { taille: 200 } } })
   const emettre = $api.useMutation('post', '/v1/bons-sortie', {
     onSuccess: (b) => (queryClient.invalidateQueries(), onEmis(b)),
   })
@@ -112,7 +111,11 @@ function NouveauBon({ onEmis, onAnnuler }: { onEmis: (b: S['BonSortie']) => void
       <CardContent className="space-y-4">
         <div className="space-y-1">
           <Label htmlFor="tel-ambulant">{t('bons.telephoneAmbulant')}</Label>
-          <Input id="tel-ambulant" type="tel" dir="ltr" className="max-w-xs" value={telephone} onChange={(e) => setTelephone(e.target.value)} />
+          <Input id="tel-ambulant" type="tel" dir="ltr" className="max-w-xs" list="ambulants-rattaches" value={telephone} onChange={(e) => setTelephone(e.target.value)} />
+          <p className="text-muted-foreground text-sm">{t('bons.choisirAmbulant')}</p>
+          <datalist id="ambulants-rattaches">
+            {ambulants.data?.contenu.filter((a) => a.telephone).map((a) => <option key={a.id} value={a.telephone}>{a.nom}</option>)}
+          </datalist>
         </div>
         <form onSubmit={(e) => (e.preventDefault(), setQ(recherche.trim()))} className="space-y-1">
           <Label htmlFor="recherche">{t('bons.rechercheProduit')}</Label>
@@ -147,7 +150,7 @@ function NouveauBon({ onEmis, onAnnuler }: { onEmis: (b: S['BonSortie']) => void
             <TableBody>
               {lignes.map((l, i) => (
                 <TableRow key={l.produitId}>
-                  <TableCell>{noms[l.produitId] ?? nom(l.produitId)}</TableCell>
+                  <TableCell>{noms[l.produitId]}</TableCell>
                   <TableCell className="text-end">
                     <Input
                       type="number"
@@ -179,7 +182,7 @@ function NouveauBon({ onEmis, onAnnuler }: { onEmis: (b: S['BonSortie']) => void
 
 function BonQr({ bon, onFermer }: { bon: S['BonSortie']; onFermer: () => void }) {
   const { t, date, nombre } = useI18n()
-  const nom = useNomProduit()
+  const nom = useNomProduit(bon.lignes.map((l) => l.produitId))
   return (
     <section className="max-w-2xl space-y-4">
       <h1 className="text-2xl font-semibold">
@@ -187,7 +190,7 @@ function BonQr({ bon, onFermer }: { bon: S['BonSortie']; onFermer: () => void })
       </h1>
       <p>{bon.ambulant.nom} · {date(bon.emisLe)}</p>
       {/* SVG produit localement par uqr à partir du jeton signé du bon. */}
-      <div className="w-72 bg-white p-2" dangerouslySetInnerHTML={{ __html: renderSVG(bon.qrJeton) }} />
+      <div className="bg-qr-fond text-qr-encre w-72 p-2" dangerouslySetInnerHTML={{ __html: renderSVG(bon.qrJeton, { whiteColor: 'transparent', blackColor: 'currentColor' }) }} />
       <p className="text-muted-foreground text-sm">{t('bons.qrAide')}</p>
       <Table>
         <TableBody>

@@ -1,11 +1,12 @@
 import { useState, useSyncExternalStore, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, NavLink, Route, Routes } from 'react-router'
-import { $api, ecrireSession, fetchClient, lireSession } from '@/api/client'
+import { $api, fetchClient, lireSession, seDeconnecter } from '@/api/client'
 import { messageErreur } from '@/api/erreurs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LANGUES, NOMS_LANGUES, useI18n, type Langue } from '@/i18n'
+import Ambulants from '@/pages/Ambulants'
 import BonsSortie from '@/pages/BonsSortie'
 import Depot from '@/pages/Depot'
 import Depots from '@/pages/Depots'
@@ -44,6 +45,7 @@ export default function App() {
             <Route path="/stock-promo" element={<StockPromo />} />
             <Route path="/retrait" element={<Retrait />} />
             <Route path="/bons-sortie" element={<BonsSortie />} />
+            <Route path="/ambulants" element={<Ambulants />} />
             <Route path="*" element={<Navigate to="/depots" replace />} />
           </Routes>
         </Consentement>
@@ -56,7 +58,7 @@ function Cadre({ nav, children }: { nav?: boolean; children: ReactNode }) {
   const { t, langue, setLangue } = useI18n()
   const jeton = useSyncExternalStore(abonner, lireJeton)
   const lien = ({ isActive }: { isActive: boolean }) =>
-    `rounded-md px-3 py-2 text-sm font-medium ${isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`
+    `rounded-md px-3 py-2 text-sm font-medium ${isActive ? 'bg-primary-soft text-primary' : 'hover:bg-muted'}`
   return (
     <>
       <header className="border-b">
@@ -68,6 +70,7 @@ function Cadre({ nav, children }: { nav?: boolean; children: ReactNode }) {
               <NavLink to="/stock-promo" className={lien}>{t('nav.stockPromo')}</NavLink>
               <NavLink to="/retrait" className={lien}>{t('nav.retrait')}</NavLink>
               <NavLink to="/bons-sortie" className={lien}>{t('nav.bonsSortie')}</NavLink>
+              <NavLink to="/ambulants" className={lien}>{t('nav.ambulants')}</NavLink>
             </nav>
           )}
           <div className="ms-auto flex items-center gap-2">
@@ -82,7 +85,7 @@ function Cadre({ nav, children }: { nav?: boolean; children: ReactNode }) {
               ))}
             </select>
             {jeton && (
-              <Button variant="outline" size="sm" onClick={() => ecrireSession(null)}>
+              <Button variant="outline" size="sm" onClick={seDeconnecter}>
                 {t('app.deconnexion')}
               </Button>
             )}
@@ -115,7 +118,7 @@ function DroitsCndp() {
       body: { versionTexte: `${VERSION_TEXTE}-${langue}`, traitementDonnees: false, langue },
     })
     if (error) setErreur(error)
-    else ecrireSession(null)
+    else await seDeconnecter()
   }
   return (
     <footer className="no-print text-muted-foreground mx-auto flex max-w-6xl gap-2 px-4 pb-6 text-sm">

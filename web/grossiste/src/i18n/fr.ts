@@ -103,7 +103,7 @@ export const fr = {
   'resa.REVENDUE': 'Revendue',
 
   'cloture.titre': 'Clôturer le dépôt',
-  'cloture.aide': 'Possible quand la campagne est épuisée ou expirée. Que devient le reliquat ?',
+  'cloture.aide': 'La campagne est épuisée ou expirée : que devient le reliquat ?',
   'cloture.RETOURNE': 'Retourné à la marque',
   'cloture.RACHETE': 'Racheté par moi',
   'cloture.confirmer': 'Clôturer',
@@ -163,6 +163,28 @@ export const fr = {
   'erreur.413': 'Photo trop lourde.',
   'erreur.422': 'Demande refusée par une règle de gestion.',
   'erreur.consentement': 'Votre consentement est requis pour continuer.',
+
+  'nav.ambulants': 'Ambulants',
+  'login.sessionExpiree': 'Session expirée. Reconnectez-vous.',
+  'erreur.appareilRevoque': 'Ce navigateur a été déconnecté à distance. Contactez le support Daba.',
+  'depot.plafond': 'Plafond / ambulant',
+  'depot.campagne': 'Campagne : {statut}',
+  'campagne.BROUILLON': 'brouillon',
+  'campagne.PROPOSEE': 'proposée',
+  'campagne.ACTIVE': 'active',
+  'campagne.EPUISEE': 'épuisée',
+  'campagne.EXPIREE': 'expirée',
+  'campagne.CLOTUREE': 'clôturée',
+  'retrait.plafond': 'Plafond par ambulant (campagne)',
+  'ambulants.titre': 'Ambulants rattachés',
+  'ambulants.aide': 'Les ambulants qui ont reçu au moins un bon de sortie de votre part.',
+  'ambulants.nom': 'Nom',
+  'ambulants.telephone': 'Téléphone',
+  'ambulants.bons': 'Bons de sortie',
+  'ambulants.volume': 'Volume (unités)',
+  'ambulants.bons30': 'Bons sur 30 jours',
+  'ambulants.dernier': 'Dernier bon',
+  'bons.choisirAmbulant': 'Choisissez un ambulant rattaché ou saisissez un numéro.',
 } as const
 
 export type Cle = keyof typeof fr

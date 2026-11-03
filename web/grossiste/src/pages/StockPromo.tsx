@@ -1,7 +1,7 @@
 import { Link } from 'react-router'
 import { $api } from '@/api/client'
 import { useNomProduit } from '@/api/produits'
-import { Etat } from '@/components/communs'
+import { Etat, StatutCampagne } from '@/components/communs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useI18n } from '@/i18n'
@@ -11,9 +11,9 @@ const COLONNES = ['quantiteDeposee', 'quantiteReservee', 'quantiteRetiree', 'qua
 // Stock promo isolé du stock normal (§4.1) : un tableau par campagne, à partir des dépôts reçus.
 export default function StockPromo() {
   const { t, nombre } = useI18n()
-  const nom = useNomProduit()
   // ponytail: une page de 200 dépôts reçus, assez pour un grossiste du pilote ; paginer au-delà.
   const requete = $api.useQuery('get', '/v1/depots', { params: { query: { statut: 'RECU', taille: 200 } } }, { refetchInterval: 15_000 })
+  const nom = useNomProduit(requete.data?.contenu.flatMap((d) => d.lignes.map((l) => l.produitId)) ?? [])
   const titres = { quantiteDeposee: 'depot.depose', quantiteReservee: 'depot.reserve', quantiteRetiree: 'depot.retire', quantiteRestante: 'depot.restant' } as const
 
   return (
@@ -28,6 +28,7 @@ export default function StockPromo() {
                 <CardTitle>
                   <Link to={`/depots/${depot.id}`} className="hover:underline">{depot.campagne.nom}</Link>
                   {depot.marque && <span className="text-muted-foreground ms-2 text-sm font-normal">{depot.marque.nom}</span>}
+                  <span className="ms-2 align-middle"><StatutCampagne statut={depot.statutCampagne} /></span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
