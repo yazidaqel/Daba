@@ -1,40 +1,163 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+/* IBM Plex Sans (latin) et IBM Plex Sans Arabic (arabe), OFL 1.1, servies par l'appli (@fontsource 5.3.0).
+   woff2 seul, 400 et 600, sous-ensembles latin et arabe : unicode-range évite de charger l'arabe en français. */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-weight: 400;
+  font-display: swap;
+  src: url('@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-400-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-weight: 600;
+  font-display: swap;
+  src: url('@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-600-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Sans Arabic';
+  font-weight: 400;
+  font-display: swap;
+  src: url('@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-400-normal.woff2') format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E,
+    U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+}
+@font-face {
+  font-family: 'IBM Plex Sans Arabic';
+  font-weight: 600;
+  font-display: swap;
+  src: url('@fontsource/ibm-plex-sans-arabic/files/ibm-plex-sans-arabic-arabic-600-normal.woff2') format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E,
+    U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+}
+
+@theme {
+  /* Pages en lettres latines : sans Plex Sans Arabic, pour ne jamais la télécharger (le sélecteur de langue
+     contient des noms en arabe) ; un texte arabe isolé y prend la police arabe du système. */
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  /* Deux graisses seulement : « gras » = 600. */
+  --font-weight-bold: 600;
+}
+
+/* Arabe et darija en lettres arabes : la face arabe, puis Plex Sans (même famille) pour les chiffres et le latin. */
+:root:lang(ar),
+:root:lang(ary-Arab) {
+  --font-sans: 'IBM Plex Sans Arabic', 'IBM Plex Sans', system-ui, sans-serif;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
-  --color-succes: var(--succes);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
+  --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-promo: var(--promo);
+  --color-promo-soft: var(--promo-soft);
+  --color-promo-foreground: var(--promo-foreground);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-foreground: var(--danger-foreground);
+}
+
+/* Palette Zellige : valeurs de docs/charte-graphique.md, seule source des couleurs.
+   Les variables shadcn/ui en dérivent ; les écrans n'utilisent que ces jetons. */
+:root {
+  color-scheme: light;
+  --primary: #0f5e59;
+  --primary-hover: #0b4a46;
+  --primary-soft: #e6f2f1;
+  --primary-foreground: #ffffff; /* on-primary */
+  --promo: #e0a526;
+  --promo-soft: #fbefd3;
+  --promo-foreground: #3d2a02; /* on-promo */
+  --background: #f6f1e7;
+  --card: #fffdf8; /* surface */
+  --border: #e4dccb;
+  --foreground: #1d2b2a; /* text */
+  --muted-foreground: #6b6559; /* text-muted */
+  --success: #2e7d32;
+  --success-soft: #e6f2e6;
+  --warning: #b45309;
+  --warning-soft: #fdebd8;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  /* Texte sur un état plein : absent de la charte, blanc en clair (≥ 4,5:1 sur les trois). */
+  --success-foreground: #ffffff;
+  --warning-foreground: #ffffff;
+  --danger-foreground: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --primary: #4fb3a9;
+    --primary-hover: #6cc4bb;
+    --primary-soft: #123b38;
+    --primary-foreground: #062b29;
+    --promo: #efc764;
+    --promo-soft: #3a2c0a;
+    --promo-foreground: #3d2a02;
+    --background: #121a19;
+    --card: #1a2423;
+    --border: #2c3a38;
+    --foreground: #ece7dc;
+    --muted-foreground: #a39d90;
+    --success: #6bbf6f;
+    --success-soft: #16301a;
+    --warning: #f0a060;
+    --warning-soft: #3a2410;
+    --danger: #f2867a;
+    --danger-soft: #3a1714;
+    /* En sombre, les états pleins sont clairs : texte au ton du fond. */
+    --success-foreground: #121a19;
+    --warning-foreground: #121a19;
+    --danger-foreground: #121a19;
+  }
 }
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --primary: #0f766e;
-  --primary-foreground: #ffffff;
-  --secondary: #f0fdfa;
-  --secondary-foreground: #134e4a;
-  --muted: #f5f5f5;
-  --muted-foreground: #525252;
-  --accent: #f5f5f5;
-  --destructive: #b91c1c;
-  --succes: #15803d;
-  --border: #d4d4d4;
-  --ring: #0f766e;
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--primary-soft);
+  --secondary-foreground: var(--primary);
+  --muted: var(--background);
+  --accent: var(--primary-soft);
+  --accent-foreground: var(--foreground);
+  --destructive: var(--danger);
+  --destructive-foreground: var(--danger-foreground);
+  --input: var(--border);
+  --ring: var(--primary);
 }
 
 body {
   @apply bg-background text-foreground antialiased;
-  font-family: system-ui, 'Noto Sans Arabic', sans-serif;
   font-size: 1.0625rem;
 }

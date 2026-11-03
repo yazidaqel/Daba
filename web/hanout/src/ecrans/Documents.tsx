@@ -1,17 +1,29 @@
-import { CircleCheck, Download, FileText, Minus, PackageCheck, PackageX, Plus, Scale, Undo2 } from 'lucide-react'
+import { Ban, CircleCheck, Download, FileText, Minus, PackageCheck, PackageX, Plus, Scale, Tag, Undo2 } from 'lucide-react'
 import { useState } from 'react'
-import { confirmerReception } from '@/api/a-venir'
 import { api, type S } from '@/api/client'
-import { Alerte, carte, cleErreur, Etat, Vide } from '@/components/commun'
+import { Alerte, carte, cleErreur, Etat, MontantDu, Vide } from '@/components/commun'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useApi } from '@/outils'
 import { Lien } from '@/router'
 import type { Cle } from '@/textes'
-import { Contestation } from './Contestation'
+import { Contestation, ContestationEnCours, useContestationOuverte } from './Contestation'
 
 type Doc = S['Document']
+
+/** Réception (§6) ; 409 si elle est déjà acquise (signée chez l'ambulant ou déjà envoyée) : reste la contestation. */
+async function receptionner(documentId: string, body: S['ReceptionHanoutSaisie']): Promise<'ok' | 'acquise' | Cle> {
+  try {
+    const { response } = await api.POST('/v1/documents/{documentId}/reception', {
+      params: { path: { documentId } },
+      body,
+    })
+    return response.ok ? 'ok' : response.status === 409 ? 'acquise' : 'erreur.generique'
+  } catch {
+    return cleErreur()
+  }
+}
 
 /** Bons de livraison, factures et avoirs reçus, par ambulant. */
 export function Documents({ ambulantId }: { ambulantId?: string }) {
@@ -47,7 +59,10 @@ export function Documents({ ambulantId }: { ambulantId?: string }) {
                       <bdi>{d.numero}</bdi> · {date(d.emisLe)}
                     </span>
                     {d.statut !== 'EMIS' && (
-                      <span className="block text-sm font-semibold text-destructive">{t(`doc.${d.statut}`)}</span>
+                      <span className="flex items-center gap-1 text-sm font-semibold text-danger">
+                        <Ban className="size-4" aria-hidden />
+                        {t(`doc.${d.statut}`)}
+                      </span>
                     )}
                   </span>
                   <span className="font-bold">{montant(d.total)}</span>
@@ -69,13 +84,16 @@ export function Documents({ ambulantId }: { ambulantId?: string }) {
 export function DocumentDetail({ id }: { id: string }) {
   const { t, langue, montant, date, libelle } = useI18n()
   const r = useApi(() => api.GET('/v1/documents/{documentId}', { params: { path: { documentId: id } } }), [id])
+  const contestation = useContestationOuverte(id)
   const [mode, setMode] = useState<'ecart' | 'contester'>()
-  const [envoye, setEnvoye] = useState(false)
   const [erreur, setErreur] = useState<Cle>()
+  const [info, setInfo] = useState<Cle>()
   const [receptionId] = useState(() => crypto.randomUUID())
 
   if (!r.data) return <Etat {...r} />
   const d = r.data
+  const reception = d.receptionHanout
+  const aReceptionner = d.type !== 'AVOIR' && d.statut !== 'ANNULE' && !d.confirmationHanout && !reception
 
   async function telecharger() {
     setErreur(undefined)
@@ -96,19 +114,23 @@ export function DocumentDetail({ id }: { id: string }) {
     }
   }
 
-  async function recuConforme() {
+  async function receptionnerPuis(body: S['ReceptionHanoutSaisie']) {
     setErreur(undefined)
-    try {
-      if (await confirmerReception(id, { id: receptionId, conforme: true })) setEnvoye(true)
-      else setErreur('erreur.generique')
-    } catch {
-      setErreur(cleErreur())
+    setInfo(undefined)
+    const res = await receptionner(id, body)
+    if (res === 'ok' || res === 'acquise') r.recharger()
+    if (res === 'ok') return setMode(undefined)
+    if (res === 'acquise') {
+      setMode(contestation.ouverte ? undefined : 'contester')
+      return setInfo('doc.receptionAcquise')
     }
+    setErreur(res)
   }
 
-  const fini = (ok: boolean) => {
+  const fini = () => {
     setMode(undefined)
-    setEnvoye(ok)
+    setInfo(undefined)
+    contestation.recharger()
   }
 
   return (
@@ -119,7 +141,12 @@ export function DocumentDetail({ id }: { id: string }) {
           <bdi>{d.numero}</bdi> · {date(d.emisLe)}
         </p>
         <p className="font-semibold">{d.ambulant.nom}</p>
-        {d.statut !== 'EMIS' && <p className="font-semibold text-destructive">{t(`doc.${d.statut}`)}</p>}
+        {d.statut !== 'EMIS' && (
+          <p className="flex items-center gap-2 font-semibold text-danger">
+            <Ban className="shrink-0" aria-hidden />
+            {t(`doc.${d.statut}`)}
+          </p>
+        )}
         {d.documentOrigineId && (
           <Lien vers={`/documents/${d.documentOrigineId}`} className="block font-semibold text-primary underline">
             {t('doc.origine')}
@@ -129,11 +156,18 @@ export function DocumentDetail({ id }: { id: string }) {
 
       <ul className="divide-y divide-border">
         {d.lignes.map((l, i) => (
-          <li key={i} className="flex items-center gap-3 py-3">
+          <li key={i} className={cn('flex items-center gap-3 py-3', l.campagneNom && 'bg-promo-soft px-2')}>
             <span className="flex-1">
               <span className="block font-semibold">
                 {l.nature === 'ARTICLE' ? libelle(l.libelle) : libelle(l.campagneNom) || t('doc.remise')}
               </span>
+              {/* Ligne promo (RG-F3) : le safran est réservé aux promotions. */}
+              {l.campagneNom && (
+                <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-promo px-2 text-sm font-semibold text-promo-foreground">
+                  <Tag className="size-4" aria-hidden />
+                  {libelle(l.campagneNom)}
+                </span>
+              )}
               {l.nature === 'ARTICLE' && l.prixUnitaire !== undefined && (
                 <span className="block text-sm text-muted-foreground">
                   {l.quantite} × {montant(l.prixUnitaire)}
@@ -151,36 +185,45 @@ export function DocumentDetail({ id }: { id: string }) {
         <dt>{t('doc.regle')}</dt>
         <dd className="text-end">{montant(d.montantRegle)}</dd>
         <dt>{t('doc.credit')}</dt>
-        <dd className="text-end">{montant(d.montantCredit)}</dd>
+        <dd className="text-end">
+          <MontantDu du={d.montantCredit > 0}>{montant(d.montantCredit)}</MontantDu>
+        </dd>
       </dl>
 
       {d.confirmationHanout && (
-        <p className="flex items-center gap-2 text-succes">
+        <p className="flex items-center gap-2 text-success">
           <CircleCheck />
           {t('doc.confirmeLe', { date: date(d.confirmationHanout.le) })}
         </p>
       )}
 
-      {envoye && (
-        <output className="flex items-center gap-2 font-semibold text-succes">
-          <CircleCheck />
-          {t('envoye')}
-        </output>
+      {reception && (
+        <p className={cn('flex items-center gap-2', reception.conforme ? 'text-success' : 'text-danger')}>
+          {reception.conforme ? <CircleCheck /> : <PackageX />}
+          {t(reception.conforme ? 'doc.confirmeLe' : 'doc.ecartLe', { date: date(reception.le) })}
+        </p>
       )}
+      {contestation.ouverte && <ContestationEnCours c={contestation.ouverte} />}
+      {info && <output className="block font-semibold">{t(info)}</output>}
+      <Alerte cle={erreur} />
 
-      {mode === 'ecart' && <Ecart doc={d} receptionId={receptionId} onFini={fini} />}
+      {mode === 'ecart' && (
+        <Ecart
+          doc={d}
+          onEnvoyer={(ecarts) => receptionnerPuis({ id: receptionId, conforme: ecarts.length === 0, ecarts })}
+          onAnnuler={() => setMode(undefined)}
+        />
+      )}
       {mode === 'contester' && <Contestation cible="DOCUMENT" cibleId={d.id} onFini={fini} />}
 
       {!mode && (
         <div className="grid gap-3">
-          {d.type !== 'AVOIR' && d.statut !== 'ANNULE' && !envoye && (
+          {aReceptionner && (
             <>
-              {!d.confirmationHanout && (
-                <Button size="lg" onClick={recuConforme}>
-                  <PackageCheck />
-                  {t('doc.recuConforme')}
-                </Button>
-              )}
+              <Button size="lg" onClick={() => receptionnerPuis({ id: receptionId, conforme: true })}>
+                <PackageCheck />
+                {t('doc.recuConforme')}
+              </Button>
               <Button size="lg" variant="outline" onClick={() => setMode('ecart')}>
                 <PackageX />
                 {t('doc.ecart')}
@@ -191,7 +234,7 @@ export function DocumentDetail({ id }: { id: string }) {
             <Download />
             {t('doc.pdf')}
           </Button>
-          {!envoye && (
+          {!contestation.ouverte && !contestation.chargement && (
             <Button size="lg" variant="ghost" onClick={() => setMode('contester')}>
               <Scale />
               {t('doc.contester')}
@@ -199,36 +242,35 @@ export function DocumentDetail({ id }: { id: string }) {
           )}
         </div>
       )}
-      <Alerte cle={erreur} />
     </div>
   )
 }
 
 /** Quantités réellement reçues, ligne par ligne. */
-function Ecart({ doc, receptionId, onFini }: { doc: Doc; receptionId: string; onFini: (ok: boolean) => void }) {
+function Ecart({
+  doc,
+  onEnvoyer,
+  onAnnuler,
+}: {
+  doc: Doc
+  onEnvoyer: (ecarts: S['EcartReception'][]) => Promise<void>
+  onAnnuler: () => void
+}) {
   const { t, libelle } = useI18n()
   // Une ligne est repérée par son rang : un même produit peut venir du stock promo et du stock normal.
   const articles = doc.lignes.map((l, ligne) => ({ ...l, ligne })).filter((l) => l.nature === 'ARTICLE')
   const [recu, setRecu] = useState(() => articles.map((l) => l.quantite ?? 0))
-  const [erreur, setErreur] = useState<Cle>()
   const [occupe, setOccupe] = useState(false)
 
   const changer = (i: number, delta: number) => setRecu((r) => r.map((q, j) => (j === i ? Math.max(0, q + delta) : q)))
 
   async function envoyer() {
     setOccupe(true)
-    setErreur(undefined)
     const ecarts = articles
       .filter((l, i) => recu[i] !== l.quantite)
       .map((l) => ({ ligne: l.ligne, quantiteRecue: recu[articles.indexOf(l)] }))
-    try {
-      if (await confirmerReception(doc.id, { id: receptionId, conforme: ecarts.length === 0, ecarts })) onFini(true)
-      else setErreur('erreur.generique')
-    } catch {
-      setErreur(cleErreur())
-    } finally {
-      setOccupe(false)
-    }
+    await onEnvoyer(ecarts)
+    setOccupe(false)
   }
 
   return (
@@ -258,9 +300,8 @@ function Ecart({ doc, receptionId, onFini }: { doc: Doc; receptionId: string; on
           </li>
         ))}
       </ul>
-      <Alerte cle={erreur} />
       <div className="grid grid-cols-2 gap-3">
-        <Button variant="ghost" onClick={() => onFini(false)}>
+        <Button variant="ghost" onClick={onAnnuler}>
           {t('annuler')}
         </Button>
         <Button disabled={occupe} onClick={envoyer}>

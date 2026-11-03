@@ -1,11 +1,10 @@
 import { Download, ShieldOff } from 'lucide-react'
 import { useState } from 'react'
-import { api } from '@/api/client'
+import { api, deconnecter } from '@/api/client'
 import { Alerte, cleErreur } from '@/components/commun'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { naviguer } from '@/router'
-import { fermerSession } from '@/session'
 import type { Cle } from '@/textes'
 
 /** Droit d'accès et retrait du consentement (loi 09-08). */
@@ -39,7 +38,7 @@ export function Donnees() {
         body: { versionTexte: `hanout-1-${langue}`, traitementDonnees: false, langue },
       })
       if (!data) return false
-      fermerSession()
+      deconnecter()
       naviguer('/connexion', true)
       return true
     })

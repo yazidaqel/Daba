@@ -1,4 +1,5 @@
 import { CircleAlert, Package, RefreshCw } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
@@ -6,9 +7,9 @@ import { cn } from '@/lib/utils'
 import type { Cle } from '@/textes'
 
 export const champ =
-  'w-full min-h-14 rounded-xl border-2 border-border bg-background px-4 text-lg outline-none focus-visible:border-ring'
+  'w-full min-h-14 rounded-xl border-2 border-input bg-card px-4 text-lg outline-none focus-visible:border-ring'
 
-export const carte = 'rounded-2xl border-2 border-border p-4'
+export const carte = 'rounded-2xl border-2 border-border bg-card p-4'
 
 /** Erreur réseau ou serveur, selon ce que dit le téléphone. */
 export const cleErreur = (): Cle => (navigator.onLine ? 'erreur.generique' : 'erreur.reseau')
@@ -41,10 +42,20 @@ export function Alerte({ cle }: { cle?: Cle }) {
   const { t } = useI18n()
   if (!cle) return null
   return (
-    <p role="alert" className="flex items-center gap-2 font-semibold text-destructive">
+    <p role="alert" className="flex items-center gap-2 font-semibold text-danger">
       <CircleAlert className="shrink-0" />
       {t(cle)}
     </p>
+  )
+}
+
+/** Somme due (solde, crédit, impayé) : `danger` avec une icône, jamais la couleur seule. */
+export function MontantDu({ du, children, className }: { du: boolean; children: ReactNode; className?: string }) {
+  return (
+    <span className={cn('inline-flex items-center gap-1', du && 'text-danger', className)}>
+      {du && <CircleAlert className="size-[1em] shrink-0" aria-hidden />}
+      {children}
+    </span>
   )
 }
 

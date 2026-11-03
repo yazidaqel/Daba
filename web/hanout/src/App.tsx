@@ -1,5 +1,6 @@
 import { FileText, LogOut, PackageSearch, ShieldCheck, Wallet } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { deconnecter } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Comptes, Releve } from '@/ecrans/Comptes'
 import { Connexion } from '@/ecrans/Connexion'
@@ -11,7 +12,7 @@ import { Rupture } from '@/ecrans/Rupture'
 import { changerLangue, LANGUES, useI18n, type Langue } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { correspond, Lien, naviguer, useUrl } from '@/router'
-import { fermerSession, lireSession } from '@/session'
+import { lireSession } from '@/session'
 
 type Rendu = (p: Record<string, string>, q: URLSearchParams) => ReactNode
 
@@ -43,7 +44,9 @@ export function App() {
   let contenu: ReactNode
   if (lien) contenu = <Connexion key={lien.jeton} jeton={lien.jeton} />
   else if (!connecte || chemin === '/connexion')
-    contenu = <Connexion suite={chemin === '/connexion' ? (q.get('suite') ?? '/') : url} />
+    contenu = (
+      <Connexion suite={chemin === '/connexion' ? (q.get('suite') ?? '/') : url} revoque={q.has('revoque')} />
+    )
   else {
     const route = ROUTES.map(([motif, rendu]) => [correspond(motif, chemin), rendu] as const).find(([p]) => p)
     contenu = route?.[0] ? route[1](route[0], q) : <Rupture />
@@ -52,7 +55,7 @@ export function App() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-background px-4 py-2">
+      <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-card px-4 py-2">
         <Lien vers="/" className="me-auto text-2xl font-bold text-primary">
           Daba
         </Lien>
@@ -60,7 +63,7 @@ export function App() {
           aria-label={t('langue')}
           value={langue}
           onChange={(e) => changerLangue(e.target.value as Langue)}
-          className="min-h-12 rounded-xl border-2 border-border bg-background px-2"
+          className="min-h-12 rounded-xl border-2 border-input bg-card px-2"
         >
           {LANGUES.map((l) => (
             <option key={l.code} value={l.code} lang={l.code}>
@@ -81,7 +84,7 @@ export function App() {
             size="icon"
             aria-label={t('deconnexion')}
             onClick={() => {
-              fermerSession()
+              deconnecter()
               naviguer('/connexion')
             }}
           >
@@ -91,7 +94,7 @@ export function App() {
       </header>
       <main className={cn('mx-auto w-full max-w-lg flex-1 p-4', avecOnglets && 'pb-28')}>{contenu}</main>
       {avecOnglets && (
-        <nav className="fixed inset-x-0 bottom-0 grid grid-cols-3 border-t border-border bg-background">
+        <nav className="fixed inset-x-0 bottom-0 grid grid-cols-3 border-t border-border bg-card">
           {ONGLETS.map(({ vers, cle, Icone, actif }) => (
             <Lien
               key={vers}
