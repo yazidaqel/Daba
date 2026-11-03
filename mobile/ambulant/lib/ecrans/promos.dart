@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../etat.dart';
 import '../ui.dart';
 
 /// Fil des promos (§3.6), livré par la synchro et consultable hors ligne ; la réservation exige le réseau.
@@ -95,7 +96,9 @@ class _EcranOffreState extends State<EcranOffre> {
       final r = await context.daba.reserver(widget.offre['id'] as String, _quantite, id: _idReservation);
       if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => EcranReservation(r)));
     } catch (e) {
-      if (mounted) context.erreur(e);
+      if (!mounted) return;
+      context.erreur(e);
+      if (e is OffreIndisponible) Navigator.pop(context); // l'offre a quitté le fil
     } finally {
       if (mounted) setState(() => _occupe = false);
     }

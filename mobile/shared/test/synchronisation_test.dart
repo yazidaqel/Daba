@@ -162,6 +162,41 @@ void main() {
       await expectLater(api.get('/v1/stock'), throwsA(isA<ProblemeApi>().having((e) => e.status, 'status', 401)));
     });
 
+    test('consentement-requis (contrat 0.5.1) : gardée sans être refusée, renvoyée telle quelle après consentement', () async {
+      var consentement = false;
+      final envois = <List<String>>[];
+      final client = MockClient((req) async {
+        if (req.url.path == '/v1/sync/operations') {
+          final ops = (jsonDecode(req.body)['operations'] as List).cast<Map>();
+          envois.add([for (final o in ops) o['type'] as String]);
+          return http.Response(jsonEncode({'resultats': [
+            for (final o in ops)
+              o['type'] == 'TARIF' && !consentement
+                  ? {'operationId': o['id'], 'statut': 'REJETEE', 'erreur': {'type': 'https://daba.ma/problemes/consentement-requis', 'status': 403}}
+                  : {'operationId': o['id'], 'statut': 'APPLIQUEE'}
+          ]}), 200);
+        }
+        return http.Response(jsonEncode({'curseur': 'c', 'plusDeChangements': false, 'changements': []}), 200);
+      });
+      final sync = Synchronisation(s, Api('http://serveur', client: client), appareilId: appareil, prefixe: 'K7Q2');
+      final tarif = s.enfiler('TARIF', {'produitId': 'p', 'prixUnitaire': 800});
+      s.enfiler('VERSEMENT', {'n': 1});
+      await sync.synchroniser();
+      expect(envois, [['TARIF', 'VERSEMENT']], reason: 'pas de renvoi en boucle');
+      expect(s.nombreEnAttente, 1);
+      expect(s.operationsSignalees(), isEmpty, reason: 'pas affichée comme refusée');
+      expect(s.attenteConsentement, isTrue);
+
+      await sync.synchroniser();
+      expect(envois, hasLength(1), reason: 'attend le consentement');
+      consentement = true;
+      s.reprendreApresConsentement();
+      await sync.synchroniser();
+      expect(envois.last, ['TARIF']);
+      expect(s.enAttente(), isEmpty);
+      expect(s.db.select('SELECT statut FROM operation WHERE id = ?', [tarif]).first['statut'], 'APPLIQUEE');
+    });
+
     test('un document rejeté reste visible, marqué refusé', () async {
       final client = MockClient((req) async => http.Response(
           jsonEncode(req.url.path == '/v1/sync/operations'

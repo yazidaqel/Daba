@@ -11,6 +11,9 @@ class DabaScope extends InheritedNotifier<Daba> {
 
 extension Contexte on BuildContext {
   Daba get daba => dependOnInheritedWidgetOfExactType<DabaScope>()!.notifier!;
+
+  /// Sans abonnement aux changements : utilisable dans initState.
+  Daba get dabaLu => getInheritedWidgetOfExactType<DabaScope>()!.notifier!;
   T get t => T.of(this);
   Locale get langue => Localizations.localeOf(this);
   String lib(Object? libelleI18n) => libelle(libelleI18n, langue);
@@ -40,6 +43,7 @@ String messageErreur(T t, Object e) => switch (e) {
       HorsLigne() => t.erreurHorsLigne,
       PermissionRefusee() => t.erreurPermissionPosition,
       AutreAmbulantEnAttente() => t.erreurAutreAmbulant,
+      OffreIndisponible() => t.offreNonCiblee,
       VenteRefusee(:final motif) => switch (motif) {
           RefusVente.factureSansMentions => t.erreurFactureSansMentions,
           RefusVente.factureTvaInconnue => t.erreurFactureTvaInconnue,

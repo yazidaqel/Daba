@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter/services.dart';
 
+import '../etat.dart';
 import '../ui.dart';
 import 'connexion.dart';
 import 'depannage.dart';
 import 'hanouts.dart';
 import 'karni.dart';
+import 'profil.dart';
 import 'promos.dart';
 import 'stock.dart';
 import 'synchro.dart';
@@ -49,6 +51,7 @@ class _EcranAccueilState extends State<EcranAccueil> {
   Widget build(BuildContext context) {
     final t = context.t;
     final daba = context.daba;
+    _proposerProfil(daba);
     final onglets = [t.ongletHanouts, t.ongletStock, t.ongletKarni, t.ongletPromos, t.ongletDepannage];
     return Scaffold(
       appBar: AppBar(
@@ -66,8 +69,13 @@ class _EcranAccueilState extends State<EcranAccueil> {
           const MenuLangue(),
           PopupMenuButton<int>(
             icon: const Ico(PhosphorIconsRegular.dotsThreeVertical),
-            onSelected: (v) => v == 0 ? context.ouvrir(const EcranParametres()) : _deconnecter(),
+            onSelected: (v) => switch (v) {
+              0 => context.ouvrir(const EcranParametres()),
+              2 => context.ouvrir(const EcranProfil()),
+              _ => _deconnecter(),
+            },
             itemBuilder: (_) => [
+              PopupMenuItem(value: 2, child: Text(t.profil)),
               PopupMenuItem(value: 0, child: Text(t.parametres)),
               PopupMenuItem(value: 1, child: Text(t.deconnexion)),
             ],
@@ -75,6 +83,13 @@ class _EcranAccueilState extends State<EcranAccueil> {
         ],
       ),
       body: Column(children: [
+        // Ancien texte CNDP accepté : l'app reste utilisable, le nouveau est proposé quand le réseau est là.
+        if ((!daba.consentementAJour || daba.stockage.attenteConsentement) && !daba.horsLigne)
+          MaterialBanner(
+            leading: const Ico(PhosphorIconsRegular.info),
+            content: Text(t.consentementNouveauTexte),
+            actions: [TextButton(onPressed: () => context.ouvrir(const EcranConsentement()), child: Text(t.lireEtAccepter))],
+          ),
         if (daba.reconnexionRequise)
           MaterialBanner(
             content: Text(t.reconnexionRequise),
@@ -110,6 +125,15 @@ class _EcranAccueilState extends State<EcranAccueil> {
         ],
       ),
     );
+  }
+
+  /// Profil proposé une fois après la première connexion, si le serveur n'en a envoyé aucun (§3.1).
+  void _proposerProfil(Daba daba) {
+    if (daba.derniereSync == null || !daba.consentementAJour || daba.m.profil != null || daba.stockage.lire('profilPropose') != null) return;
+    daba.stockage.ecrire('profilPropose', '1');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.ouvrir(const EcranProfil(propose: true));
+    });
   }
 
   Future<void> _deconnecter() async {

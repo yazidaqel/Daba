@@ -193,7 +193,7 @@ abstract class T {
   /// No description provided for @consentementTexte.
   ///
   /// In fr, this message translates to:
-  /// **'Daba enregistre vos ventes, votre stock et le crédit de vos clients pour vous rendre service (loi 09-08, déclaration CNDP). Aucune donnée nominative n\'est transmise aux marques. Votre position n\'est collectée que si vous l\'acceptez, et seulement quand vous êtes « disponible » pour le dépannage. Vous pouvez retirer votre accord et demander vos données à tout moment.'**
+  /// **'Daba enregistre vos ventes, votre stock et le crédit de vos clients pour vous rendre service (loi 09-08, déclaration CNDP). Votre nom est montré aux grossistes et aux hanouts avec qui vous travaillez. Aucune donnée nominative n\'est transmise aux marques. Votre position n\'est collectée que si vous l\'acceptez, et seulement quand vous êtes « disponible » pour le dépannage. Vous pouvez retirer votre accord et demander vos données à tout moment.'**
   String get consentementTexte;
 
   /// No description provided for @consentementDonnees.
@@ -1557,6 +1557,138 @@ abstract class T {
   /// In fr, this message translates to:
   /// **'Délai dépassé'**
   String get delaiDepasse;
+
+  /// No description provided for @profil.
+  ///
+  /// In fr, this message translates to:
+  /// **'Mon profil'**
+  String get profil;
+
+  /// No description provided for @profilExplication.
+  ///
+  /// In fr, this message translates to:
+  /// **'Votre nom est montré aux grossistes et aux hanouts avec qui vous travaillez, jamais aux marques. Vos catégories choisissent les promos que vous recevez.'**
+  String get profilExplication;
+
+  /// No description provided for @nomComplet.
+  ///
+  /// In fr, this message translates to:
+  /// **'Nom et prénom'**
+  String get nomComplet;
+
+  /// No description provided for @cin.
+  ///
+  /// In fr, this message translates to:
+  /// **'CIN (facultatif)'**
+  String get cin;
+
+  /// No description provided for @cinInvalide.
+  ///
+  /// In fr, this message translates to:
+  /// **'CIN : 1 ou 2 lettres puis jusqu\'à 6 chiffres (ex. BK123456)'**
+  String get cinInvalide;
+
+  /// No description provided for @vehicule.
+  ///
+  /// In fr, this message translates to:
+  /// **'Véhicule (facultatif)'**
+  String get vehicule;
+
+  /// No description provided for @zonesCouvertes.
+  ///
+  /// In fr, this message translates to:
+  /// **'Zones couvertes'**
+  String get zonesCouvertes;
+
+  /// No description provided for @categoriesVendues.
+  ///
+  /// In fr, this message translates to:
+  /// **'Catégories vendues'**
+  String get categoriesVendues;
+
+  /// No description provided for @listeApresConnexion.
+  ///
+  /// In fr, this message translates to:
+  /// **'Liste disponible après une connexion'**
+  String get listeApresConnexion;
+
+  /// No description provided for @plusTard.
+  ///
+  /// In fr, this message translates to:
+  /// **'Plus tard'**
+  String get plusTard;
+
+  /// No description provided for @profilEnregistre.
+  ///
+  /// In fr, this message translates to:
+  /// **'Profil enregistré'**
+  String get profilEnregistre;
+
+  /// No description provided for @opPROFIL_AMBULANT.
+  ///
+  /// In fr, this message translates to:
+  /// **'Profil'**
+  String get opPROFIL_AMBULANT;
+
+  /// No description provided for @mentionsLegales.
+  ///
+  /// In fr, this message translates to:
+  /// **'Mentions légales (facture)'**
+  String get mentionsLegales;
+
+  /// No description provided for @mentionsExplication.
+  ///
+  /// In fr, this message translates to:
+  /// **'Avec un ICE, vous pouvez émettre des factures en plus des bons de livraison.'**
+  String get mentionsExplication;
+
+  /// No description provided for @mentionsAucune.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucune : bons de livraison seulement'**
+  String get mentionsAucune;
+
+  /// No description provided for @identifiantFiscal.
+  ///
+  /// In fr, this message translates to:
+  /// **'Identifiant fiscal (IF)'**
+  String get identifiantFiscal;
+
+  /// No description provided for @registreCommerce.
+  ///
+  /// In fr, this message translates to:
+  /// **'Registre du commerce (RC)'**
+  String get registreCommerce;
+
+  /// No description provided for @assujettiTva.
+  ///
+  /// In fr, this message translates to:
+  /// **'Assujetti à la TVA'**
+  String get assujettiTva;
+
+  /// No description provided for @offreNonCiblee.
+  ///
+  /// In fr, this message translates to:
+  /// **'Cette offre ne vous est plus proposée.'**
+  String get offreNonCiblee;
+
+  /// No description provided for @consentementNouveauTexte.
+  ///
+  /// In fr, this message translates to:
+  /// **'Le texte sur vos données a changé : votre nom est maintenant montré aux grossistes et aux hanouts avec qui vous travaillez.'**
+  String get consentementNouveauTexte;
+
+  /// No description provided for @lireEtAccepter.
+  ///
+  /// In fr, this message translates to:
+  /// **'Lire et accepter'**
+  String get lireEtAccepter;
+
+  /// No description provided for @profilConsentementRequis.
+  ///
+  /// In fr, this message translates to:
+  /// **'Acceptez d\'abord le nouveau texte sur vos données pour enregistrer votre profil.'**
+  String get profilConsentementRequis;
 }
 
 class _TDelegate extends LocalizationsDelegate<T> {

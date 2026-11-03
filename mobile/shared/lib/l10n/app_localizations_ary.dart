@@ -58,7 +58,7 @@ class TAry extends T {
 
   @override
   String get consentementTexte =>
-      'دابا كيسجل البيعات، السلعة والكريدي ديال الكليان باش يعاونك (قانون 09-08، تصريح CNDP). حتى معلومة شخصية ما كتمشي للماركات. البلاصة ديالك ما كتتاخدش غير إلا قبلتي، وغير ملي تكون «موجود» للدبانة. تقدر تحيد الموافقة وتطلب المعلومات ديالك فأي وقت.';
+      'دابا كيسجل البيعات، السلعة والكريدي ديال الكليان باش يعاونك (قانون 09-08، تصريح CNDP). السمية ديالك كتبان لموالين الجملة وللحوانت اللي خدام معاهم. حتى معلومة شخصية ما كتمشي للماركات. البلاصة ديالك ما كتتاخدش غير إلا قبلتي، وغير ملي تكون «موجود» للدبانة. تقدر تحيد الموافقة وتطلب المعلومات ديالك فأي وقت.';
 
   @override
   String get consentementDonnees => 'موافق على المعالجة ديال المعلومات ديالي';
@@ -807,6 +807,77 @@ class TAry extends T {
 
   @override
   String get delaiDepasse => 'فاتت المدة';
+
+  @override
+  String get profil => 'البروفيل ديالي';
+
+  @override
+  String get profilExplication =>
+      'السمية ديالك كتبان لموالين الجملة وللحوانت اللي خدام معاهم، عمرها ما كتبان للماركات. الأصناف ديالك هوما اللي كيختارو البروموات اللي توصلك.';
+
+  @override
+  String get nomComplet => 'السمية والكنية';
+
+  @override
+  String get cin => 'لاكارط (إلا بغيتي)';
+
+  @override
+  String get cinInvalide =>
+      'لاكارط: حرف ولا جوج ومن بعد حتى 6 ديال الأرقام (بحال BK123456)';
+
+  @override
+  String get vehicule => 'الطوموبيل ولا التريبورتور (إلا بغيتي)';
+
+  @override
+  String get zonesCouvertes => 'المناطق اللي كتدور فيها';
+
+  @override
+  String get categoriesVendues => 'الأصناف اللي كتبيع';
+
+  @override
+  String get listeApresConnexion => 'الليستة كتبان من بعد ما تتكونيكطا';
+
+  @override
+  String get plusTard => 'من بعد';
+
+  @override
+  String get profilEnregistre => 'البروفيل تسجل';
+
+  @override
+  String get opPROFIL_AMBULANT => 'البروفيل';
+
+  @override
+  String get mentionsLegales => 'المعلومات القانونية (الفاكتورة)';
+
+  @override
+  String get mentionsExplication =>
+      'إلا عندك ICE تقدر تخرج فاكتورات زايدين على البونات ديال التسليم.';
+
+  @override
+  String get mentionsAucune => 'والو: غير البونات ديال التسليم';
+
+  @override
+  String get identifiantFiscal => 'التعريف الضريبي (IF)';
+
+  @override
+  String get registreCommerce => 'السجل التجاري (RC)';
+
+  @override
+  String get assujettiTva => 'كتخلص TVA';
+
+  @override
+  String get offreNonCiblee => 'هاد البرومو ما بقاتش ليك.';
+
+  @override
+  String get consentementNouveauTexte =>
+      'النص ديال المعلومات ديالك تبدل: دابا السمية ديالك كتبان لموالين الجملة وللحوانت اللي خدام معاهم.';
+
+  @override
+  String get lireEtAccepter => 'قرا وقبل';
+
+  @override
+  String get profilConsentementRequis =>
+      'قبل الأول النص الجديد ديال المعلومات ديالك باش تسجل البروفيل.';
 }
 
 /// The translations for Moroccan Arabic, using the Latin script (`ary_Latn`).
@@ -862,7 +933,7 @@ class TAryLatn extends TAry {
 
   @override
   String get consentementTexte =>
-      'Daba kaysajjel lbi3at, sel3a w lcrédit dyal lclients bach y3awnek (9anoun 09-08, tasri7 CNDP). 7ta ma3louma chakhsiya ma katmchi l marques. Blassa dyalek ma kattakhed ghir ila 9bilti, w ghir mli tkoun « mojoud » l dépannage. T9der t7iyed lmowafa9a w tetlob lma3loumat dyalek f ay we9t.';
+      'Daba kaysajjel lbi3at, sel3a w lcrédit dyal lclients bach y3awnek (9anoun 09-08, tasri7 CNDP). Smiya dyalek katban l lgrossistes w l l7wanet li khddam m3ahom. 7ta ma3louma chakhsiya ma katmchi l marques. Blassa dyalek ma kattakhed ghir ila 9bilti, w ghir mli tkoun « mojoud » l dépannage. T9der t7iyed lmowafa9a w tetlob lma3loumat dyalek f ay we9t.';
 
   @override
   String get consentementDonnees =>
@@ -1617,4 +1688,75 @@ class TAryLatn extends TAry {
 
   @override
   String get delaiDepasse => 'Fatet lmodda';
+
+  @override
+  String get profil => 'Profil dyali';
+
+  @override
+  String get profilExplication =>
+      'Smiya dyalek katban l lgrossistes w l l7wanet li khddam m3ahom, 3omrha ma katban l marques. Les catégories dyalek homa li kaykhtaro les promos li ywsslouk.';
+
+  @override
+  String get nomComplet => 'Smiya w kniya';
+
+  @override
+  String get cin => 'CIN (ila bghiti)';
+
+  @override
+  String get cinInvalide =>
+      'CIN : 7arf wla jouj w men b3d 7ta 6 ar9am (b7al BK123456)';
+
+  @override
+  String get vehicule => 'Tomobil wla triporteur (ila bghiti)';
+
+  @override
+  String get zonesCouvertes => 'Lmanati9 li katdour fihom';
+
+  @override
+  String get categoriesVendues => 'Les catégories li katbi3';
+
+  @override
+  String get listeApresConnexion => 'Lista katban men b3d ma tconnecta';
+
+  @override
+  String get plusTard => 'Men b3d';
+
+  @override
+  String get profilEnregistre => 'Profil tsajjel';
+
+  @override
+  String get opPROFIL_AMBULANT => 'Profil';
+
+  @override
+  String get mentionsLegales => 'Ma3loumat 9anouniya (facture)';
+
+  @override
+  String get mentionsExplication =>
+      'Ila 3ndek ICE t9der tkhrej factures zaydin 3la bons de livraison.';
+
+  @override
+  String get mentionsAucune => 'Walou : ghir bons de livraison';
+
+  @override
+  String get identifiantFiscal => 'Identifiant fiscal (IF)';
+
+  @override
+  String get registreCommerce => 'Registre du commerce (RC)';
+
+  @override
+  String get assujettiTva => 'Katkhlles TVA';
+
+  @override
+  String get offreNonCiblee => 'Had lpromo ma b9atch lik.';
+
+  @override
+  String get consentementNouveauTexte =>
+      'Nass dyal lma3loumat dyalek tbeddel : daba smiya dyalek katban l lgrossistes w l l7wanet li khddam m3ahom.';
+
+  @override
+  String get lireEtAccepter => '9ra w 9bel';
+
+  @override
+  String get profilConsentementRequis =>
+      '9bel lowel nass jdid dyal lma3loumat dyalek bach tsajjel profil.';
 }

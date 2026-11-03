@@ -58,7 +58,7 @@ class TFr extends T {
 
   @override
   String get consentementTexte =>
-      'Daba enregistre vos ventes, votre stock et le crédit de vos clients pour vous rendre service (loi 09-08, déclaration CNDP). Aucune donnée nominative n\'est transmise aux marques. Votre position n\'est collectée que si vous l\'acceptez, et seulement quand vous êtes « disponible » pour le dépannage. Vous pouvez retirer votre accord et demander vos données à tout moment.';
+      'Daba enregistre vos ventes, votre stock et le crédit de vos clients pour vous rendre service (loi 09-08, déclaration CNDP). Votre nom est montré aux grossistes et aux hanouts avec qui vous travaillez. Aucune donnée nominative n\'est transmise aux marques. Votre position n\'est collectée que si vous l\'acceptez, et seulement quand vous êtes « disponible » pour le dépannage. Vous pouvez retirer votre accord et demander vos données à tout moment.';
 
   @override
   String get consentementDonnees => 'J\'accepte le traitement de mes données';
@@ -824,4 +824,75 @@ class TFr extends T {
 
   @override
   String get delaiDepasse => 'Délai dépassé';
+
+  @override
+  String get profil => 'Mon profil';
+
+  @override
+  String get profilExplication =>
+      'Votre nom est montré aux grossistes et aux hanouts avec qui vous travaillez, jamais aux marques. Vos catégories choisissent les promos que vous recevez.';
+
+  @override
+  String get nomComplet => 'Nom et prénom';
+
+  @override
+  String get cin => 'CIN (facultatif)';
+
+  @override
+  String get cinInvalide =>
+      'CIN : 1 ou 2 lettres puis jusqu\'à 6 chiffres (ex. BK123456)';
+
+  @override
+  String get vehicule => 'Véhicule (facultatif)';
+
+  @override
+  String get zonesCouvertes => 'Zones couvertes';
+
+  @override
+  String get categoriesVendues => 'Catégories vendues';
+
+  @override
+  String get listeApresConnexion => 'Liste disponible après une connexion';
+
+  @override
+  String get plusTard => 'Plus tard';
+
+  @override
+  String get profilEnregistre => 'Profil enregistré';
+
+  @override
+  String get opPROFIL_AMBULANT => 'Profil';
+
+  @override
+  String get mentionsLegales => 'Mentions légales (facture)';
+
+  @override
+  String get mentionsExplication =>
+      'Avec un ICE, vous pouvez émettre des factures en plus des bons de livraison.';
+
+  @override
+  String get mentionsAucune => 'Aucune : bons de livraison seulement';
+
+  @override
+  String get identifiantFiscal => 'Identifiant fiscal (IF)';
+
+  @override
+  String get registreCommerce => 'Registre du commerce (RC)';
+
+  @override
+  String get assujettiTva => 'Assujetti à la TVA';
+
+  @override
+  String get offreNonCiblee => 'Cette offre ne vous est plus proposée.';
+
+  @override
+  String get consentementNouveauTexte =>
+      'Le texte sur vos données a changé : votre nom est maintenant montré aux grossistes et aux hanouts avec qui vous travaillez.';
+
+  @override
+  String get lireEtAccepter => 'Lire et accepter';
+
+  @override
+  String get profilConsentementRequis =>
+      'Acceptez d\'abord le nouveau texte sur vos données pour enregistrer votre profil.';
 }

@@ -114,8 +114,17 @@ class Stockage {
           }
       ];
 
+  /// Opérations pas encore acquittées, y compris celles qui attendent un consentement actif.
   int get nombreEnAttente =>
-      db.select("SELECT count(*) n FROM operation WHERE statut = 'EN_ATTENTE'").first['n'] as int;
+      db.select("SELECT count(*) n FROM operation WHERE statut IN ('EN_ATTENTE', 'CONSENTEMENT')").first['n'] as int;
+
+  /// Des opérations attendent un consentement actif (le serveur a répondu `consentement-requis`).
+  bool get attenteConsentement => db.select("SELECT 1 FROM operation WHERE statut = 'CONSENTEMENT' LIMIT 1").isNotEmpty;
+
+  /// Consentement de nouveau actif : les opérations mises de côté (`consentement-requis`, contrat 0.5.1)
+  /// repartent telles quelles, à leur rang d'origine.
+  void reprendreApresConsentement() =>
+      db.execute("UPDATE operation SET statut = 'EN_ATTENTE', resultat = NULL WHERE statut = 'CONSENTEMENT'");
 
   void marquer(String opId, String statut, Map<String, dynamic> resultat) => db.execute(
       'UPDATE operation SET statut = ?, resultat = ? WHERE id = ?', [statut, jsonEncode(resultat), opId]);
@@ -140,7 +149,7 @@ class Stockage {
 
   /// Après un tirage complet qui a suivi la poussée, le serveur reflète les opérations acquittées.
   void oublierDeltasAcquittes() => db.execute(
-      "DELETE FROM delta_local WHERE operation_id IN (SELECT id FROM operation WHERE statut <> 'EN_ATTENTE')");
+      "DELETE FROM delta_local WHERE operation_id IN (SELECT id FROM operation WHERE statut NOT IN ('EN_ATTENTE', 'CONSENTEMENT'))");
 
   // ------------------------------------------------------------------ numérotation (RG-F1)
   /// Séquence suivante d'une série (BL, FA, AV) ; à appeler dans la transaction qui émet le document

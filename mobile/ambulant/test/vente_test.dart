@@ -287,7 +287,7 @@ void main() {
     final schemaDe = {
       'EMISSION_DOCUMENT': 'EmissionDocument', 'VERSEMENT': 'VersementSaisie', 'CHARGEMENT': 'Chargement',
       'HANOUT': 'NouveauHanout', 'CREDIT_HANOUT': 'CreditHanoutSaisie', 'PARAMETRES_AMBULANT': 'ParametresAmbulantSaisie',
-      'RESOLUTION_CONTESTATION': 'ResolutionContestation', 'TARIF': 'Tarif',
+      'RESOLUTION_CONTESTATION': 'ResolutionContestation', 'TARIF': 'Tarif', 'PROFIL_AMBULANT': 'ProfilAmbulantSaisie',
     };
 
     final m = monter(parametres: {
@@ -303,6 +303,8 @@ void main() {
     m.definirPolitique('BLOQUER');
     m.chargerManuel({coca: 12});
     m.resoudreContestation('99999999-9999-4999-8999-999999999999', commentaire: 'Avoir émis');
+    m.definirProfil(nom: 'Said', cin: 'BK123456', vehicule: 'Triporteur', villes: ['CASABLANCA'], categories: ['BOISSONS']);
+    m.definirMentions({'ice': '001234567000089', 'identifiantFiscal': '1', 'registreCommerce': '2', 'assujettiTva': true});
 
     final champsSaisie = (schemas['LigneDocumentSaisie']['properties'] as YamlMap).keys.toSet();
     for (final op in m.s.enAttente()) {
@@ -314,6 +316,12 @@ void main() {
         expect(donnees, contains(requis), reason: '${op['type']} : $requis manquant');
       }
       expect((schema['properties'] as YamlMap).keys.toSet(), containsAll(donnees.keys), reason: '${op['type']} : champ hors contrat');
+      if (op['type'] == 'PROFIL_AMBULANT') {
+        expect(RegExp(schemas['ProfilAmbulantSaisie']['properties']['cin']['pattern'] as String).hasMatch(donnees['cin'] as String), isTrue);
+      }
+      if (donnees['mentionsLegales'] case final Map ml when op['type'] == 'PARAMETRES_AMBULANT') {
+        expect(ml.keys.toSet(), (schemas['MentionsLegales']['properties'] as YamlMap).keys.toSet());
+      }
       if (op['type'] == 'EMISSION_DOCUMENT') {
         expect(RegExp(schemas['NumeroDocument']['pattern'] as String).hasMatch(donnees['numero'] as String), isTrue);
         final taux = (schemas['TauxTva']['enum'] as YamlList).toSet();

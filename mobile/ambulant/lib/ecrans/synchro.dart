@@ -4,6 +4,7 @@ import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../etat.dart';
 import '../ui.dart';
+import 'profil.dart';
 
 /// État de la file : opérations en attente, opérations refusées ou en conflit (à afficher,
 /// contrat `ResultatOperation`), anomalies signalées par le serveur.
@@ -77,6 +78,7 @@ String nomOperation(T t, String type) => switch (type) {
       'HANOUT' => t.opHANOUT,
       'CREDIT_HANOUT' => t.opCREDIT_HANOUT,
       'RESOLUTION_CONTESTATION' => t.opRESOLUTION_CONTESTATION,
+      'PROFIL_AMBULANT' => t.opPROFIL_AMBULANT,
       _ => t.opPARAMETRES_AMBULANT,
     };
 
@@ -117,6 +119,14 @@ class EcranParametres extends StatelessWidget {
             RadioListTile(value: 'AVERTIR', title: Text(t.politiqueAvertir)),
             RadioListTile(value: 'BLOQUER', title: Text(t.politiqueBloquer)),
           ]),
+        ),
+        const Divider(),
+        ListTile(
+          leading: const Ico(PhosphorIconsRegular.receipt),
+          title: Text(t.mentionsLegales),
+          subtitle: Text(daba.m.peutFacturer ? ltr('ICE ${daba.m.parametres['mentionsLegales']['ice']}') : t.mentionsAucune),
+          trailing: const Icon(PhosphorIconsRegular.caretRight),
+          onTap: () => context.ouvrir(const EcranMentions()),
         ),
         const Divider(),
         SwitchListTile(

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'api.dart';
 import 'stockage.dart';
 
@@ -44,7 +46,14 @@ class Synchronisation {
       ];
       stockage.transaction(() {
         for (final r in resultats) {
-          stockage.marquer(r['operationId'] as String, r['statut'] as String, r);
+          final opId = r['operationId'] as String;
+          if (r['statut'] == 'REJETEE' && ProblemeApi(422, (r['erreur'] as Map?)?.cast<String, dynamic>() ?? {}).consentementRequis) {
+            // Refus provisoire (contrat 0.5.1) : ni annulation ni affichage comme refusée ; l'opération
+            // attend un consentement actif, puis repart (Stockage.reprendreApresConsentement).
+            stockage.marquer(opId, 'CONSENTEMENT', r);
+            continue;
+          }
+          stockage.marquer(opId, r['statut'] as String, r);
           final op = ops.firstWhere((o) => o['id'] == r['operationId']);
           if (r['statut'] == 'REJETEE' && op['type'] == 'EMISSION_DOCUMENT') {
             // Le document reste visible (jamais supprimé) mais marqué refusé par le serveur.
@@ -57,6 +66,15 @@ class Synchronisation {
             final id = op['donnees']['contestationId'] as String;
             final c = stockage.objet('CONTESTATION', id);
             if (c != null) stockage.enregistrer('CONTESTATION', id, {...c, 'statut': 'OUVERTE'}..remove('resolueLe'));
+          }
+          if (r['statut'] == 'REJETEE' && op['type'] == 'PROFIL_AMBULANT') {
+            // Profil refusé (code inconnu…) : on revient au dernier profil du serveur, ou à aucun,
+            // pour ne pas imprimer un nom refusé sur les pièces (pas d'écrasement silencieux, §10).
+            stockage.db.execute("DELETE FROM objet WHERE entite = 'PROFIL'");
+            if (stockage.lire('profilServeur') case final String p) {
+              final v = jsonDecode(p) as Map<String, dynamic>;
+              stockage.enregistrer('PROFIL', v['id'] as String, (v['donnees'] as Map).cast<String, dynamic>());
+            }
           }
           if (r['conflit'] case {'resolution': 'VERSION_SERVEUR_CONSERVEE', 'versionServeur': final Map v}) {
             versionServeur(op['type'] as String, v.cast<String, dynamic>());
@@ -76,6 +94,7 @@ class Synchronisation {
           [v['produitId'], v['hanoutId']]),
       'CREDIT_HANOUT' => ('COMPTE_CREDIT', "json_extract(donnees, '\$.hanout.id') = ?", [v['hanout']?['id']]),
       'PARAMETRES_AMBULANT' => ('PARAMETRES', '1', <Object?>[]),
+      'PROFIL_AMBULANT' => ('PROFIL', '1', <Object?>[]),
       _ => (null, '', <Object?>[]),
     };
     if (entite == null) return;
@@ -135,9 +154,11 @@ class Synchronisation {
         stockage.db.execute(
             "DELETE FROM objet WHERE entite = 'MOUVEMENT' AND local = 1 AND json_extract(donnees, '\$.operationId') = ?",
             [donnees['operationId']]);
-      case 'PARAMETRES':
-        // Les paramètres du serveur (mentions légales, politique) remplacent toute copie locale.
-        stockage.db.execute("DELETE FROM objet WHERE entite = 'PARAMETRES' AND id <> ?", [id]);
+      case 'PARAMETRES' || 'PROFIL':
+        // Les paramètres et le profil du serveur remplacent toute copie locale (une seule ligne).
+        stockage.db.execute('DELETE FROM objet WHERE entite = ? AND id <> ?', [entite, id]);
+        // Version serveur gardée à part : elle revient si un profil saisi ensuite est refusé.
+        if (entite == 'PROFIL') stockage.ecrire('profilServeur', jsonEncode({'id': id, 'donnees': donnees}));
       case 'TARIF':
         // Un tarif saisi sur l'appareil est remplacé par celui du serveur (même produit, même hanout).
         stockage.db.execute(

@@ -39,10 +39,14 @@ class Reglement {
 /// Logique métier de l'app ambulant, entièrement locale : chaque geste écrit les objets
 /// locaux et enfile l'opération du contrat dans la même transaction.
 class Ambulant {
-  Ambulant(this.s, {required this.appareilId, required this.prefixe, required this.utilisateurId, this.nom = ''});
+  Ambulant(this.s, {required this.appareilId, required this.prefixe, required this.utilisateurId, String nom = ''})
+      : _nomSession = nom;
 
   final Stockage s;
-  final String appareilId, prefixe, utilisateurId, nom;
+  final String appareilId, prefixe, utilisateurId, _nomSession;
+
+  /// Nom affiché sur les pièces : celui du profil (§3.1), sinon celui de la session.
+  String get nom => (profil?['nom'] as String?) ?? _nomSession;
 
   static const _j = "json_extract(donnees, '\$.";
 
@@ -407,12 +411,45 @@ class Ambulant {
     });
   }
 
-  void definirPolitique(String politique) {
+  void definirPolitique(String politique) => _parametres({'politiqueDepassementCredit': politique});
+
+  /// ICE, IF, RC et TVA (RG-F2) : présentes, elles permettent la FACTURE. Le contrat ne prévoit pas
+  /// de les retirer (un champ absent garde la valeur serveur).
+  void definirMentions(Map<String, dynamic> mentions) => _parametres({'mentionsLegales': mentions});
+
+  void _parametres(Map<String, dynamic> saisie) {
     s.transaction(() {
-      s.enfiler('PARAMETRES_AMBULANT', {'politiqueDepassementCredit': politique});
+      s.enfiler('PARAMETRES_AMBULANT', saisie);
       // Même ligne que celle du serveur, qui la remplacera au prochain tirage.
       final id = s.db.select("SELECT id FROM objet WHERE entite = 'PARAMETRES'").firstOrNull?['id'] as String? ?? 'local';
-      s.enregistrer('PARAMETRES', id, {...parametres, 'politiqueDepassementCredit': politique}, local: true);
+      s.enregistrer('PARAMETRES', id, {...parametres, ...saisie}, local: true);
+    });
+  }
+
+  // ------------------------------------------------------------------ profil (§3.1)
+  /// Profil reçu du serveur (entité PROFIL) ou saisi sur l'appareil ; null tant qu'il n'existe pas.
+  Map<String, dynamic>? get profil => s.objets('PROFIL').firstOrNull;
+
+  /// Motif du contrat (`ProfilAmbulantSaisie.cin`).
+  static final motifCin = RegExp(r'^[A-Z]{1,2}[0-9]{1,6}$');
+
+  /// Remplace tout le profil, hors ligne (opération PROFIL_AMBULANT) : un champ facultatif vide est effacé.
+  void definirProfil({required String nom, String? cin, String? vehicule, Iterable<String> villes = const [], Iterable<String> categories = const []}) {
+    String? net(String? v) => (v == null || v.trim().isEmpty) ? null : v.trim();
+    final saisie = {
+      'nom': nom.trim(),
+      'cin': ?net(cin)?.toUpperCase(),
+      'vehicule': ?net(vehicule),
+      'villes': villes.toSet().toList(),
+      'categories': categories.toSet().toList(),
+    };
+    if ((saisie['nom'] as String).isEmpty) throw ArgumentError.value(nom, 'nom');
+    if (saisie['cin'] case final String c when !motifCin.hasMatch(c)) throw ArgumentError.value(cin, 'cin');
+    s.transaction(() {
+      final opId = s.enfiler('PROFIL_AMBULANT', saisie);
+      // Horodatage du geste, celui que le serveur retiendra (ProfilAmbulant.modifieLe).
+      final le = s.db.select('SELECT cree_le FROM operation WHERE id = ?', [opId]).first['cree_le'];
+      s.enregistrer('PROFIL', utilisateurId, {...saisie, 'modifieLe': le}, local: true);
     });
   }
 

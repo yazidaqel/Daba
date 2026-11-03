@@ -58,7 +58,7 @@ class TAr extends T {
 
   @override
   String get consentementTexte =>
-      'يسجل دابا مبيعاتك ومخزونك وديون زبنائك لخدمتك (القانون 09-08، تصريح اللجنة الوطنية لمراقبة حماية المعطيات). لا تُرسل أي معطيات اسمية إلى العلامات التجارية. لا يُجمع موقعك إلا بموافقتك، وفقط عندما تكون «متاحاً» للإغاثة. يمكنك سحب موافقتك وطلب معطياتك في أي وقت.';
+      'يسجل دابا مبيعاتك ومخزونك وديون زبنائك لخدمتك (القانون 09-08، تصريح اللجنة الوطنية لمراقبة حماية المعطيات). يظهر اسمك لتجار الجملة والبقالات الذين تتعامل معهم. لا تُرسل أي معطيات اسمية إلى العلامات التجارية. لا يُجمع موقعك إلا بموافقتك، وفقط عندما تكون «متاحاً» للإغاثة. يمكنك سحب موافقتك وطلب معطياتك في أي وقت.';
 
   @override
   String get consentementDonnees => 'أوافق على معالجة معطياتي';
@@ -807,4 +807,75 @@ class TAr extends T {
 
   @override
   String get delaiDepasse => 'تجاوز المهلة';
+
+  @override
+  String get profil => 'ملفي الشخصي';
+
+  @override
+  String get profilExplication =>
+      'يظهر اسمك لتجار الجملة والبقالات الذين تتعامل معهم، ولا يظهر أبداً للعلامات التجارية. فئاتك تحدد العروض التي تصلك.';
+
+  @override
+  String get nomComplet => 'الاسم الكامل';
+
+  @override
+  String get cin => 'رقم البطاقة الوطنية (اختياري)';
+
+  @override
+  String get cinInvalide =>
+      'البطاقة الوطنية: حرف أو حرفان ثم حتى 6 أرقام (مثلاً BK123456)';
+
+  @override
+  String get vehicule => 'المركبة (اختياري)';
+
+  @override
+  String get zonesCouvertes => 'المناطق المغطاة';
+
+  @override
+  String get categoriesVendues => 'الفئات المبيعة';
+
+  @override
+  String get listeApresConnexion => 'القائمة متاحة بعد الاتصال';
+
+  @override
+  String get plusTard => 'لاحقاً';
+
+  @override
+  String get profilEnregistre => 'تم حفظ الملف الشخصي';
+
+  @override
+  String get opPROFIL_AMBULANT => 'الملف الشخصي';
+
+  @override
+  String get mentionsLegales => 'البيانات القانونية (الفاتورة)';
+
+  @override
+  String get mentionsExplication =>
+      'برقم ICE يمكنك إصدار فواتير إلى جانب وصولات التسليم.';
+
+  @override
+  String get mentionsAucune => 'لا شيء: وصولات التسليم فقط';
+
+  @override
+  String get identifiantFiscal => 'التعريف الضريبي (IF)';
+
+  @override
+  String get registreCommerce => 'السجل التجاري (RC)';
+
+  @override
+  String get assujettiTva => 'خاضع للضريبة على القيمة المضافة';
+
+  @override
+  String get offreNonCiblee => 'هذا العرض لم يعد موجهاً إليك.';
+
+  @override
+  String get consentementNouveauTexte =>
+      'تغيّر النص المتعلق بمعطياتك: يظهر اسمك الآن لتجار الجملة والبقالات الذين تتعامل معهم.';
+
+  @override
+  String get lireEtAccepter => 'القراءة والموافقة';
+
+  @override
+  String get profilConsentementRequis =>
+      'وافق أولاً على النص الجديد المتعلق بمعطياتك لحفظ ملفك الشخصي.';
 }

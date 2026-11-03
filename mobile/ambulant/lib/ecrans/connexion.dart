@@ -114,7 +114,9 @@ class EcranConsentement extends StatefulWidget {
 }
 
 class _EcranConsentementState extends State<EcranConsentement> {
-  bool _donnees = false, _geo = false, _occupe = false;
+  bool _donnees = false, _occupe = false;
+  // Nouveau texte proposé à un ambulant qui avait déjà répondu : son choix de géolocalisation est repris.
+  late bool _geo = context.dabaLu.consentGeolocalisation;
 
   @override
   Widget build(BuildContext context) {
@@ -134,6 +136,8 @@ class _EcranConsentementState extends State<EcranConsentement> {
                   setState(() => _occupe = true);
                   try {
                     await context.daba.consentir(geolocalisation: _geo);
+                    // Ouvert depuis l'accueil (nouveau texte) : on y revient.
+                    if (context.mounted && Navigator.canPop(context)) Navigator.pop(context);
                   } catch (e) {
                     if (context.mounted) context.erreur(e);
                   } finally {

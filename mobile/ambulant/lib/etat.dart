@@ -11,8 +11,9 @@ import 'domaine.dart';
 
 enum Etape { connexion, consentement, pinCreation, verrouille, pret }
 
-/// Version du texte d'information CNDP affiché (journalisée avec le consentement).
-const versionTexteCndp = '2026-11-v1';
+/// Version du texte d'information CNDP affiché (journalisée avec le consentement). v2 : le nom de
+/// l'ambulant est montré à ses grossistes et à ses hanouts (contrat v0.5.0).
+const versionTexteCndp = '2026-11-v2';
 
 /// État de l'app : session, synchronisation, disponibilité (dépannage).
 class Daba extends ChangeNotifier with WidgetsBindingObserver {
@@ -36,7 +37,7 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
       Api(const String.fromEnvironment('DABA_API', defaultValue: 'http://10.0.2.2:4010')),
       const FlutterSecureStorage(),
     );
-    await daba._chargerSecrets();
+    await daba.chargerSecrets();
     return daba;
   }
 
@@ -72,10 +73,11 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   // ------------------------------------------------------------------ session
-  Future<void> _chargerSecrets() async {
+  /// Étape d'ouverture d'après la session et les secrets gardés sur le téléphone (au démarrage).
+  Future<void> chargerSecrets() async {
     api.jeton = await _coffre.read(key: 'jeton');
     if (metier != null && api.jeton != null) {
-      etape = stockage.lire('consentement') == null
+      etape = !_consentementDonne
           ? Etape.consentement
           : (await _coffre.read(key: 'pin') == null ? Etape.pinCreation : Etape.verrouille);
     } else {
@@ -133,15 +135,15 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
     }
     await _enregistrerJetons(session);
     _ouvrir(session);
-    if (stockage.lire('consentement') == null) {
+    if (!consentementAJour) {
       try {
         final c = await api.get('/v1/moi/consentement') as Map<String, dynamic>;
-        if (c['traitementDonnees'] == true) stockage.ecrire('consentement', jsonEncode(c));
-      } on ProblemeApi catch (_) {
-        // 404 : aucun consentement enregistré
+        if (c['traitementDonnees'] == true) _consentementActif(c);
+      } catch (_) {
+        // 404 : aucun consentement enregistré ; coupure : on garde la copie locale
       }
     }
-    etape = stockage.lire('consentement') == null
+    etape = !_consentementDonne
         ? Etape.consentement
         : (await _coffre.read(key: 'pin') == null ? Etape.pinCreation : Etape.pret);
     if (etape == Etape.pret) _demarrerSync();
@@ -174,8 +176,24 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  bool get consentGeolocalisation =>
-      (jsonDecode(stockage.lire('consentement') ?? '{}') as Map)['geolocalisation'] == true;
+  Map get _consentement => jsonDecode(stockage.lire('consentement') ?? '{}') as Map;
+
+  /// Un consentement, même sur un ancien texte : l'app reste utilisable, hors ligne compris (§10).
+  /// Sans aucun consentement, l'écran CNDP bloque comme avant.
+  bool get _consentementDonne => _consentement['traitementDonnees'] == true;
+
+  /// Consentement donné sur le texte actuel. Un ancien texte ne bloque que ce qui dépend du nouveau :
+  /// le profil, dont le nom est montré aux grossistes et aux hanouts (v2). Le nouveau texte est
+  /// proposé sans bloquer quand le réseau est là.
+  bool get consentementAJour => _consentement['versionTexte'] == versionTexteCndp;
+
+  /// Enregistre un consentement actif et relance les opérations qui l'attendaient.
+  void _consentementActif(Map<String, dynamic> c) {
+    stockage.ecrire('consentement', jsonEncode(c));
+    stockage.reprendreApresConsentement();
+  }
+
+  bool get consentGeolocalisation => _consentement['geolocalisation'] == true;
 
   /// Consentement CNDP (loi 09-08), exigé par le serveur avant toute opération.
   Future<void> consentir({required bool geolocalisation}) async {
@@ -185,11 +203,13 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
       'geolocalisation': geolocalisation,
       'langue': codeLangue(locale),
     });
-    stockage.ecrire('consentement', jsonEncode(c));
+    _consentementActif(c as Map<String, dynamic>);
     if (!geolocalisation && disponible) await changerDisponibilite(false);
     if (etape == Etape.consentement) {
       etape = await _coffre.read(key: 'pin') == null ? Etape.pinCreation : Etape.pret;
       if (etape == Etape.pret) _demarrerSync();
+    } else if (etape == Etape.pret) {
+      synchroniser(); // les opérations qui attendaient ce consentement repartent tout de suite
     }
     notifyListeners();
   }
@@ -271,6 +291,7 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
     if (sync == null || reconnexionRequise) return;
     try {
       await sync.synchroniser();
+      if (!_referentielsCharges) await chargerReferentiels().catchError((_) {}); // réessayé au prochain tour
       horsLigne = false;
       derniereSync = DateTime.now();
       if (!disponible && stockage.lire('couperDisponibilite') != null) {
@@ -288,6 +309,20 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
     }
     notifyListeners();
   }
+
+  bool _referentielsCharges = false;
+
+  /// Régions et catégories (`GET /v1/regions`, `/v1/categories`), gardées sur le téléphone pour
+  /// saisir le profil hors ligne ; relues une fois par lancement.
+  Future<void> chargerReferentiels() async {
+    for (final nom in ['regions', 'categories']) {
+      stockage.ecrire('referentiel.$nom', jsonEncode(await api.get('/v1/$nom')));
+    }
+    _referentielsCharges = true;
+  }
+
+  List<Map<String, dynamic>> referentiel(String nom) =>
+      (jsonDecode(stockage.lire('referentiel.$nom') ?? '[]') as List).cast<Map<String, dynamic>>();
 
   /// Après un geste local : rafraîchit l'écran et tente de remonter tout de suite.
   void apresGeste() {
@@ -381,8 +416,17 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
   // ------------------------------------------------------------------ promos (réservation en ligne, §3.6)
   /// L'`id` est créé avant l'envoi : un nouvel essai après coupure ne crée pas de seconde réservation.
   Future<Map<String, dynamic>> reserver(String offreId, int quantite, {String? id}) async {
-    final r = await api.post('/v1/reservations', {'id': id ?? Stockage.nouvelId(), 'offreId': offreId, 'quantite': quantite})
-        as Map<String, dynamic>;
+    final Map<String, dynamic> r;
+    try {
+      r = await api.post('/v1/reservations', {'id': id ?? Stockage.nouvelId(), 'offreId': offreId, 'quantite': quantite})
+          as Map<String, dynamic>;
+    } on ProblemeApi catch (e) {
+      if (e.status != 404) rethrow;
+      // L'offre ne vise plus l'ambulant (ou n'existe plus) : elle quitte le fil sans attendre la synchro.
+      stockage.supprimer('PROMO', offreId);
+      notifyListeners();
+      throw const OffreIndisponible();
+    }
     stockage.enregistrer('RESERVATION', r['id'] as String, r);
     notifyListeners();
     return r;
@@ -399,6 +443,10 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
 
 class PermissionRefusee implements Exception {
   const PermissionRefusee();
+}
+
+class OffreIndisponible implements Exception {
+  const OffreIndisponible();
 }
 
 class AutreAmbulantEnAttente implements Exception {
