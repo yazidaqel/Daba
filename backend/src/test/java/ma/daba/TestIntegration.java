@@ -92,6 +92,8 @@ public abstract class TestIntegration {
 		var session = UUID.randomUUID();
 		jdbc.sql("INSERT INTO appareil (id, utilisateur_id, session) VALUES (:id, :u, :s)")
 			.param("id", appareil).param("u", id).param("s", session).update();
+		jdbc.sql("INSERT INTO appareil_utilisateur (utilisateur_id, appareil_id, premiere_connexion) VALUES (:u, :a, now())")
+			.param("u", id).param("a", appareil).update();
 		if (prefixe != null) {
 			jdbc.sql("INSERT INTO prefixe_numerotation (utilisateur_id, appareil_id, prefixe) VALUES (:u, :a, :p)")
 				.param("u", id).param("a", appareil).param("p", prefixe).update();

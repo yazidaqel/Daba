@@ -204,7 +204,7 @@ class AdministrationTest extends TestIntegration {
 		assertThat(corps).doesNotContain(session);
 		assertThat(a.properties().stream().map(java.util.Map.Entry::getKey).toList())
 			.isSubsetOf("appareilId", "plateforme", "langue", "prefixeNumerotation", "creeLe", "derniereConnexion", "vuLe",
-					"sessionOuverte", "pushActif", "revoque", "revoqueLe");
+					"compteActuel", "sessionOuverte", "pushActif", "revoque", "revoqueLe", "autresComptes");
 
 		// Recherche par nom, filtre par rôle ; un hanout et son absence de consentement.
 		var hanout = compteHanout(hanout(33.5, -7.6));
@@ -340,6 +340,58 @@ class AdministrationTest extends TestIntegration {
 		assertThat(entree.get(0).get("details").get("utilisateurId").asString()).isEqualTo(ambulant.id().toString());
 		assertThat(entree.get(0).get("auteur").get("id").asString()).isEqualTo(admin.id().toString());
 		assertThat(entree.get(0).get("appareilId").asString()).isEqualTo(admin.appareilId().toString());
+	}
+
+	private JsonNode appareilDe(Compte admin, String telephone, UUID appareil) {
+		var u = lire(get(admin, "/v1/admin/utilisateurs?q=" + telephone.substring(1))).get("contenu").get(0);
+		return StreamSupport.stream(u.get("appareils").spliterator(), false)
+			.filter(a -> a.get("appareilId").asString().equals(appareil.toString())).findFirst().orElseThrow();
+	}
+
+	/** Deux ambulants sur un même téléphone (RG-F1) : chacun garde l'appareil dans sa fiche ; la révocation (§10) les touche tous. */
+	@Test
+	void rgF1_telephonePartageVisibleDansChaqueCompteEtRevocationPourTousSesComptes() {
+		var admin = admin();
+		var partage = UUID.randomUUID();
+		var telA = telephone();
+		var telB = telephone();
+		var sessionA = lire(connexion(telA, partage));
+		// vuLe est posé dès la connexion, avant tout autre appel.
+		var a = appareilDe(admin, telA, partage);
+		assertThat(a.has("vuLe")).isTrue();
+		assertThat(a.get("compteActuel").asBoolean()).isTrue();
+		assertThat(a.get("sessionOuverte").asBoolean()).isTrue();
+		assertThat(a.get("autresComptes")).isEmpty();
+
+		var sessionB = lire(connexion(telB, partage));
+		var b = compteDe(sessionB, partage);
+		a = appareilDe(admin, telA, partage);
+		assertThat(a.get("compteActuel").asBoolean()).isFalse();
+		assertThat(a.get("sessionOuverte").asBoolean()).isFalse();
+		assertThat(a.get("pushActif").asBoolean()).isFalse();
+		assertThat(a.get("prefixeNumerotation").asString()).isEqualTo(sessionA.get("prefixeNumerotation").asString());
+		assertThat(a.get("autresComptes").get(0).get("telephone").asString()).isEqualTo(telB);
+		var vueB = appareilDe(admin, telB, partage);
+		assertThat(vueB.get("compteActuel").asBoolean()).isTrue();
+		assertThat(vueB.get("prefixeNumerotation").asString()).isEqualTo(sessionB.get("prefixeNumerotation").asString());
+		assertThat(vueB.get("autresComptes").get(0).get("telephone").asString()).isEqualTo(telA);
+
+		var r = lire(post(admin, "/v1/admin/appareils/" + partage + "/revocation", null));
+		assertThat(r.get("id").asString()).isEqualTo(b.id().toString());
+		var revoque = StreamSupport.stream(r.get("appareils").spliterator(), false)
+			.filter(x -> x.get("appareilId").asString().equals(partage.toString())).findFirst().orElseThrow();
+		assertThat(revoque.get("revoque").asBoolean()).isTrue();
+		assertThat(revoque.get("autresComptes").get(0).get("id").asString()).isEqualTo(sessionA.get("utilisateur").get("id").asString());
+		assertThat(appareilDe(admin, telA, partage).get("revoque").asBoolean()).isTrue();
+		var details = lire(get(admin, "/v1/admin/audit?operation=APPAREIL_REVOQUE&auteurId=" + admin.id())).get("contenu").get(0)
+			.get("details");
+		assertThat(details.get("utilisateurIds").toString()).contains(b.id().toString())
+			.contains(sessionA.get("utilisateur").get("id").asString());
+
+		// Effacé pour tous : ni B ni A ne s'y reconnectent ; A refonctionne sur un nouvel appareil.
+		assertThat(get(b, "/v1/produits")).hasStatus(403);
+		assertThat(connexion(telA, partage)).hasStatus(401).bodyJson().extractingPath("$.type").asString().endsWith("appareil-revoque");
+		assertThat(connexion(telA, UUID.randomUUID())).hasStatusOk();
 	}
 
 	// ---------------------------------------------------------------- audit

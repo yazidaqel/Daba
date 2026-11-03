@@ -103,8 +103,10 @@ public class Comptes implements Acces.VerificationCompte, Acces.Organisations {
 			throw Probleme.nonAuthentifie();
 		}
 		// Dernier appel authentifié, pour le support (à 5 minutes près : une écriture au plus par fenêtre).
-		jdbc.sql("UPDATE appareil SET vu_le = now() WHERE id = :a AND (vu_le IS NULL OR vu_le < now() - interval '5 minutes')")
-			.param("a", appelant.appareilId()).update();
+		jdbc.sql("""
+				UPDATE appareil_utilisateur SET vu_le = now()
+				WHERE utilisateur_id = :u AND appareil_id = :a AND (vu_le IS NULL OR vu_le < now() - interval '5 minutes')
+				""").param("u", appelant.utilisateurId()).param("a", appelant.appareilId()).update();
 		if (consentementExige && !etat.get().consenti() && !appelant.a(Appelant.Role.ADMIN)) {
 			throw Probleme.interdit("consentement-requis", "Consentement CNDP requis (PUT /v1/moi/consentement)");
 		}

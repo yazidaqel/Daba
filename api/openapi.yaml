@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Daba API
-  version: 0.7.0
+  version: 0.8.0
   description: |
     Contrat unique entre le back-end, les apps mobiles (ambulant, hanout) et les portails web.
     Changement incompatible = nouvelle version de l'endpoint (/v2/...), jamais de rupture silencieuse.
@@ -16,7 +16,7 @@ info:
     Un compte désactivé par l'administrateur répond 403 `…/utilisateur-desactive` (sur tout appel
     authentifié et à `POST /v1/auth/otp/verify`) : l'app n'efface rien, sa file attend la réactivation.
     Pour le mock Prism, `POST /v1/auth/otp/verify` a un exemple de Session par rôle, à choisir avec
-    l'en-tête `Prefer: example=grossiste` (ou ambulant, grandClient, hanout).
+    l'en-tête `Prefer: example=grossiste` (ou ambulant, grandClient, hanout, admin).
 
     **Cloisonnement multi-tenant.** Chaque appel authentifié est cloisonné par l'organisation
     portée par le jeton (`organisationId` de la Session) ; aucun chemin ne prend l'organisation
@@ -49,6 +49,10 @@ info:
     appareil révoqué, import du référentiel, configuration des canaux) est inscrite au journal
     d'audit (`GET /v1/admin/audit`), que la base refuse de modifier ou d'effacer. Les lectures ne
     sont pas journalisées.
+    Les recherches (`GET /v1/admin/utilisateurs?q=`, `GET /v1/hanouts?q=`) portent des numéros de
+    téléphone dans la query string : le back-end ne journalise aucune URL (pas de journal d'accès,
+    pas de détail des requêtes), et tout reverse proxy placé devant (Azure pendant le pilote, VPS
+    ensuite) doit journaliser le chemin sans la query string, ou rien.
 
     **Langues.** Les clients affichent à partir des codes (enums, `Problem.type`, `regle`) ; les
     textes libres renvoyés par le serveur suivent l'en-tête `Accept-Language` (fr, ar, ary-Arab, ary-Latn).
@@ -169,6 +173,8 @@ paths:
                   $ref: '#/components/examples/SessionGrandClient'
                 hanout:
                   $ref: '#/components/examples/SessionHanout'
+                admin:
+                  $ref: '#/components/examples/SessionAdmin'
         '400':
           $ref: '#/components/responses/Problem'
         '401':
@@ -600,13 +606,19 @@ paths:
         connexion OTP sur un autre appareil (ou après effacement, avec un nouvel `appareilId`)
         fonctionne, avec un nouveau préfixe de numérotation (RG-F1). La disponibilité de dépannage
         de l'utilisateur est coupée (sa dernière position venait peut-être de ce téléphone). Sans
-        effet sur un appareil déjà révoqué. Inscrit au journal d'audit (APPAREIL_REVOQUE).
+        effet sur un appareil déjà révoqué. Inscrit au journal d'audit (APPAREIL_REVOQUE, avec
+        `utilisateurIds` : tous les comptes de l'appareil).
+        La révocation vise l'appareil physique, pas un compte (v0.8.0) : un téléphone partagé par
+        plusieurs comptes s'efface pour tous, et aucun d'eux ne peut plus s'y reconnecter. Seul le
+        compte courant (`compteActuel`) y avait une session ; c'est sa disponibilité qui est coupée.
       x-roles: [ADMIN]
       parameters:
         - $ref: '#/components/parameters/AppareilId'
       responses:
         '200':
-          description: Appareil révoqué ; renvoie son utilisateur et tous ses appareils
+          description: |
+            Appareil révoqué ; renvoie son compte courant, avec tous ses appareils ; l'entrée de cet
+            appareil liste dans `autresComptes` les autres comptes touchés
           content:
             application/json:
               schema:
@@ -2763,6 +2775,19 @@ components:
           hanoutId: 1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e03
           nouveau: false
 
+    SessionAdmin:
+      summary: Administrateur plateforme (RED / éditeur, numéro déclaré dans DABA_ADMIN_TELEPHONES)
+      value:
+        accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJhY2NlcyJ9.exemple-admin
+        refreshToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJyZWZyZXNoIn0.exemple-admin
+        expireDans: 86400
+        utilisateur:
+          id: 5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a01
+          telephone: '+212600000001'
+          roles: [ADMIN]
+          organisationId: 5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a02
+          nouveau: false
+
   schemas:
     # ------------------------------------------------------------ communs
     Telephone:
@@ -3234,13 +3259,22 @@ components:
           description: Dernier consentement CNDP enregistré ; absent s'il n'en a jamais donné
         appareils:
           type: array
-          description: Du plus récemment vu au plus ancien
+          description: |
+            Appareils sur lesquels ce compte s'est connecté (v0.8.0 : y compris un téléphone partagé
+            dont un autre compte est depuis le compte courant), du plus récemment vu au plus ancien.
           items:
             $ref: '#/components/schemas/AppareilAdmin'
 
     AppareilAdmin:
       type: object
-      required: [appareilId, creeLe, sessionOuverte, pushActif, revoque]
+      description: |
+        Un appareil vu depuis un compte. Plusieurs comptes peuvent utiliser le même téléphone (un
+        préfixe de numérotation par couple ambulant/appareil, RG-F1) ; l'appareil n'a qu'une session
+        à la fois, celle du dernier compte connecté (`compteActuel`). Les dates (`creeLe`,
+        `derniereConnexion`, `vuLe`) et le préfixe sont ceux de ce compte sur cet appareil ;
+        `plateforme`, `langue`, `revoque` et `revoqueLe` sont ceux de l'appareil physique.
+        La révocation vaut pour l'appareil, donc pour tous ses comptes (`autresComptes`).
+      required: [appareilId, creeLe, compteActuel, sessionOuverte, pushActif, revoque, autresComptes]
       properties:
         appareilId:
           type: string
@@ -3256,25 +3290,47 @@ components:
         creeLe:
           type: string
           format: date-time
-          description: Première connexion de cet appareil
+          description: Première connexion de ce compte sur cet appareil
         derniereConnexion:
           type: string
           format: date-time
-          description: Dernière connexion par OTP
+          description: Dernière connexion par OTP de ce compte sur cet appareil
         vuLe:
           type: string
           format: date-time
-          description: Dernier appel authentifié (à 5 minutes près)
+          description: Dernier appel authentifié de ce compte sur cet appareil (à 5 minutes près ; posé dès la connexion)
+        compteActuel:
+          type: boolean
+          description: Ce compte est le dernier connecté sur l'appareil, le seul qui peut y avoir une session
         sessionOuverte:
           type: boolean
+          description: Ce compte a une session ouverte sur l'appareil (jamais vrai si `compteActuel` est faux)
         pushActif:
           type: boolean
-          description: Un jeton push est enregistré pour la session ouverte (le jeton n'est jamais renvoyé)
+          description: Un jeton push est enregistré pour la session ouverte de ce compte (le jeton n'est jamais renvoyé)
         revoque:
           type: boolean
+          description: Appareil révoqué (§10), pour tous ses comptes
         revoqueLe:
           type: string
           format: date-time
+        autresComptes:
+          type: array
+          description: Autres comptes qui se sont connectés sur cet appareil, du plus ancien au plus récent
+          items:
+            $ref: '#/components/schemas/CompteAppareil'
+
+    CompteAppareil:
+      type: object
+      required: [id, telephone]
+      properties:
+        id:
+          type: string
+          format: uuid
+        telephone:
+          $ref: '#/components/schemas/Telephone'
+        nom:
+          type: string
 
     UtilisateurAdminPage:
       allOf:

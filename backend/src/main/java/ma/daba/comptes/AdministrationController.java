@@ -48,9 +48,13 @@ class AdministrationController {
 	record OrganisationRef(UUID id, String type, String nom) {
 	}
 
+	/** Autre compte qui s'est connecté sur le même appareil (téléphone partagé). */
+	record CompteAppareil(UUID id, String telephone, String nom) {
+	}
+
 	record AppareilAdmin(UUID appareilId, String plateforme, String langue, String prefixeNumerotation, Instant creeLe,
-			Instant derniereConnexion, Instant vuLe, boolean sessionOuverte, boolean pushActif, boolean revoque,
-			Instant revoqueLe) {
+			Instant derniereConnexion, Instant vuLe, boolean compteActuel, boolean sessionOuverte, boolean pushActif,
+			boolean revoque, Instant revoqueLe, List<CompteAppareil> autresComptes) {
 	}
 
 	record UtilisateurAdmin(UUID id, String telephone, String nom, List<String> roles, OrganisationRef organisation,
@@ -213,7 +217,11 @@ class AdministrationController {
 				UPDATE appareil SET revoque = true, revoque_le = now(), session = NULL, jeton_push = NULL
 				WHERE id = :a AND NOT revoque
 				""").param("a", appareilId).update() > 0) {
-			audit.consigner(admin, "APPAREIL_REVOQUE", Map.of("appareilId", appareilId, "utilisateurId", utilisateurId));
+			// Un téléphone perdu s'efface pour tous les comptes qui l'ont utilisé ; seul le compte courant y avait une session.
+			var comptesAppareil = jdbc.sql("SELECT utilisateur_id FROM appareil_utilisateur WHERE appareil_id = :a ORDER BY premiere_connexion")
+				.param("a", appareilId).query(UUID.class).list();
+			audit.consigner(admin, "APPAREIL_REVOQUE", Map.of("appareilId", appareilId, "utilisateurId", utilisateurId,
+					"utilisateurIds", comptesAppareil));
 			retirerAcces(utilisateurId, role(utilisateurId));
 		}
 		return utilisateur(utilisateurId);
@@ -269,20 +277,41 @@ class AdministrationController {
 		if (utilisateurs.isEmpty()) {
 			return utilisateurs;
 		}
+		var ids = utilisateurs.stream().map(UtilisateurAdmin::id).toList();
+		// Tous les comptes de chaque appareil de la page, pour dire qui d'autre l'a utilisé.
+		var comptesParAppareil = new HashMap<UUID, List<CompteAppareil>>();
+		jdbc.sql("""
+				SELECT au.appareil_id, u.id, u.telephone, u.nom
+				FROM appareil_utilisateur au JOIN utilisateur u ON u.id = au.utilisateur_id
+				WHERE au.appareil_id IN (SELECT appareil_id FROM appareil_utilisateur WHERE utilisateur_id IN (:u))
+				ORDER BY au.premiere_connexion, u.id
+				""").param("u", ids)
+			.query(rs -> {
+				comptesParAppareil.computeIfAbsent(rs.getObject("appareil_id", UUID.class), k -> new java.util.ArrayList<>())
+					.add(new CompteAppareil(rs.getObject("id", UUID.class), rs.getString("telephone"), rs.getString("nom")));
+			});
 		var appareils = new HashMap<UUID, List<AppareilAdmin>>();
 		jdbc.sql("""
-				SELECT a.utilisateur_id, a.id, a.plateforme, a.langue, p.prefixe, a.cree_le, a.derniere_connexion, a.vu_le,
-				       a.session IS NOT NULL AS ouverte, a.session IS NOT NULL AND a.jeton_push IS NOT NULL AS push,
+				SELECT au.utilisateur_id, a.id, a.plateforme, a.langue, p.prefixe, au.premiere_connexion, au.derniere_connexion,
+				       au.vu_le, a.utilisateur_id = au.utilisateur_id AS actuel,
+				       a.utilisateur_id = au.utilisateur_id AND a.session IS NOT NULL AS ouverte,
+				       a.utilisateur_id = au.utilisateur_id AND a.session IS NOT NULL AND a.jeton_push IS NOT NULL AS push,
 				       a.revoque, a.revoque_le
-				FROM appareil a LEFT JOIN prefixe_numerotation p ON p.appareil_id = a.id AND p.utilisateur_id = a.utilisateur_id
-				WHERE a.utilisateur_id IN (:u)
-				ORDER BY coalesce(a.vu_le, a.derniere_connexion, a.cree_le) DESC, a.id
-				""").param("u", utilisateurs.stream().map(UtilisateurAdmin::id).toList())
+				FROM appareil_utilisateur au JOIN appareil a ON a.id = au.appareil_id
+				LEFT JOIN prefixe_numerotation p ON p.appareil_id = au.appareil_id AND p.utilisateur_id = au.utilisateur_id
+				WHERE au.utilisateur_id IN (:u)
+				ORDER BY coalesce(au.vu_le, au.derniere_connexion, au.premiere_connexion) DESC, a.id
+				""").param("u", ids)
 			.query(rs -> {
-				appareils.computeIfAbsent(rs.getObject("utilisateur_id", UUID.class), k -> new java.util.ArrayList<>())
-					.add(new AppareilAdmin(rs.getObject("id", UUID.class), rs.getString("plateforme"), rs.getString("langue"),
-							rs.getString("prefixe"), instant(rs, "cree_le"), instant(rs, "derniere_connexion"), instant(rs, "vu_le"),
-							rs.getBoolean("ouverte"), rs.getBoolean("push"), rs.getBoolean("revoque"), instant(rs, "revoque_le")));
+				var utilisateurId = rs.getObject("utilisateur_id", UUID.class);
+				var appareilId = rs.getObject("id", UUID.class);
+				var autres = comptesParAppareil.getOrDefault(appareilId, List.of()).stream()
+					.filter(c -> !c.id().equals(utilisateurId)).toList();
+				appareils.computeIfAbsent(utilisateurId, k -> new java.util.ArrayList<>())
+					.add(new AppareilAdmin(appareilId, rs.getString("plateforme"), rs.getString("langue"), rs.getString("prefixe"),
+							instant(rs, "premiere_connexion"), instant(rs, "derniere_connexion"), instant(rs, "vu_le"),
+							rs.getBoolean("actuel"), rs.getBoolean("ouverte"), rs.getBoolean("push"), rs.getBoolean("revoque"),
+							instant(rs, "revoque_le"), autres));
 			});
 		return utilisateurs.stream()
 			.map(u -> new UtilisateurAdmin(u.id(), u.telephone(), u.nom(), u.roles(), u.organisation(), u.hanoutId(), u.actif(),

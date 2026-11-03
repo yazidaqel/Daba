@@ -212,10 +212,12 @@ class ComptesController {
 		export.put("profil", comptes.profil(appelant.utilisateurId()).orElse(null));
 		export.put("consentements", consentements(appelant.utilisateurId()));
 		export.put("appareils", jdbc.sql("""
-				SELECT a.id, p.prefixe, a.plateforme, a.langue, a.jeton_push IS NOT NULL AS push_actif, a.revoque, a.cree_le,
-				  a.derniere_connexion
-				FROM appareil a LEFT JOIN prefixe_numerotation p ON p.appareil_id = a.id AND p.utilisateur_id = a.utilisateur_id
-				WHERE a.utilisateur_id = :u
+				SELECT a.id, p.prefixe, a.plateforme, a.langue,
+				  a.utilisateur_id = au.utilisateur_id AND a.session IS NOT NULL AND a.jeton_push IS NOT NULL AS push_actif,
+				  a.revoque, au.premiere_connexion AS cree_le, au.derniere_connexion, au.vu_le
+				FROM appareil_utilisateur au JOIN appareil a ON a.id = au.appareil_id
+				LEFT JOIN prefixe_numerotation p ON p.appareil_id = au.appareil_id AND p.utilisateur_id = au.utilisateur_id
+				WHERE au.utilisateur_id = :u
 				""").param("u", appelant.utilisateurId()).query().listOfRows());
 		for (var contributeur : contributeurs) {
 			export.put(contributeur.cle(), contributeur.exporter(appelant.utilisateurId()));

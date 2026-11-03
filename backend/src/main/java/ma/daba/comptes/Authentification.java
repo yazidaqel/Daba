@@ -125,6 +125,12 @@ class Authentification {
 		if (ouverte.isEmpty()) {
 			throw revoque();
 		}
+		// Historique par compte : un téléphone partagé garde la trace de chaque compte qui s'y connecte.
+		jdbc.sql("""
+				INSERT INTO appareil_utilisateur (utilisateur_id, appareil_id, premiere_connexion, derniere_connexion, vu_le)
+				VALUES (:u, :a, now(), now(), now())
+				ON CONFLICT (utilisateur_id, appareil_id) DO UPDATE SET derniere_connexion = now(), vu_le = now()
+				""").param("u", utilisateurId).param("a", appareilId).update();
 		if ("AMBULANT".equals(role)) {
 			attribuerPrefixe(utilisateurId, appareilId);
 		}
