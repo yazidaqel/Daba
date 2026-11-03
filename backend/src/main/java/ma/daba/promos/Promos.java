@@ -4,8 +4,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -538,13 +540,14 @@ public class Promos {
 
 	/**
 	 * Offres visibles : produit d'une campagne ACTIVE en cours, dans un dépôt RECU (RG-P1), filtrées
-	 * par ville ciblée. ponytail: filtre et pagination en mémoire ; zones et catégories des ambulants
-	 * à ajouter quand le profil ambulant les portera.
+	 * par ville ciblée et par catégorie (§9, {@link #vise}). ponytail: filtre et pagination en
+	 * mémoire ; zones de tournée et rayon (Ciblage.zones, rayonM) pas encore appliqués.
 	 */
 	Page<OffrePromo> offres(UUID ambulantId, String categorie, int page, int taille) {
 		var toutes = offresVisibles(null).stream()
-			.map(o -> avecDejaReserve(o, ambulantId))
 			.filter(o -> categorie == null || o.produit().categorie().code().equals(categorie))
+			.filter(o -> vise(o, ambulantId))
+			.map(o -> avecDejaReserve(o, ambulantId))
 			.sorted(Comparator.comparing(OffrePromo::fin))
 			.toList();
 		var debut = Math.min(page * taille, toutes.size());
@@ -624,7 +627,8 @@ public class Promos {
 		// Verrou sur l'offre : deux ambulants ne peuvent pas réserver les mêmes dernières unités.
 		jdbc.sql("SELECT id FROM depot_ligne WHERE id = :o FOR UPDATE").param("o", saisie.offreId()).query(UUID.class).optional()
 			.orElseThrow(Probleme::introuvable);
-		var offre = offresVisibles(saisie.offreId()).stream().findFirst().orElseThrow(Probleme::introuvable);
+		var offre = offresVisibles(saisie.offreId()).stream().filter(o -> vise(o, ambulantId)).findFirst()
+			.orElseThrow(Probleme::introuvable);
 		if (offre.quantiteDisponible() < saisie.quantite()) {
 			throw Probleme.conflit("Quantité disponible insuffisante : " + offre.quantiteDisponible());
 		}
@@ -762,6 +766,7 @@ public class Promos {
 		var offre = jdbc.sql("SELECT offre_id FROM reservation WHERE id = :id").param("id", r.id()).query(UUID.class).single();
 		publierReservation(r.id());
 		publierOffre(offre);
+		reevaluerCiblage(r.ambulant().id());
 		// Campagne épuisée quand plus rien n'est disponible ni réservé dans ses dépôts reçus.
 		jdbc.sql("""
 				UPDATE campagne SET statut = 'EPUISEE' WHERE id = :c AND statut = 'ACTIVE' AND NOT EXISTS (
@@ -854,10 +859,87 @@ public class Promos {
 			.forEach(this::publierOffre);
 	}
 
-	/** Offre livrée hors ligne à tous les ambulants (entité PROMO), retirée quand elle n'est plus visible. */
+	/**
+	 * Offre livrée hors ligne (entité PROMO) à tous les ambulants (destinataire null), ou à chaque
+	 * ambulant visé si la campagne cible des catégories (§9) ; retirée des appareils qui ne la voient plus.
+	 */
 	private void publierOffre(UUID offreId) {
-		offresVisibles(offreId).stream().findFirst().ifPresentOrElse(o -> journal.publier(null, "PROMO", offreId, o),
-				() -> journal.supprimer(null, "PROMO", offreId));
+		var offre = offresVisibles(offreId).stream().findFirst().orElse(null);
+		var pour = new HashSet<UUID>();
+		if (offre != null) {
+			var categories = categoriesCiblees(offre.campagneId());
+			if (categories.isEmpty()) {
+				pour.add(null);
+			}
+			else {
+				pour.addAll(ambulantsVises(categories, offre.produit().marque(), comptes.ambulants()));
+			}
+		}
+		pour.forEach(d -> journal.publier(d, "PROMO", offreId, offre));
+		journal.destinataires("PROMO", offreId).stream().filter(d -> !pour.contains(d))
+			.forEach(d -> journal.supprimer(d, "PROMO", offreId));
+	}
+
+	// ---------------------------------------------------------------- ciblage par catégorie (§9)
+
+	private List<String> categoriesCiblees(UUID campagneId) {
+		var ciblage = json.lire(jdbc.sql("SELECT ciblage::text FROM campagne WHERE id = :c").param("c", campagneId)
+			.query(String.class).optional().orElse(null), OBJET);
+		return ciblage != null && ciblage.get("categories") instanceof List<?> l ? l.stream().map(String::valueOf).toList()
+				: List.of();
+	}
+
+	/**
+	 * §9 : sans catégorie ciblée, tous ; sinon l'ambulant qui vend une catégorie ciblée, qui a déjà
+	 * acheté la marque (chargement, retrait promo ou vente), ou qui n'a déclaré aucune catégorie.
+	 */
+	private Set<UUID> ambulantsVises(List<String> categories, String marque, Collection<UUID> ambulants) {
+		if (categories.isEmpty()) {
+			return Set.copyOf(ambulants);
+		}
+		var vendues = comptes.categoriesVendues(ambulants);
+		var acheteurs = stock.ambulantsAyantAchete(referentiel.produitsDeMarque(marque), ambulants);
+		return ambulants.stream().filter(a -> {
+			var c = vendues.getOrDefault(a, List.of());
+			return c.isEmpty() || c.stream().anyMatch(categories::contains) || acheteurs.contains(a);
+		}).collect(Collectors.toSet());
+	}
+
+	private boolean vise(OffrePromo offre, UUID ambulantId) {
+		return ambulantsVises(categoriesCiblees(offre.campagneId()), offre.produit().marque(), List.of(ambulantId))
+			.contains(ambulantId);
+	}
+
+	/** Ambulants visés par au moins une ligne du dépôt : destinataires de « promo confirmée » (§9). */
+	Set<UUID> ambulantsVises(UUID depotId) {
+		var depot = depot(depotId);
+		var categories = categoriesCiblees(depot.campagne().id());
+		var ambulants = comptes.ambulants();
+		var vises = new HashSet<UUID>();
+		referentiel.produits(depot.lignes().stream().map(LigneDepot::produitId).toList()).values().stream()
+			.map(Produit::marque).distinct().forEach(m -> vises.addAll(ambulantsVises(categories, m, ambulants)));
+		return vises;
+	}
+
+	/**
+	 * Profil ou historique d'achat de l'ambulant changé : ses offres ciblées par catégorie arrivent
+	 * sur son appareil ou en repartent. ponytail: relit toutes les offres en cours à chaque
+	 * chargement, vente ou profil ; à indexer par marque et catégorie si le nombre d'offres grandit.
+	 */
+	public void reevaluerCiblage(UUID ambulantId) {
+		for (var offre : offresVisibles(null)) {
+			if (categoriesCiblees(offre.campagneId()).isEmpty()) {
+				continue;
+			}
+			var voit = vise(offre, ambulantId);
+			var a = journal.destinataires("PROMO", offre.id()).contains(ambulantId);
+			if (voit && !a) {
+				journal.publier(ambulantId, "PROMO", offre.id(), offre);
+			}
+			else if (!voit && a) {
+				journal.supprimer(ambulantId, "PROMO", offre.id());
+			}
+		}
 	}
 
 	private void publierReservation(UUID id) {

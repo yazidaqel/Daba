@@ -70,6 +70,18 @@ const PRODUITS = [
 ]
 const PRIX = Object.fromEntries(PRODUITS.map((p) => [p[0], p[8]]))
 
+// Libellés des catégories [fr, ar, darija arabe, darija latin], posés par l'import produits.
+const CATEGORIES = {
+  BOISSONS: ['Boissons', 'مشروبات', 'المشروبات', 'Lmachroubat'],
+  EPICERIE: ['Épicerie', 'مواد غذائية', 'المواد الغذائية', 'Lmawad lghidaiya'],
+  PRODUITS_LAITIERS: ['Produits laitiers', 'منتجات الألبان', 'الحليب ومشتقاتو', 'L7lib w mochta9ato'],
+  HYGIENE: ['Hygiène et entretien', 'النظافة والتنظيف', 'النقا والصابون', 'N9a w sabon'],
+}
+
+// Profils des ambulants (§3.1), fictifs ; leurs catégories pilotent le ciblage des promos (§9).
+const PROFIL_1 = { nom: 'Youssef Benjelloun', vehicule: 'Triporteur', villes: ['CASABLANCA'], categories: ['BOISSONS', 'EPICERIE', 'PRODUITS_LAITIERS'] }
+const PROFIL_2 = { nom: 'Abdelilah Chraibi', vehicule: 'Fourgonnette', villes: ['CASABLANCA', 'MOHAMMEDIA'], categories: ['EPICERIE', 'HYGIENE'] }
+
 // PNG 1×1 : photo du bon de livraison du dépôt.
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
 
@@ -201,8 +213,9 @@ etape(`grand client « ${grandClientOrg.nom} » créé`)
 const bilanProduits = await appel(admin, 'POST', '/v1/admin/produits/import', formulaire([[
   'fichier',
   csv([
-    ['ean', 'libelle_fr', 'libelle_ar', 'libelle_ary_arab', 'libelle_ary_latn', 'marque', 'categorie', 'conditionnement', 'unites', 'photo_url', 'grand_client_id', 'taux_tva'],
-    ...PRODUITS.map((p, i) => [ean(i + 1), p[1], p[2], p[3], p[4], p[5], p[6], 'UNITE', 1, '', p[9] ? grandClientOrg.id : '', p[7]]),
+    ['ean', 'libelle_fr', 'libelle_ar', 'libelle_ary_arab', 'libelle_ary_latn', 'marque', 'categorie', 'conditionnement', 'unites', 'photo_url', 'grand_client_id', 'taux_tva',
+      'categorie_libelle_fr', 'categorie_libelle_ar', 'categorie_libelle_ary_arab', 'categorie_libelle_ary_latn'],
+    ...PRODUITS.map((p, i) => [ean(i + 1), p[1], p[2], p[3], p[4], p[5], p[6], 'UNITE', 1, '', p[9] ? grandClientOrg.id : '', p[7], ...CATEGORIES[p[6]]]),
   ]),
   'produits.csv',
 ]]))
@@ -222,6 +235,13 @@ etape(`${bilanHanouts.crees} hanouts POS importés`)
 
 const produits = (await appel(admin, 'GET', '/v1/produits?taille=50')).contenu
 const P = Object.fromEntries(PRODUITS.map((p, i) => [p[0], produits.find((x) => x.ean === ean(i + 1)).id]))
+const categories = await appel(admin, 'GET', '/v1/categories')
+for (const [code, [fr, ar, aryArab, aryLatn]] of Object.entries(CATEGORIES)) {
+  const l = categories.find((c) => c.code === code)?.libelle
+  if (l?.fr !== fr || l.ar !== ar || l['ary-Arab'] !== aryArab || l['ary-Latn'] !== aryLatn) echec(`libellés de ${code} : ${JSON.stringify(l)}`)
+}
+if (produits.find((x) => x.id === P.lait).categorie.libelle.ar !== CATEGORIES.PRODUITS_LAITIERS[1]) echec('libellé de catégorie absent du produit')
+etape(`${Object.keys(CATEGORIES).length} catégories libellées en fr, ar et darija`)
 
 // ------------------------------------------------------------------ connexions et consentements CNDP
 
@@ -234,6 +254,9 @@ await consentir(ambulant1, true)
 const ambulant2 = await connecter(AMBULANT_2, 5)
 await consentir(ambulant2, true)
 etape('grossiste, grand client et 2 ambulants connectés, consentement CNDP enregistré')
+await pousser(ambulant1, [{ type: 'PROFIL_AMBULANT', donnees: PROFIL_1 }])
+await pousser(ambulant2, [{ type: 'PROFIL_AMBULANT', donnees: PROFIL_2 }])
+etape(`profils : ${PROFIL_1.nom} (${PROFIL_1.categories.join(', ')}), ${PROFIL_2.nom} (${PROFIL_2.categories.join(', ')})`)
 const hanouts = {}
 for (const h of HANOUTS) {
   const s = await connecter(tel(h.n), h.n)
@@ -278,7 +301,17 @@ etape('grossiste : réception de 200 unités confirmée, campagne ACTIVE')
 const offres = (await appel(ambulant1, 'GET', '/v1/promos')).contenu
 const offre = offres.find((o) => o.campagneId === campagne.id)
 if (!offre) echec(`offre de la campagne absente de GET /v1/promos : ${JSON.stringify(offres)}`)
-etape(`ambulant 1 voit l'offre (${offre.quantiteDisponible} disponibles, plafond ${offre.quantiteMaxParAmbulant})`)
+etape(`ambulant 1 voit l'offre (${offre.quantiteDisponible} disponibles, plafond ${offre.quantiteMaxParAmbulant}) : il vend des BOISSONS`)
+
+/** L'ambulant voit l'offre Atlas Cola en ligne (GET /v1/promos) et hors ligne (entité PROMO) ; les deux doivent concorder. */
+async function voitAtlasCola(session) {
+  const enLigne = (await appel(session, 'GET', '/v1/promos?taille=200')).contenu.some((o) => o.campagneId === campagne.id)
+  const horsLigne = (await tirer(session)).some((c) => c.entite === 'PROMO' && c.donnees?.campagneId === campagne.id)
+  if (enLigne !== horsLigne) echec(`ciblage incohérent : GET /v1/promos ${enLigne}, entité PROMO ${horsLigne}`)
+  return enLigne
+}
+if (await voitAtlasCola(ambulant2)) echec('ambulant 2 (EPICERIE, HYGIENE) ne devrait pas voir la campagne BOISSONS')
+etape("ambulant 2 ne voit pas l'offre : ni BOISSONS dans son profil, ni achat Atlas (§9)")
 
 const reservation = await appel(ambulant1, 'POST', '/v1/reservations', { id: randomUUID(), offreId: offre.id, quantite: 48 })
 etape(`ambulant 1 : 48 unités réservées (${reservation.statut})`)
@@ -286,7 +319,8 @@ etape(`ambulant 1 : 48 unités réservées (${reservation.statut})`)
 const qr = (await appel(ambulant1, 'GET', `/v1/reservations/${reservation.id}`)).qrJeton
 if (!qr) echec('réservation sans qrJeton')
 const apercu = await appel(grossiste, 'POST', '/v1/retraits/apercu', { qrJeton: qr })
-etape(`grossiste : QR scanné, réservation de ${apercu.quantiteReservee} unités ${apercu.statut}`)
+if (apercu.ambulant.nom !== PROFIL_1.nom) echec(`nom de l'ambulant au grossiste : ${apercu.ambulant.nom}`)
+etape(`grossiste : QR de ${apercu.ambulant.nom} scanné, réservation de ${apercu.quantiteReservee} unités ${apercu.statut}`)
 const retrait = await appel(grossiste, 'POST', '/v1/retraits', { qrJeton: qr, quantiteRemise: 48, appareilId: grossiste.appareilId })
 etape(`grossiste : retrait validé (${retrait.statut}, ${retrait.quantiteRetiree} unités)`)
 
@@ -321,7 +355,8 @@ etape(`ambulant 1 : bon de livraison ${numero(ambulant1, 1)} à ${h11.nom}, ${to
 const docHanout = await appel(h11.session, 'GET', `/v1/documents/${documentPromo}`)
 const compte = (await appel(h11.session, 'GET', '/v1/karni/comptes')).contenu[0]
 if (!compte || compte.solde !== totalVente - 20000) echec(`solde du hanout attendu ${totalVente - 20000} : ${JSON.stringify(compte)}`)
-etape(`${h11.nom} voit le document ${docHanout.numero} et un solde de ${compte.solde / 100} DH`)
+if (docHanout.ambulant.nom !== PROFIL_1.nom || compte.ambulant.nom !== PROFIL_1.nom) echec(`nom de l'ambulant au hanout : ${docHanout.ambulant.nom}`)
+etape(`${h11.nom} voit le document ${docHanout.numero} de ${docHanout.ambulant.nom} et un solde de ${compte.solde / 100} DH`)
 
 const { total } = await appel(grandClient, 'GET', `/v1/campagnes/${campagne.id}/entonnoir`)
 if (total.depose !== 200 || total.reserve !== 48 || total.retire !== 48 || total.revendu !== 24) {
@@ -352,12 +387,17 @@ const bon = await appel(grossiste, 'POST', '/v1/bons-sortie', {
     { produitId: P.savon, quantite: 30 },
   ],
 })
-etape(`grossiste : bon de sortie ${bon.numero} émis pour l'ambulant 2`)
+if (bon.ambulant.nom !== PROFIL_2.nom) echec(`nom de l'ambulant sur le bon de sortie : ${bon.ambulant.nom}`)
+etape(`grossiste : bon de sortie ${bon.numero} émis pour ${bon.ambulant.nom}`)
 
 const bonRecu = (await tirer(ambulant2)).find((c) => c.entite === 'BON_SORTIE' && c.id === bon.id)
 if (!bonRecu) echec('bon de sortie absent de GET /v1/sync/changements')
 await pousser(ambulant2, [{ type: 'CHARGEMENT', donnees: { qrJeton: bonRecu.donnees.qrJeton } }])
 etape('ambulant 2 : bon reçu par synchronisation et chargé par scan du QR')
+if (!(await voitAtlasCola(ambulant2))) echec("ambulant 2 a chargé de l'eau Atlas : il devrait voir la campagne Atlas Cola")
+etape("ambulant 2 voit maintenant l'offre Atlas Cola : il a acheté la marque Atlas (eau du bon de sortie, §9)")
+const rattache = (await appel(grossiste, 'GET', '/v1/ambulants')).contenu[0]
+if (rattache?.nom !== PROFIL_2.nom) echec(`ambulants rattachés : ${JSON.stringify(rattache)}`)
 
 const h13 = hanouts[13]
 await appel(ambulant2, 'PUT', '/v1/ambulant/disponibilite', { disponible: true, position: { lat: 33.5812, lon: -7.6301 } })
@@ -389,6 +429,7 @@ await pousser(ambulant2, [{
 }])
 const livree = await appel(h13.session, 'GET', `/v1/demandes-depannage/${rupture.id}`)
 if (livree.statut !== 'LIVREE' || livree.documentId !== documentDepannage) echec(`demande non livrée : ${JSON.stringify(livree)}`)
+if (livree.ambulant?.nom !== PROFIL_2.nom) echec(`nom de l'ambulant sur la demande : ${JSON.stringify(livree.ambulant)}`)
 etape(`ambulant 2 : livré, bon ${numero(ambulant2, 1)} payé comptant, demande LIVREE`)
 
 // Demandes laissées ouvertes : eau Atlas chez 3 hanouts d'une même cellule geohash 5, le seuil
@@ -415,8 +456,8 @@ console.table([
   { role: 'Admin', telephone: ADMIN, voir: 'Import référentiel, création des organisations' },
   { role: 'Grossiste', telephone: GROSSISTE, voir: 'Dépôt Atlas Cola reçu (48 retirés), dépôt Eau Atlas à accepter, bon de sortie, ambulant 2 rattaché' },
   { role: 'Grand client', telephone: GRAND_CLIENT, voir: 'Campagne Atlas Cola ACTIVE + entonnoir 200/48/48/24, campagne Eau Atlas PROPOSEE, carte des ruptures (précision 5)' },
-  { role: 'Ambulant 1', telephone: AMBULANT_1, voir: 'Promo réservée et retirée, stock promo, BL à Épicerie Al Baraka, karni (133 DH dus)' },
-  { role: 'Ambulant 2', telephone: AMBULANT_2, voir: 'Stock chargé par bon de sortie, dépannage livré, 3 demandes ouvertes (eau Atlas)' },
+  { role: `Ambulant 1 (${PROFIL_1.nom})`, telephone: AMBULANT_1, voir: 'Vend BOISSONS : voit la promo Atlas Cola, réservée et retirée, stock promo, BL à Épicerie Al Baraka, karni (133 DH dus)' },
+  { role: `Ambulant 2 (${PROFIL_2.nom})`, telephone: AMBULANT_2, voir: "Vend EPICERIE, HYGIENE : voit Atlas Cola par l'eau Atlas chargée, bon de sortie, dépannage livré, 3 demandes ouvertes (eau Atlas)" },
   ...HANOUTS.map((h) => ({
     role: `Hanout ${h.n}`,
     telephone: tel(h.n),

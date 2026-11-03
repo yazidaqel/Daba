@@ -1,6 +1,10 @@
 package ma.daba.comptes;
 
+import java.sql.Timestamp;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -9,12 +13,23 @@ import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import ma.daba.canaux.Canaux.Destinataire;
 import ma.daba.commun.Acces;
 import ma.daba.commun.Appelant;
+import ma.daba.commun.Geste;
+import ma.daba.commun.Geste.Conflit;
+import ma.daba.commun.Geste.Effet;
 import ma.daba.commun.Jetons;
+import ma.daba.commun.Journal;
+import ma.daba.commun.Json;
 import ma.daba.commun.Probleme;
+import ma.daba.referentiel.Referentiel;
+import tools.jackson.core.type.TypeReference;
 
 /** API publique des comptes : coordonnées des utilisateurs, liens signés, contrôles d'accès du compte. */
 @Service
@@ -28,13 +43,33 @@ public class Comptes implements Acces.VerificationCompte {
 		DOCUMENT, RELEVE, DEMANDE_DEPANNAGE
 	}
 
+	/** Profil saisi hors ligne (opération PROFIL_AMBULANT, §3.1) : remplace tout le profil. */
+	public record ProfilSaisie(@NotBlank @Size(max = 100) String nom, @Pattern(regexp = "^[A-Z]{1,2}[0-9]{1,6}$") String cin,
+			@Size(max = 100) String vehicule, @Size(max = 50) List<@NotBlank String> villes,
+			@Size(max = 50) List<@NotBlank String> categories) {
+	}
+
+	public record Profil(String nom, String cin, String vehicule, List<String> villes, List<String> categories,
+			Instant modifieLe) {
+	}
+
+	private static final TypeReference<List<String>> CODES = new TypeReference<>() {
+	};
+
 	private final JdbcClient jdbc;
 	private final Jetons jetons;
+	private final Json json;
+	private final Journal journal;
+	private final Referentiel referentiel;
 	private final String baseLiens;
 
-	Comptes(JdbcClient jdbc, Jetons jetons, @Value("${daba.liens.base-url}") String baseLiens) {
+	Comptes(JdbcClient jdbc, Jetons jetons, Json json, Journal journal, Referentiel referentiel,
+			@Value("${daba.liens.base-url}") String baseLiens) {
 		this.jdbc = jdbc;
 		this.jetons = jetons;
+		this.json = json;
+		this.journal = journal;
+		this.referentiel = referentiel;
 		this.baseLiens = baseLiens;
 	}
 
@@ -89,6 +124,62 @@ public class Comptes implements Acces.VerificationCompte {
 		return jdbc.sql("SELECT nom, telephone FROM utilisateur WHERE id = :u").param("u", utilisateurId)
 			.query((rs, i) -> rs.getString("nom") != null ? rs.getString("nom") : masquer(rs.getString("telephone")))
 			.optional().orElse("—");
+	}
+
+	/**
+	 * Profil de l'ambulant (§3.1) : son nom devient celui que voient ses grossistes et ses hanouts
+	 * ({@link #nom}). Codes de ville ou de catégorie inconnus : REJETEE ; profil plus récent sur un
+	 * autre appareil : conservé (pas d'écrasement silencieux).
+	 */
+	@Transactional
+	public Effet profil(Geste geste, ProfilSaisie p) {
+		var villes = p.villes() == null ? List.<String>of() : p.villes().stream().distinct().toList();
+		var categories = p.categories() == null ? List.<String>of() : p.categories().stream().distinct().toList();
+		var inconnus = new java.util.ArrayList<>(referentiel.villesInconnues(villes));
+		inconnus.addAll(referentiel.categoriesInconnues(categories));
+		if (!inconnus.isEmpty()) {
+			throw Probleme.regle(null, "Codes inconnus du référentiel : " + inconnus);
+		}
+		var actuel = profil(geste.ambulantId());
+		if (actuel.isPresent() && actuel.get().modifieLe().isAfter(geste.horodatage())) {
+			return new Effet(List.of(), Conflit.versionServeur("Profil modifié plus récemment sur un autre appareil", actuel.get()));
+		}
+		jdbc.sql("UPDATE utilisateur SET nom = :nom WHERE id = :u").param("nom", p.nom().trim()).param("u", geste.ambulantId())
+			.update();
+		jdbc.sql("""
+				INSERT INTO profil_ambulant (utilisateur_id, cin, vehicule, villes, categories, modifie_le_appareil)
+				VALUES (:u, :cin, :vehicule, :villes::jsonb, :categories::jsonb, :le)
+				ON CONFLICT (utilisateur_id) DO UPDATE SET cin = excluded.cin, vehicule = excluded.vehicule,
+				  villes = excluded.villes, categories = excluded.categories, modifie_le_appareil = excluded.modifie_le_appareil
+				""").param("u", geste.ambulantId()).param("cin", p.cin()).param("vehicule", p.vehicule())
+			.param("villes", json.ecrire(villes)).param("categories", json.ecrire(categories))
+			.param("le", Timestamp.from(geste.horodatage())).update();
+		journal.publier(geste.ambulantId(), "PROFIL", geste.ambulantId(), profil(geste.ambulantId()).orElseThrow());
+		return Effet.ok();
+	}
+
+	public Optional<Profil> profil(UUID ambulantId) {
+		return jdbc.sql("""
+				SELECT u.nom, p.cin, p.vehicule, p.villes::text AS villes, p.categories::text AS categories, p.modifie_le_appareil
+				FROM profil_ambulant p JOIN utilisateur u ON u.id = p.utilisateur_id WHERE p.utilisateur_id = :u
+				""").param("u", ambulantId)
+			.query((rs, i) -> new Profil(rs.getString("nom"), rs.getString("cin"), rs.getString("vehicule"),
+					json.lire(rs.getString("villes"), CODES), json.lire(rs.getString("categories"), CODES),
+					rs.getTimestamp("modifie_le_appareil").toInstant()))
+			.optional();
+	}
+
+	/** Catégories vendues déclarées au profil (ciblage d'une promo, §9) ; absent = aucune déclarée. */
+	public Map<UUID, List<String>> categoriesVendues(Collection<UUID> ambulants) {
+		var categories = new HashMap<UUID, List<String>>();
+		if (!ambulants.isEmpty()) {
+			jdbc.sql("SELECT utilisateur_id, categories::text FROM profil_ambulant WHERE utilisateur_id IN (:a)")
+				.param("a", ambulants)
+				.query(rs -> {
+					categories.put(rs.getObject(1, UUID.class), json.lire(rs.getString(2), CODES));
+				});
+		}
+		return categories;
 	}
 
 	/** Préfixe de numérotation attribué au couple (ambulant, appareil) (RG-F1). */

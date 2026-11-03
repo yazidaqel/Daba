@@ -98,7 +98,8 @@ public class Ventes implements ProduitsHabituels {
 	}
 
 	public record ParametresSaisie(@jakarta.validation.constraints.Pattern(regexp = "^(BLOQUER|AVERTIR)$") String politiqueDepassementCredit,
-			@DecimalMin("0") @DecimalMax("100") BigDecimal plafondRemisePonctuellePourcent) {
+			@DecimalMin("0") @DecimalMax("100") BigDecimal plafondRemisePonctuellePourcent,
+			@Valid MentionsLegales mentionsLegales) {
 	}
 
 	// ---------------------------------------------------------------- vues
@@ -505,13 +506,16 @@ public class Ventes implements ProduitsHabituels {
 					parametres(geste.ambulantId())));
 		}
 		jdbc.sql("""
-				INSERT INTO parametres_ambulant (ambulant_id, politique_depassement, plafond_remise_pourcent, modifie_le_appareil)
-				VALUES (:a, coalesce(:pol, 'AVERTIR'), :remise, :le)
+				INSERT INTO parametres_ambulant (ambulant_id, politique_depassement, plafond_remise_pourcent, mentions_legales,
+				  modifie_le_appareil)
+				VALUES (:a, coalesce(:pol, 'AVERTIR'), :remise, CAST(:mentions AS jsonb), :le)
 				ON CONFLICT (ambulant_id) DO UPDATE SET
 				  politique_depassement = coalesce(:pol, parametres_ambulant.politique_depassement),
 				  plafond_remise_pourcent = coalesce(:remise, parametres_ambulant.plafond_remise_pourcent),
+				  mentions_legales = coalesce(CAST(:mentions AS jsonb), parametres_ambulant.mentions_legales),
 				  modifie_le_appareil = :le
 				""").param("a", geste.ambulantId()).param("pol", p.politiqueDepassementCredit())
+			.param("mentions", json.ecrire(p.mentionsLegales()))
 			.param("remise", p.plafondRemisePonctuellePourcent()).param("le", Timestamp.from(geste.horodatage())).update();
 		journal.publier(geste.ambulantId(), "PARAMETRES", geste.ambulantId(), parametres(geste.ambulantId()));
 		return Effet.ok();

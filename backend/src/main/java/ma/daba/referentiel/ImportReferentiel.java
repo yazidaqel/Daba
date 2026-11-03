@@ -73,7 +73,8 @@ class ImportReferentiel {
 
 	/**
 	 * Colonnes : ean, libelle_fr, libelle_ar, libelle_ary_arab, libelle_ary_latn, marque, categorie,
-	 * conditionnement (UNITE, PACK, CARTON), unites, photo_url, grand_client_id, taux_tva (vide = inconnu).
+	 * conditionnement (UNITE, PACK, CARTON), unites, photo_url, grand_client_id, taux_tva (vide = inconnu),
+	 * et facultatives categorie_libelle_fr, _ar, _ary_arab, _ary_latn.
 	 */
 	@Transactional
 	Bilan produits(MultipartFile fichier) {
@@ -91,8 +92,6 @@ class ImportReferentiel {
 				}
 			}
 			var categorie = requis(l, "categorie");
-			jdbc.sql("INSERT INTO categorie (code, libelle) VALUES (:code, :libelle::jsonb) ON CONFLICT DO NOTHING")
-				.param("code", categorie).param("libelle", json.ecrire(Map.of("fr", categorie))).update();
 			var conditionnement = requis(l, "conditionnement").toUpperCase();
 			if (!List.of("UNITE", "PACK", "CARTON").contains(conditionnement)) {
 				throw new IllegalArgumentException("Conditionnement inconnu : " + conditionnement);
@@ -101,6 +100,25 @@ class ImportReferentiel {
 			var tva = vide(l.get("taux_tva"));
 			if (tva != null && !List.of("0", "7", "10", "14", "20").contains(tva)) {
 				throw new IllegalArgumentException("Taux de TVA inconnu : " + tva);
+			}
+			var marque = requis(l, "marque");
+			var unites = vide(l.get("unites"));
+			var unitesParConditionnement = Integer.parseInt(unites == null ? "1" : unites);
+			var gc = grandClient == null ? null : UUID.fromString(grandClient);
+			// Libellés facultatifs : une valeur remplace celle de sa langue, les autres sont gardées ; fr = code à défaut.
+			var libelleCategorie = new LinkedHashMap<String, String>();
+			for (var langue : List.of("fr", "ar", "ary-Arab", "ary-Latn")) {
+				var valeur = vide(l.get("categorie_libelle_" + langue.toLowerCase().replace('-', '_')));
+				if (valeur != null) {
+					libelleCategorie.put(langue, valeur);
+				}
+			}
+			if (jdbc.sql("""
+					INSERT INTO categorie (code, libelle) VALUES (:code, jsonb_build_object('fr', CAST(:code AS text)) || CAST(:libelle AS jsonb))
+					ON CONFLICT (code) DO UPDATE SET libelle = categorie.libelle || CAST(:libelle AS jsonb)
+					  WHERE NOT categorie.libelle @> CAST(:libelle AS jsonb)
+					""").param("code", categorie).param("libelle", json.ecrire(libelleCategorie)).update() > 0) {
+				referentiel.publierCategorie(categorie);
 			}
 			var r = jdbc.sql("""
 					INSERT INTO produit (id, ean, libelle, marque, categorie, conditionnement, unites_par_conditionnement,
@@ -113,10 +131,10 @@ class ImportReferentiel {
 					RETURNING id, (xmax = 0) AS cree
 					""")
 				.param("id", UUID.randomUUID()).param("ean", ean).param("libelle", json.ecrire(libelle))
-				.param("marque", requis(l, "marque")).param("categorie", categorie).param("cond", conditionnement)
-				.param("unites", Integer.parseInt(l.getOrDefault("unites", "1").isBlank() ? "1" : l.get("unites")))
+				.param("marque", marque).param("categorie", categorie).param("cond", conditionnement)
+				.param("unites", unitesParConditionnement)
 				.param("photo", vide(l.get("photo_url")))
-				.param("gc", grandClient == null ? null : UUID.fromString(grandClient))
+				.param("gc", gc)
 				.param("tva", tva == null ? null : Integer.valueOf(tva))
 				.query((rs, i) -> Map.entry(rs.getObject("id", UUID.class), rs.getBoolean("cree"))).single();
 			referentiel.publierProduit(r.getKey());

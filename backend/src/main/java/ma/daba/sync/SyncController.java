@@ -22,6 +22,7 @@ import ma.daba.commun.Appelant;
 import ma.daba.commun.Appelant.Role;
 import ma.daba.commun.Journal;
 import ma.daba.commun.Probleme;
+import ma.daba.promos.Promos;
 import tools.jackson.databind.JsonNode;
 
 @RestController
@@ -36,10 +37,12 @@ class SyncController {
 
 	private final Synchronisation synchronisation;
 	private final Journal journal;
+	private final Promos promos;
 
-	SyncController(Synchronisation synchronisation, Journal journal) {
+	SyncController(Synchronisation synchronisation, Journal journal, Promos promos) {
 		this.synchronisation = synchronisation;
 		this.journal = journal;
+		this.promos = promos;
 	}
 
 	/** Ouvert sans consentement : les pièces déjà émises doivent remonter (obligation de conservation, RG-C4). */
@@ -62,6 +65,10 @@ class SyncController {
 	@Roles(Role.AMBULANT)
 	Journal.Lot tirer(Appelant appelant, @RequestParam(required = false) String curseur,
 			@RequestParam(defaultValue = "500") @Min(1) @Max(1000) int limite) {
+		if (curseur == null) {
+			// Synchronisation complète (nouveau compte, nouvel appareil) : offres ciblées par catégorie à jour (§9).
+			promos.reevaluerCiblage(appelant.utilisateurId());
+		}
 		return journal.lire(appelant.utilisateurId(), curseur, limite);
 	}
 

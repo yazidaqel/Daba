@@ -80,15 +80,17 @@ class ComptesController {
 	}
 
 	private final JdbcClient jdbc;
+	private final Comptes comptes;
 	private final Authentification authentification;
 	private final Jetons jetons;
 	private final Referentiel referentiel;
 	private final ApplicationEventPublisher evenements;
 	private final List<Acces.ContributeurExport> contributeurs;
 
-	ComptesController(JdbcClient jdbc, Authentification authentification, Jetons jetons, Referentiel referentiel,
-			ApplicationEventPublisher evenements, List<Acces.ContributeurExport> contributeurs) {
+	ComptesController(JdbcClient jdbc, Comptes comptes, Authentification authentification, Jetons jetons,
+			Referentiel referentiel, ApplicationEventPublisher evenements, List<Acces.ContributeurExport> contributeurs) {
 		this.jdbc = jdbc;
+		this.comptes = comptes;
 		this.authentification = authentification;
 		this.jetons = jetons;
 		this.referentiel = referentiel;
@@ -203,6 +205,7 @@ class ComptesController {
 				       o.type AS organisation_type, o.nom AS organisation_nom
 				FROM utilisateur u JOIN organisation o ON o.id = u.organisation_id WHERE u.id = :u
 				""").param("u", appelant.utilisateurId()).query().singleRow());
+		export.put("profil", comptes.profil(appelant.utilisateurId()).orElse(null));
 		export.put("consentements", consentements(appelant.utilisateurId()));
 		export.put("appareils", jdbc.sql("""
 				SELECT a.id, p.prefixe, a.plateforme, a.langue, a.jeton_push IS NOT NULL AS push_actif, a.revoque, a.cree_le,

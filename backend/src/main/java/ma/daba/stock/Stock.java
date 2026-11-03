@@ -258,6 +258,17 @@ public class Stock {
 				""").param("p", produitId).param("a", ambulants).query(UUID.class).list());
 	}
 
+	/** Parmi {@code ambulants}, ceux qui ont déjà chargé, retiré en promo ou vendu un de ces produits (§9). */
+	public Set<UUID> ambulantsAyantAchete(Collection<UUID> produits, Collection<UUID> ambulants) {
+		if (produits.isEmpty() || ambulants.isEmpty()) {
+			return Set.of();
+		}
+		return Set.copyOf(jdbc.sql("""
+				SELECT DISTINCT ambulant_id FROM mouvement
+				WHERE produit_id IN (:p) AND ambulant_id IN (:a) AND type IN ('CHARGEMENT', 'PROMO', 'VENTE')
+				""").param("p", produits).param("a", ambulants).query(UUID.class).list());
+	}
+
 	/** Ambulants rattachés à un grossiste (ils ont reçu au moins un bon de sortie). */
 	public List<UUID> ambulantsRattaches(UUID grossisteId) {
 		return jdbc.sql("SELECT DISTINCT ambulant_id FROM bon_sortie WHERE grossiste_id = :g").param("g", grossisteId)

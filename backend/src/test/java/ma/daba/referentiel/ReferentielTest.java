@@ -66,6 +66,53 @@ class ReferentielTest extends TestIntegration {
 		assertThat(lire(get(ambulant(), "/v1/produits?ean=" + ean)).get("total").asInt()).isEqualTo(1);
 	}
 
+	JsonNode categorie(Compte compte, String code) {
+		for (var c : lire(get(compte, "/v1/categories"))) {
+			if (c.get("code").asString().equals(code)) {
+				return c.get("libelle");
+			}
+		}
+		return null;
+	}
+
+	@Test
+	void importDesLibellesDeCategorieDansLesQuatreLanguesAvecLeCodeADefaut() {
+		var admin = admin();
+		var code = "LAITIERS_" + System.nanoTime();
+		var sansLibelle = "SANS_" + System.nanoTime();
+		var ean1 = "%013d".formatted(java.util.concurrent.ThreadLocalRandom.current().nextLong(1_000_000_000_000L));
+		var ean2 = "%013d".formatted(java.util.concurrent.ThreadLocalRandom.current().nextLong(1_000_000_000_000L));
+		var csv = """
+				ean;libelle_fr;marque;categorie;conditionnement;unites;categorie_libelle_fr;categorie_libelle_ar;categorie_libelle_ary_arab;categorie_libelle_ary_latn
+				%s;Lben 50 cl;Bladi;%s;UNITE;1;Produits laitiers;منتجات الحليب;الحليب ومشتقاتو;L7lib w mochta9ato
+				%s;Savon;Nqi;%s;UNITE;1;;;;
+				""".formatted(ean1, code, ean2, sansLibelle);
+		assertThat(importer(admin, "/v1/admin/produits/import", csv).get("crees").asInt()).isEqualTo(2);
+		var ambulant = ambulant();
+		var libelle = categorie(ambulant, code);
+		assertThat(libelle.get("fr").asString()).isEqualTo("Produits laitiers");
+		assertThat(libelle.get("ar").asString()).isEqualTo("منتجات الحليب");
+		assertThat(libelle.get("ary-Arab").asString()).isEqualTo("الحليب ومشتقاتو");
+		assertThat(libelle.get("ary-Latn").asString()).isEqualTo("L7lib w mochta9ato");
+		assertThat(categorie(ambulant, sansLibelle).get("fr").asString()).isEqualTo(sansLibelle);
+		var produit = lire(get(ambulant, "/v1/produits?ean=" + ean1)).get("contenu").get(0);
+		assertThat(produit.get("categorie").get("libelle").get("ar").asString()).isEqualTo("منتجات الحليب");
+
+		// Réimport avec la seule colonne arabe : l'arabe change, le reste est gardé, le produit est republié.
+		long avant = jdbc.sql("SELECT coalesce(max(seq), 0) FROM changement").query(Long.class).single();
+		var reimport = importer(admin, "/v1/admin/produits/import", """
+				ean;libelle_fr;marque;categorie;conditionnement;categorie_libelle_ar
+				%s;Savon;Nqi;%s;UNITE;صابون
+				""".formatted(ean2, code));
+		assertThat(reimport.get("misAJour").asInt()).isEqualTo(1);
+		libelle = categorie(ambulant, code);
+		assertThat(libelle.get("ar").asString()).isEqualTo("صابون");
+		assertThat(libelle.get("fr").asString()).isEqualTo("Produits laitiers");
+		var republies = jdbc.sql("SELECT donnees->>'ean' FROM changement WHERE entite = 'PRODUIT' AND seq > :avant")
+			.param("avant", avant).query(String.class).list();
+		assertThat(republies).contains(ean1, ean2);
+	}
+
 	@Test
 	void produitParIdFiltresIdsEtMesProduitsCategoriesEtRegions() {
 		var marque = grandClient();

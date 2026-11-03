@@ -44,16 +44,16 @@ class NotificationsPromos {
 	}
 
 	/**
-	 * « Promo confirmée chez un grossiste de sa zone » : moins de 2 minutes après la confirmation (§10).
-	 * ponytail: tous les ambulants du pilote (une seule ville) ; filtrer par zone de tournée et
-	 * catégories quand le profil ambulant les portera.
+	 * « Promo confirmée chez un grossiste de sa zone » : moins de 2 minutes après la confirmation (§10),
+	 * aux ambulants visés par catégorie (§9, même règle que le fil). ponytail: pas encore de filtre par
+	 * zone de tournée (pilote sur une seule ville).
 	 */
 	@ApplicationModuleListener
 	void receptionConfirmee(Promos.ReceptionConfirmee evenement) {
 		var depot = promos.depot(evenement.depotId());
 		var nom = promos.nomsCampagnes(Set.of(depot.campagne().id())).get(depot.campagne().id());
 		var fin = DateTimeFormatter.ofPattern("dd/MM").withZone(CASABLANCA).format(depot.finCampagne());
-		for (var ambulant : comptes.ambulants()) {
+		for (var ambulant : promos.ambulantsVises(depot.id())) {
 			canaux.envoyer(TypeMessage.PROMO_CONFIRMEE, comptes.destinataire(ambulant), nom, depot.grossiste().nom(), fin);
 		}
 	}

@@ -56,6 +56,12 @@ public class Journal {
 		enregistrer(new Entree(destinataire, entite, id, "SUPPRESSION", null));
 	}
 
+	/** Destinataires qui ont l'objet sur leur appareil (dernier état UPSERT, déjà écrit) ; null = tous les ambulants. */
+	public List<UUID> destinataires(String entite, UUID id) {
+		return jdbc.sql("SELECT destinataire FROM changement WHERE entite = :e AND entite_id = :id AND action = 'UPSERT'")
+			.param("e", entite).param("id", id).query(UUID.class).list();
+	}
+
 	/**
 	 * Les entrées d'une transaction sont écrites juste avant son commit, sous un verrou global :
 	 * l'ordre des séquences est alors celui des commits, et aucun curseur ne saute une ligne.

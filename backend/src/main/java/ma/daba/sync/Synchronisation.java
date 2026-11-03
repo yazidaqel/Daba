@@ -32,6 +32,7 @@ import ma.daba.commun.Journal;
 import ma.daba.commun.Json;
 import ma.daba.commun.Position;
 import ma.daba.commun.Probleme;
+import ma.daba.comptes.Comptes;
 import ma.daba.depannage.Depannage;
 import ma.daba.promos.Promos;
 import ma.daba.referentiel.Referentiel;
@@ -85,10 +86,13 @@ class Synchronisation {
 	private final Promos promos;
 	private final Depannage depannage;
 	private final AvisHanout avisHanout;
+	private final Comptes comptes;
 
 	Synchronisation(JdbcClient jdbc, Json json, Journal journal, Validator validateur, TransactionTemplate transactions,
-			Stock stock, Ventes ventes, Referentiel referentiel, Promos promos, Depannage depannage, AvisHanout avisHanout) {
+			Stock stock, Ventes ventes, Referentiel referentiel, Promos promos, Depannage depannage, AvisHanout avisHanout,
+			Comptes comptes) {
 		this.avisHanout = avisHanout;
+		this.comptes = comptes;
 		this.jdbc = jdbc;
 		this.json = json;
 		this.journal = journal;
@@ -128,6 +132,10 @@ class Synchronisation {
 		try {
 			return transactions.execute(s -> {
 				var effet = executer(geste, type, operation.get("donnees"));
+				// §9 : un achat ou des catégories déclarées changent les offres ciblées que voit l'ambulant.
+				if (effet.conflit() == null && Set.of("CHARGEMENT", "EMISSION_DOCUMENT", "PROFIL_AMBULANT").contains(type)) {
+					promos.reevaluerCiblage(geste.ambulantId());
+				}
 				var anomalies = effet.anomalies().stream().map(a -> enregistrer(geste, a)).toList();
 				var statut = effet.conflit() == null ? "APPLIQUEE" : "EN_CONFLIT";
 				var resultat = new Resultat(id, statut, anomalies.isEmpty() ? null : anomalies, effet.conflit(), null);
@@ -189,6 +197,7 @@ class Synchronisation {
 			case "TARIF" -> ventes.tarif(geste, lire(donnees, Ventes.Tarif.class));
 			case "CREDIT_HANOUT" -> ventes.credit(geste, lire(donnees, Ventes.CreditHanout.class));
 			case "PARAMETRES_AMBULANT" -> ventes.parametres(geste, lire(donnees, Ventes.ParametresSaisie.class));
+			case "PROFIL_AMBULANT" -> comptes.profil(geste, lire(donnees, Comptes.ProfilSaisie.class));
 			case "RESOLUTION_CONTESTATION" -> avisHanout.resoudre(geste, lire(donnees, AvisHanout.Resolution.class));
 			case "HANOUT" -> {
 				var h = lire(donnees, NouveauHanout.class);

@@ -86,6 +86,29 @@ public class Referentiel {
 			.query(UUID.class).list();
 	}
 
+	/** Produits d'une marque (ciblage d'une promo par l'historique d'achat, §9). */
+	public List<UUID> produitsDeMarque(String marque) {
+		return jdbc.sql("SELECT id FROM produit WHERE marque = :m").param("m", marque).query(UUID.class).list();
+	}
+
+	/** Codes de {@code codes} absents des villes de {@code GET /v1/regions}. */
+	public List<String> villesInconnues(Collection<String> codes) {
+		return inconnus("ville", codes);
+	}
+
+	/** Codes de {@code codes} absents de {@code GET /v1/categories}. */
+	public List<String> categoriesInconnues(Collection<String> codes) {
+		return inconnus("categorie", codes);
+	}
+
+	private List<String> inconnus(String table, Collection<String> codes) {
+		if (codes.isEmpty()) {
+			return List.of();
+		}
+		var connus = jdbc.sql("SELECT code FROM " + table + " WHERE code IN (:c)").param("c", codes).query(String.class).list();
+		return codes.stream().filter(c -> !connus.contains(c)).toList();
+	}
+
 	public Optional<Hanout> hanout(UUID id) {
 		return jdbc.sql(SELECT_HANOUT + ", null AS distance FROM hanout h WHERE h.id = :id").param("id", id)
 			.query(this::ligneHanout).optional();
@@ -125,6 +148,12 @@ public class Referentiel {
 
 	void publierProduit(UUID id) {
 		produit(id).ifPresent(p -> journal.publier(null, "PRODUIT", id, p));
+	}
+
+	/** Libellés d'une catégorie changés : ses produits, qui l'embarquent, repartent vers les appareils. */
+	void publierCategorie(String code) {
+		jdbc.sql("SELECT id FROM produit WHERE categorie = :c").param("c", code).query(UUID.class).list()
+			.forEach(this::publierProduit);
 	}
 
 	/** Code de ville de {@code GET /v1/regions} : « Fès », « fes » et « FES » désignent la même ville. */

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Daba API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Contrat unique entre le back-end, les apps mobiles (ambulant, hanout) et les portails web.
     Changement incompatible = nouvelle version de l'endpoint (/v2/...), jamais de rupture silencieuse.
@@ -23,13 +23,22 @@ info:
       de dépannage qui lui sont proposées et les bons de sortie qui lui sont adressés ;
     - le hanout voit les documents qui lui sont adressés, ses comptes de crédit et leurs relevés.
 
+    **Nom de l'ambulant (CNDP, §5.4).** Partout où un ambulant est désigné (`Reference.nom` d'un
+    bon de sortie, d'une réservation, d'un document, d'un compte de crédit ; `AmbulantRattache.nom` ;
+    `DemandeDepannage.ambulant.nom`), c'est `ProfilAmbulant.nom`, ou son téléphone masqué
+    (`+2126•••••004`) tant qu'il n'a pas de profil. Ce nom n'est montré qu'aux grossistes et aux
+    hanouts avec qui l'ambulant travaille ; le texte de consentement de l'ambulant le dit. Aucune
+    réponse à un GRAND_CLIENT ne contient de donnée nominative d'un ambulant ou d'un hanout (nom,
+    téléphone, gérant, CIN, position) : seulement des agrégats et ses propres grossistes dépositaires.
+
     **Langues.** Les clients affichent à partir des codes (enums, `Problem.type`, `regle`) ; les
     textes libres renvoyés par le serveur suivent l'en-tête `Accept-Language` (fr, ar, ary-Arab, ary-Latn).
     `x-roles` liste les rôles autorisés ; un autre rôle reçoit 403.
 
     **Hors ligne.** Toutes les écritures de l'app ambulant passent par `POST /v1/sync/operations`
-    (UUID générés par l'appareil, rejouables sans effet de bord). Seules la réservation d'une promo
-    et les actions de dépannage (disponibilité, acceptation) exigent le réseau.
+    (UUID générés par l'appareil, rejouables sans effet de bord), profil compris (`PROFIL_AMBULANT`).
+    Seules la réservation d'une promo et les actions de dépannage (disponibilité, acceptation)
+    exigent le réseau.
 
     **Montants** en centimes de dirham (entiers). **Quantités** en unités du produit
     (un produit = un code EAN et un conditionnement).
@@ -608,6 +617,10 @@ paths:
         conditionnement (UNITE, PACK, CARTON), unites, photo_url, grand_client_id (organisation
         propriétaire, pour la carte des ruptures), taux_tva (pourcentage : 0, 7, 10, 14 ou 20 ;
         vide = inconnu). Clé : ean.
+        Colonnes facultatives (v0.5.0) : categorie_libelle_fr, categorie_libelle_ar,
+        categorie_libelle_ary_arab, categorie_libelle_ary_latn. Une valeur non vide crée ou remplace
+        ce libellé de la catégorie (les autres langues sont gardées) ; une catégorie créée sans
+        libellé français prend son code. Les produits de la catégorie sont republiés (entité PRODUIT).
       x-roles: [ADMIN]
       requestBody:
         required: true
@@ -1627,9 +1640,11 @@ paths:
       operationId: listerPromos
       summary: Fil des promotions disponibles pour l'ambulant connecté (§3.6)
       description: |
-        Une offre = un produit d'une campagne ACTIVE dans un dépôt RECU (RG-P1), ciblée sur les
-        zones et catégories de l'ambulant. Aussi livrée hors ligne par `GET /v1/sync/changements`
-        (entité PROMO), pour consultation ; la réservation exige le réseau.
+        Une offre = un produit d'une campagne ACTIVE dans un dépôt RECU (RG-P1), dont le grossiste
+        dépositaire est dans les villes et régions ciblées, et qui vise l'ambulant connecté selon
+        `Ciblage.categories` (§9). Aussi livrée hors ligne par `GET /v1/sync/changements` (entité
+        PROMO, envoyée seulement aux ambulants visés, et retirée par SUPPRESSION quand l'ambulant
+        cesse d'être visé), pour consultation ; la réservation exige le réseau.
         CNDP : aucune position n'est envoyée ; l'app calcule la distance à partir de `grossiste.position`.
       x-roles: [AMBULANT]
       parameters:
@@ -1660,7 +1675,7 @@ paths:
       summary: Réserve une quantité d'une offre promo (en ligne uniquement)
       description: |
         Contrôle la quantité restante du dépôt (409) et le plafond par ambulant défini par la
-        marque (422, RG-P3). L'`id` vient de l'appareil : renvoyer la même requête rend la
+        marque (422, RG-P3). Une offre qui ne vise pas l'ambulant (`Ciblage.categories`) répond 404. L'`id` vient de l'appareil : renvoyer la même requête rend la
         réservation existante (200) sans en créer une seconde. Expire si elle n'est pas retirée
         dans le délai de la campagne (24 h par défaut, RG-P2) ; la quantité revient au disponible.
       x-roles: [AMBULANT]
@@ -2427,7 +2442,9 @@ components:
 
     Reference:
       type: object
-      description: Référence courte vers un acteur, pour l'affichage
+      description: |
+        Référence courte vers un acteur, pour l'affichage. Pour un ambulant, `nom` est
+        `ProfilAmbulant.nom`, ou son téléphone masqué tant qu'il n'a pas de profil.
       required: [id, nom]
       properties:
         id:
@@ -2602,7 +2619,9 @@ components:
       properties:
         versionTexte:
           type: string
-          description: Version du texte d'information CNDP affiché, dans la langue de l'utilisateur
+          description: |
+            Version du texte d'information CNDP affiché, dans la langue de l'utilisateur. Celui de
+            l'ambulant dit que son nom est montré aux grossistes et aux hanouts avec qui il travaille.
         traitementDonnees:
           type: boolean
         geolocalisation:
@@ -2759,6 +2778,9 @@ components:
 
     Categorie:
       type: object
+      description: |
+        Libellés posés par l'import produits (colonnes categorie_libelle_*) ; `libelle.fr` vaut le
+        code tant qu'aucun libellé français n'a été importé.
       required: [code, libelle]
       properties:
         code:
@@ -2899,6 +2921,7 @@ components:
         - $ref: '#/components/schemas/OperationHanout'
         - $ref: '#/components/schemas/OperationCreditHanout'
         - $ref: '#/components/schemas/OperationParametresAmbulant'
+        - $ref: '#/components/schemas/OperationProfilAmbulant'
         - $ref: '#/components/schemas/OperationResolutionContestation'
       discriminator:
         propertyName: type
@@ -2913,6 +2936,7 @@ components:
           HANOUT: '#/components/schemas/OperationHanout'
           CREDIT_HANOUT: '#/components/schemas/OperationCreditHanout'
           PARAMETRES_AMBULANT: '#/components/schemas/OperationParametresAmbulant'
+          PROFIL_AMBULANT: '#/components/schemas/OperationProfilAmbulant'
           RESOLUTION_CONTESTATION: '#/components/schemas/OperationResolutionContestation'
 
     OperationChargement:
@@ -3051,6 +3075,17 @@ components:
               const: PARAMETRES_AMBULANT
             donnees:
               $ref: '#/components/schemas/ParametresAmbulantSaisie'
+
+    OperationProfilAmbulant:
+      allOf:
+        - $ref: '#/components/schemas/OperationBase'
+        - type: object
+          required: [type, donnees]
+          properties:
+            type:
+              const: PROFIL_AMBULANT
+            donnees:
+              $ref: '#/components/schemas/ProfilAmbulantSaisie'
 
     OperationResolutionContestation:
       allOf:
@@ -3428,6 +3463,7 @@ components:
 
     ParametresAmbulantSaisie:
       type: object
+      description: Un champ absent garde sa valeur serveur.
       properties:
         politiqueDepassementCredit:
           $ref: '#/components/schemas/PolitiqueDepassementCredit'
@@ -3435,6 +3471,65 @@ components:
           type: number
           minimum: 0
           maximum: 100
+        mentionsLegales:
+          $ref: '#/components/schemas/MentionsLegales'
+          description: |
+            ICE, IF, RC et assujettissement à la TVA de l'ambulant auto-entrepreneur ou société
+            (§3.1, RG-F2) : c'est la partie fiscale du profil, gardée ici et non dans
+            `ProfilAmbulantSaisie`. Présentes, elles permettent la FACTURE (v0.5.0).
+
+    ProfilAmbulantSaisie:
+      type: object
+      description: |
+        Profil de l'ambulant (§3.1), saisi hors ligne. L'opération remplace tout le profil : un champ
+        facultatif absent est effacé. Le nom est montré aux grossistes et aux hanouts avec qui
+        l'ambulant travaille (jamais aux grands clients, §5.4). Un code de ville ou de catégorie
+        inconnu rend l'opération REJETEE. Un profil modifié plus récemment sur un autre appareil
+        est conservé (EN_CONFLIT, VERSION_SERVEUR_CONSERVEE). Les mentions légales (ICE, IF, RC, TVA)
+        sont dans `ParametresAmbulantSaisie.mentionsLegales`.
+      required: [nom]
+      properties:
+        nom:
+          type: string
+          minLength: 1
+          maxLength: 100
+          examples: [Youssef El Amrani]
+        cin:
+          type: string
+          pattern: '^[A-Z]{1,2}[0-9]{1,6}$'
+          description: Carte nationale d'identité, facultative ; visible du seul ambulant (droit d'accès compris)
+          examples: [BK123456]
+        vehicule:
+          type: string
+          maxLength: 100
+          examples: [Triporteur Docker]
+        villes:
+          type: array
+          description: Zones couvertes, au grain de la ville (codes de `GET /v1/regions`)
+          maxItems: 50
+          uniqueItems: true
+          items:
+            type: string
+            examples: [CASABLANCA]
+        categories:
+          type: array
+          description: Catégories vendues (codes de `GET /v1/categories`), utilisées par `Ciblage.categories`
+          maxItems: 50
+          uniqueItems: true
+          items:
+            type: string
+            examples: [EPICERIE]
+
+    ProfilAmbulant:
+      allOf:
+        - $ref: '#/components/schemas/ProfilAmbulantSaisie'
+        - type: object
+          required: [villes, categories, modifieLe]
+          properties:
+            modifieLe:
+              type: string
+              format: date-time
+              description: Horodatage de l'appareil de la dernière modification retenue
 
     PolitiqueDepassementCredit:
       type: string
@@ -3581,6 +3676,7 @@ components:
         - $ref: '#/components/schemas/ChangementReservation'
         - $ref: '#/components/schemas/ChangementAnomalie'
         - $ref: '#/components/schemas/ChangementParametres'
+        - $ref: '#/components/schemas/ChangementProfil'
         - $ref: '#/components/schemas/ChangementBonSortie'
         - $ref: '#/components/schemas/ChangementContestation'
       discriminator:
@@ -3598,6 +3694,7 @@ components:
           RESERVATION: '#/components/schemas/ChangementReservation'
           ANOMALIE: '#/components/schemas/ChangementAnomalie'
           PARAMETRES: '#/components/schemas/ChangementParametres'
+          PROFIL: '#/components/schemas/ChangementProfil'
           BON_SORTIE: '#/components/schemas/ChangementBonSortie'
           CONTESTATION: '#/components/schemas/ChangementContestation'
 
@@ -3721,6 +3818,17 @@ components:
             donnees:
               $ref: '#/components/schemas/ParametresAmbulant'
 
+    ChangementProfil:
+      allOf:
+        - $ref: '#/components/schemas/ChangementBase'
+        - type: object
+          description: Profil de l'ambulant connecté (`id` = son utilisateur) ; absent tant qu'il n'est pas saisi
+          properties:
+            entite:
+              const: PROFIL
+            donnees:
+              $ref: '#/components/schemas/ProfilAmbulant'
+
     ChangementBonSortie:
       allOf:
         - $ref: '#/components/schemas/ChangementBase'
@@ -3754,7 +3862,7 @@ components:
           description: Écart d'inventaire au-delà duquel un motif est exigé (RG-S4), fixé par l'administrateur
         mentionsLegales:
           $ref: '#/components/schemas/MentionsLegales'
-          description: Présentes si l'ambulant peut émettre des factures (RG-F2), déclarées dans son profil
+          description: Présentes si l'ambulant peut émettre des factures (RG-F2), déclarées par `ParametresAmbulantSaisie.mentionsLegales`
 
     # ------------------------------------------------------------ stock
     TypeMouvement:
@@ -4449,7 +4557,12 @@ components:
             $ref: '#/components/schemas/ZoneGeo'
         categories:
           type: array
-          description: Codes des catégories vendues par les ambulants visés
+          description: |
+            Codes de `GET /v1/categories` (§9). Vide ou absent : tous les ambulants. Sinon, l'offre
+            vise l'ambulant qui vend au moins une de ces catégories (`ProfilAmbulant.categories`), ou
+            qui a déjà acheté la marque du produit (un chargement, un retrait promo ou une vente d'un
+            produit de cette marque), ou qui n'a déclaré aucune catégorie (un compte neuf n'a pas un
+            fil vide avant de remplir son profil). Même règle pour la notification « promo confirmée ».
           items:
             type: string
         rayonM:

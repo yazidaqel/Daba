@@ -349,4 +349,153 @@ class PromosTest extends TestIntegration {
 		assertThat(envois).isPositive();
 	}
 
+	// ---------------------------------------------------------------- ciblage par catégorie (§9)
+
+	/** Produit d'une marque propre au test (historique d'achat), dans une catégorie donnée. */
+	UUID produitDeMarque(String marque, String categorie, UUID grandClient) {
+		jdbc.sql("INSERT INTO categorie (code, libelle) VALUES (:c, jsonb_build_object('fr', CAST(:c AS text))) ON CONFLICT DO NOTHING")
+			.param("c", categorie).update();
+		var id = UUID.randomUUID();
+		jdbc.sql("""
+				INSERT INTO produit (id, ean, libelle, marque, categorie, conditionnement, unites_par_conditionnement, grand_client_id)
+				VALUES (:id, :ean, '{"fr":"Produit"}', :m, :c, 'UNITE', 1, :gc)
+				""").param("id", id).param("ean", "%013d".formatted(java.util.concurrent.ThreadLocalRandom.current().nextLong(1_000_000_000_000L)))
+			.param("m", marque).param("c", categorie).param("gc", grandClient).update();
+		return id;
+	}
+
+	JsonNode pousser(Compte ambulant, String type, Object donnees) {
+		var r = post(ambulant, "/v1/sync/operations", m("appareilId", ambulant.appareilId(), "operations",
+				List.of(m("id", UUID.randomUUID(), "type", type, "creeLe", Instant.now().toString(), "donnees", donnees))));
+		assertThat(r).hasStatusOk();
+		var resultat = lire(r).get("resultats").get(0);
+		assertThat(resultat.get("statut").asString()).isEqualTo("APPLIQUEE");
+		return resultat;
+	}
+
+	Compte ambulantQuiVend(String... categories) {
+		for (var c : categories) {
+			jdbc.sql("INSERT INTO categorie (code, libelle) VALUES (:c, jsonb_build_object('fr', CAST(:c AS text))) ON CONFLICT DO NOTHING")
+				.param("c", c).update();
+		}
+		var a = ambulant();
+		pousser(a, "PROFIL_AMBULANT", m("nom", "Ambulant " + String.join(" ", categories), "categories", List.of(categories)));
+		return a;
+	}
+
+	/** Offres PROMO présentes sur l'appareil après une synchronisation complète. */
+	java.util.Set<String> promosSurLAppareil(Compte ambulant) {
+		var ids = new java.util.HashSet<String>();
+		String curseur = null;
+		for (;;) {
+			var lot = lire(get(ambulant, "/v1/sync/changements?limite=1000" + (curseur == null ? "" : "&curseur=" + curseur)));
+			for (var c : lot.get("changements")) {
+				if (c.get("entite").asString().equals("PROMO")) {
+					if (c.get("action").asString().equals("UPSERT")) {
+						ids.add(c.get("id").asString());
+					}
+					else {
+						ids.remove(c.get("id").asString());
+					}
+				}
+			}
+			curseur = lot.get("curseur").asString();
+			if (!lot.get("plusDeChangements").asBoolean()) {
+				return ids;
+			}
+		}
+	}
+
+	/** Campagne ciblée sur BOISSONS, sur un produit BOISSONS d'une marque propre au test, reçue chez un grossiste. */
+	Scenario promoCiblee(String marqueProduit) {
+		var marque = grandClient();
+		var grossiste = grossiste();
+		var produit = produitDeMarque(marqueProduit, "BOISSONS", marque.organisationId());
+		var saisie = campagne(produit, 100, 5);
+		saisie.put("ciblage", m("villes", List.of("CASABLANCA"), "categories", List.of("BOISSONS")));
+		var campagneId = lire(post(marque, "/v1/campagnes", saisie)).get("id").asString();
+		var depotId = lire(post(marque, "/v1/campagnes/" + campagneId + "/depots", m("grossisteId", grossiste.organisationId(),
+				"lignes", List.of(m("produitId", produit, "quantite", 20))))).get("id").asString();
+		post(grossiste, "/v1/depots/" + depotId + "/reponse", m("decision", "ACCEPTER"));
+		recevoir(grossiste, depotId, produit, 20);
+		return new Scenario(marque, grossiste, produit, campagneId, depotId);
+	}
+
+	@Test
+	void ciblageParCategorie_visibleSiLAmbulantVendLaCategorie_ouNEnDeclareAucune() {
+		produitDeMarque("Autre", "EPICERIE", null);
+		var s = promoCiblee("Marque-" + UUID.randomUUID());
+		var vendeur = ambulantQuiVend("EPICERIE", "BOISSONS");
+		var autre = ambulantQuiVend("EPICERIE");
+		var neuf = ambulant();
+		var offre = offre(vendeur, s);
+		assertThat(offre).isNotNull();
+		assertThat(offre(neuf, s)).isEqualTo(offre);
+		assertThat(offre(autre, s)).isNull();
+		assertThat(post(autre, "/v1/reservations", m("id", UUID.randomUUID(), "offreId", offre, "quantite", 1))).hasStatus(404);
+
+		// Hors ligne : l'offre n'arrive que chez les ambulants visés.
+		assertThat(promosSurLAppareil(vendeur)).contains(offre);
+		assertThat(promosSurLAppareil(neuf)).contains(offre);
+		assertThat(promosSurLAppareil(autre)).doesNotContain(offre);
+
+		// Le vendeur ne déclare plus BOISSONS : l'offre quitte son fil et son appareil ; l'autre l'ajoute et la reçoit.
+		pousser(vendeur, "PROFIL_AMBULANT", m("nom", "Vendeur", "categories", List.of("EPICERIE")));
+		pousser(autre, "PROFIL_AMBULANT", m("nom", "Autre", "categories", List.of("BOISSONS")));
+		assertThat(offre(vendeur, s)).isNull();
+		assertThat(promosSurLAppareil(vendeur)).doesNotContain(offre);
+		assertThat(promosSurLAppareil(autre)).contains(offre);
+		// Une réservation met à jour l'offre chez les seuls ambulants visés.
+		assertThat(post(autre, "/v1/reservations", m("id", UUID.randomUUID(), "offreId", offre, "quantite", 2))).hasStatus(201);
+		assertThat(promosSurLAppareil(vendeur)).doesNotContain(offre);
+	}
+
+	@Test
+	void ciblageParCategorie_visibleSiLAmbulantADejaAcheteLaMarque() {
+		var marqueProduit = "Marque-" + UUID.randomUUID();
+		var s = promoCiblee(marqueProduit);
+		var ambulant = ambulantQuiVend("EPICERIE");
+		assertThat(offre(ambulant, s)).isNull();
+		// Chargement d'un autre produit de la même marque (hors catégorie ciblée) : il a acheté la marque.
+		var memeMarque = produitDeMarque(marqueProduit, "EPICERIE", null);
+		pousser(ambulant, "CHARGEMENT", m("lignes", List.of(m("produitId", memeMarque, "quantite", 3))));
+		var offre = offre(ambulant, s);
+		assertThat(offre).isNotNull();
+		assertThat(promosSurLAppareil(ambulant)).contains(offre);
+		// Un chargement d'une autre marque ne suffit pas.
+		var autre = ambulantQuiVend("EPICERIE");
+		pousser(autre, "CHARGEMENT", m("lignes", List.of(m("produitId", produitDeMarque("Autre-" + UUID.randomUUID(), "EPICERIE", null),
+				"quantite", 3))));
+		assertThat(offre(autre, s)).isNull();
+	}
+
+	@Test
+	void ciblageParCategorie_notificationPromoConfirmeeAuxSeulsAmbulantsVises() throws InterruptedException {
+		var vise = ambulantQuiVend("BOISSONS");
+		var nonVise = ambulantQuiVend("EPICERIE");
+		var s = promoCiblee("Marque-" + UUID.randomUUID());
+		for (int i = 0; i < 50 && jdbc.sql("""
+				SELECT count(*) FROM event_publication WHERE completion_date IS NULL AND serialized_event LIKE :d
+				""").param("d", "%" + s.depotId() + "%").query(Long.class).single() > 0; i++) {
+			Thread.sleep(200);
+		}
+		var compte = (java.util.function.Function<Compte, Long>) a -> jdbc.sql(
+				"SELECT count(*) FROM notification WHERE utilisateur_id = :u AND type = 'PROMO_CONFIRMEE'")
+			.param("u", a.id()).query(Long.class).single();
+		assertThat(compte.apply(vise)).isPositive();
+		assertThat(compte.apply(nonVise)).isZero();
+	}
+
+	@Test
+	void reservationMontreLeNomDeLAmbulantAuGrossiste() {
+		var s = promoActive();
+		var ambulant = ambulant();
+		pousser(ambulant, "PROFIL_AMBULANT", m("nom", "Hamid Bennis"));
+		var id = UUID.randomUUID();
+		post(ambulant, "/v1/reservations", m("id", id, "offreId", offre(ambulant, s), "quantite", 1));
+		assertThat(lire(get(s.grossiste(), "/v1/reservations/" + id)).get("ambulant").get("nom").asString()).isEqualTo("Hamid Bennis");
+		assertThat(lire(get(s.grossiste(), "/v1/reservations?depotId=" + s.depotId())).get("contenu").get(0).get("ambulant")
+			.get("nom").asString()).isEqualTo("Hamid Bennis");
+	}
+
 }
