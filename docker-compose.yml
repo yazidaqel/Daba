@@ -23,6 +23,8 @@ services:
       DB_URL: jdbc:postgresql://db:5432/daba
       DB_USER: daba
       DB_PASSWORD: ${DB_PASSWORD:-daba}
+      # Aucun administrateur par défaut : la démo passe le sien (DABA_ADMIN_TELEPHONES=+212600000001, voir CLAUDE.md).
+      DABA_ADMIN_TELEPHONES: ${DABA_ADMIN_TELEPHONES:-}
     ports:
       - "8080:8080"
     depends_on:

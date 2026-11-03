@@ -1,0 +1,26 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "grossiste",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "web/grossiste"],
+      "env": { "API_URL": "http://localhost:8080" },
+      "port": 5175
+    },
+    {
+      "name": "grand-client",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "web/grand-client"],
+      "env": { "DABA_API": "http://localhost:8080" },
+      "port": 5177
+    },
+    {
+      "name": "hanout",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "web/hanout"],
+      "env": { "API_URL": "http://localhost:8080" },
+      "port": 5173
+    }
+  ]
+}

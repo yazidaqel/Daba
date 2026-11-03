@@ -56,4 +56,5 @@ Prérequis : Docker, et JDK 25 dans `JAVA_HOME` pour builder hors conteneur.
 - Santé : `curl localhost:8080/actuator/health` ; Swagger UI : http://localhost:8080/swagger-ui.html
 - Arrêter : `docker compose down` (ajouter `-v` pour effacer la base)
 - Valider le contrat : `npx @redocly/cli lint api/openapi.yaml`
+- Jeu de démo (dev, base vide) : `docker compose down -v && DABA_ADMIN_TELEPHONES=+212600000001 docker compose up -d --build && node scripts/demo.mjs` ; il parcourt les flux promo et dépannage par la vraie API et affiche les numéros de démo. Code OTP : `docker compose logs backend | grep "\[SMS\] <téléphone>"`. Portails contre ce back-end : configurations de `.claude/launch.json`.
 - Back-end : voir `backend/CLAUDE.md`.
