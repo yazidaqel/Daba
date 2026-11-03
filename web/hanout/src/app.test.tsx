@@ -60,6 +60,45 @@ describe('session', () => {
     expect(JSON.parse(localStorage.getItem('daba.session')!).accessToken).toBe('neuf')
   })
 
+  async function connecterDepuisAccueil(consenti: boolean) {
+    const appels: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (req: Request) => {
+        const { pathname } = new URL(req.url)
+        appels.push(pathname)
+        if (pathname === '/v1/auth/otp') return new Response(null, { status: 202 })
+        if (pathname === '/v1/auth/otp/verify') return json({ accessToken: 'a', refreshToken: 'r', utilisateur: { roles: ['HANOUT'] } })
+        if (pathname === '/v1/moi/consentement') {
+          expect(req.headers.get('Authorization')).toBe('Bearer a')
+          return json({ traitementDonnees: consenti })
+        }
+        return json({ page: 0, taille: 60, total: 0, contenu: [] })
+      }),
+    )
+    history.replaceState(null, '', '/')
+    render(<App />)
+
+    await userEvent.type(screen.getByPlaceholderText('06 12 34 56 78'), '0600000011')
+    await userEvent.click(screen.getByRole('button', { name: /Recevoir le code/ }))
+    await userEvent.type(await screen.findByLabelText(/Code reçu/), '123456')
+    await userEvent.click(screen.getByRole('button', { name: 'Entrer' }))
+    return appels
+  }
+
+  it('quitte l’écran de connexion même quand l’URL ne change pas (connexion depuis « / »)', async () => {
+    await connecterDepuisAccueil(true)
+    expect(await screen.findByRole('link', { name: /Bons/ })).toBeTruthy()
+    expect(location.pathname).toBe('/')
+  })
+
+  it('sans consentement, va à l’écran CNDP sans afficher ni charger l’accueil', async () => {
+    const appels = await connecterDepuisAccueil(false)
+    await vi.waitFor(() => expect(location.pathname).toBe('/consentement'))
+    expect(appels).not.toContain('/v1/produits')
+    expect(appels).not.toContain('/v1/demandes-depannage')
+  })
+
   it('garde la session si le renouvellement tombe sur une panne du serveur', async () => {
     localStorage.setItem('daba.session', JSON.stringify({ accessToken: 'vieux', refreshToken: 'r1' }))
     vi.stubGlobal(

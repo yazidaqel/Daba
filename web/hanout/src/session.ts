@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from 'react'
 import type { components } from './api/schema'
 
 type Session = components['schemas']['Session']
@@ -12,12 +13,26 @@ export function lireSession(): Session | null {
   }
 }
 
+// Connexion et déconnexion ne changent pas toujours l'URL (connexion depuis « / ») : l'App s'abonne à la session elle-même.
+const CHANGEMENT = 'daba:session'
+const abonner = (f: () => void) => {
+  addEventListener(CHANGEMENT, f)
+  addEventListener('storage', f)
+  return () => {
+    removeEventListener(CHANGEMENT, f)
+    removeEventListener('storage', f)
+  }
+}
+export const useConnecte = () => useSyncExternalStore(abonner, () => localStorage.getItem(CLE) !== null)
+
 export function ouvrirSession(s: Session) {
   localStorage.setItem(CLE, JSON.stringify(s))
+  dispatchEvent(new Event(CHANGEMENT))
 }
 
 export function fermerSession() {
   localStorage.removeItem(CLE)
+  dispatchEvent(new Event(CHANGEMENT))
   // Les réponses API et photos gardées pour le hors ligne appartiennent à ce compte.
   void globalThis.caches?.delete('api')
   void globalThis.caches?.delete('images')

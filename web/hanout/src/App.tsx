@@ -12,7 +12,7 @@ import { Rupture } from '@/ecrans/Rupture'
 import { changerLangue, LANGUES, useI18n, type Langue } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { correspond, Lien, naviguer, useUrl } from '@/router'
-import { lireSession } from '@/session'
+import { useConnecte } from '@/session'
 
 type Rendu = (p: Record<string, string>, q: URLSearchParams) => ReactNode
 
@@ -39,7 +39,7 @@ export function App() {
   const [chemin, recherche] = url.split('?')
   const q = new URLSearchParams(recherche)
   const lien = correspond('/l/:jeton', chemin)
-  const connecte = lireSession() !== null
+  const connecte = useConnecte()
 
   let contenu: ReactNode
   if (lien) contenu = <Connexion key={lien.jeton} jeton={lien.jeton} />

@@ -12,9 +12,11 @@ import type { Cle } from '@/textes'
 const CIBLES = { DOCUMENT: '/documents/', RELEVE: '/comptes/', DEMANDE_DEPANNAGE: '/demandes/' } as const
 const versCible = (l: S['LienCible']) => CIBLES[l.cible] + l.cibleId
 
-async function apresConnexion(suite: string) {
-  const c = await api.GET('/v1/moi/consentement')
+// La session ne s'ouvre qu'une fois le consentement lu : l'accueil ne s'affiche jamais avant l'écran CNDP.
+async function apresConnexion(session: S['Session'], suite: string) {
+  const c = await api.GET('/v1/moi/consentement', { headers: { Authorization: `Bearer ${session.accessToken}` } })
   naviguer(c.data?.traitementDonnees ? suite : `/consentement?suite=${encodeURIComponent(suite)}`, true)
+  ouvrirSession(session)
 }
 
 const ERREURS: Record<number, Cle> = { 401: 'erreur.code', 410: 'erreur.lienExpire', 429: 'erreur.tropTentatives' }
@@ -82,8 +84,7 @@ export function Connexion({ jeton, suite = '/', revoque }: { jeton?: string; sui
         if (!session) return
         // Le serveur filtre par rôle, mais un ambulant verrait ici ses propres documents : on refuse.
         if (!session.utilisateur.roles.includes('HANOUT')) return setErreur('erreur.pasHanout')
-        ouvrirSession(session)
-        await apresConnexion(lien ? versCible(lien) : suite)
+        await apresConnexion(session, lien ? versCible(lien) : suite)
       },
     )
   }
