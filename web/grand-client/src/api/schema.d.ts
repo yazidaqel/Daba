@@ -139,7 +139,11 @@ export interface paths {
          *     opération authentifiée répond 403 (Problem `type` …/consentement-requis, quelle que soit
          *     la connexion), sauf `GET`/`PUT /v1/moi/consentement`, `GET /v1/moi/donnees` (droit d'accès)
          *     et `POST /v1/sync/operations` : les pièces de vente déjà émises doivent pouvoir remonter
-         *     (obligation légale de conservation, RG-C4).
+         *     (obligation légale de conservation, RG-C4). Sans ce consentement, seules y sont appliquées
+         *     EMISSION_DOCUMENT, AVOIR, VERSEMENT, le stock qu'elles mouvementent (CHARGEMENT, RETOUR,
+         *     INVENTAIRE) et HANOUT (hanout terrain qu'elles référencent) ; les autres (PROFIL_AMBULANT,
+         *     PARAMETRES_AMBULANT, TARIF, CREDIT_HANOUT, RESOLUTION_CONTESTATION) sont REJETEE avec
+         *     `erreur.type` …/consentement-requis, à renvoyer une fois le consentement donné.
          *     Retirer `geolocalisation` coupe la disponibilité de l'ambulant et efface sa dernière position.
          */
         put: operations["enregistrerConsentement"];
@@ -362,6 +366,10 @@ export interface paths {
          *     conditionnement (UNITE, PACK, CARTON), unites, photo_url, grand_client_id (organisation
          *     propriétaire, pour la carte des ruptures), taux_tva (pourcentage : 0, 7, 10, 14 ou 20 ;
          *     vide = inconnu). Clé : ean.
+         *     Colonnes facultatives (v0.5.0) : categorie_libelle_fr, categorie_libelle_ar,
+         *     categorie_libelle_ary_arab, categorie_libelle_ary_latn. Une valeur non vide crée ou remplace
+         *     ce libellé de la catégorie (les autres langues sont gardées) ; une catégorie créée sans
+         *     libellé français prend son code. Les produits de la catégorie sont republiés (entité PRODUIT).
          */
         post: operations["importerProduits"];
         delete?: never;
@@ -385,6 +393,9 @@ export interface paths {
          *     l'appareil : la rejouer renvoie `DEJA_APPLIQUEE` sans nouvel effet (idempotence).
          *     Une opération qui reflète un fait terrain (vente, versement, chargement) n'est jamais refusée
          *     pour une règle de gestion : elle est appliquée et signalée en anomalie (RG-S1, RG-C3, RG-F1…).
+         *     Sans consentement CNDP actif, une opération qui n'est ni une pièce de vente, ni un versement,
+         *     ni un mouvement de stock, ni un hanout terrain est REJETEE (…/consentement-requis, voir
+         *     `PUT /v1/moi/consentement`).
          *     Seule une opération mal formée (dont une FACTURE sans `mentionsLegales`, RG-F2, un numéro
          *     dont le préfixe n'est pas celui de l'appareil, RG-F1, ou un AVOIR supérieur au restant à
          *     annuler du document d'origine, RG-C4) ou qui référence un objet inconnu est `REJETEE` ;
@@ -908,9 +919,11 @@ export interface paths {
         };
         /**
          * Fil des promotions disponibles pour l'ambulant connecté (§3.6)
-         * @description Une offre = un produit d'une campagne ACTIVE dans un dépôt RECU (RG-P1), ciblée sur les
-         *     zones et catégories de l'ambulant. Aussi livrée hors ligne par `GET /v1/sync/changements`
-         *     (entité PROMO), pour consultation ; la réservation exige le réseau.
+         * @description Une offre = un produit d'une campagne ACTIVE dans un dépôt RECU (RG-P1), dont le grossiste
+         *     dépositaire est dans les villes et régions ciblées, et qui vise l'ambulant connecté selon
+         *     `Ciblage.categories` (§9). Aussi livrée hors ligne par `GET /v1/sync/changements` (entité
+         *     PROMO, envoyée seulement aux ambulants visés, et retirée par SUPPRESSION quand l'ambulant
+         *     cesse d'être visé), pour consultation ; la réservation exige le réseau.
          *     CNDP : aucune position n'est envoyée ; l'app calcule la distance à partir de `grossiste.position`.
          */
         get: operations["listerPromos"];
@@ -935,7 +948,7 @@ export interface paths {
         /**
          * Réserve une quantité d'une offre promo (en ligne uniquement)
          * @description Contrôle la quantité restante du dépôt (409) et le plafond par ambulant défini par la
-         *     marque (422, RG-P3). L'`id` vient de l'appareil : renvoyer la même requête rend la
+         *     marque (422, RG-P3). Une offre qui ne vise pas l'ambulant (`Ciblage.categories`) répond 404. L'`id` vient de l'appareil : renvoyer la même requête rend la
          *     réservation existante (200) sans en créer une seconde. Expire si elle n'est pas retirée
          *     dans le délai de la campagne (24 h par défaut, RG-P2) ; la quantité revient au disponible.
          */
@@ -1226,7 +1239,10 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
-        /** @description Référence courte vers un acteur, pour l'affichage */
+        /**
+         * @description Référence courte vers un acteur, pour l'affichage. Pour un ambulant, `nom` est
+         *     `ProfilAmbulant.nom`, ou son téléphone masqué tant qu'il n'a pas de profil.
+         */
         Reference: {
             /** Format: uuid */
             id: string;
@@ -1334,7 +1350,10 @@ export interface components {
             expireLe: string;
         };
         ConsentementSaisie: {
-            /** @description Version du texte d'information CNDP affiché, dans la langue de l'utilisateur */
+            /**
+             * @description Version du texte d'information CNDP affiché, dans la langue de l'utilisateur. Celui de
+             *     l'ambulant dit que son nom est montré aux grossistes et aux hanouts avec qui il travaille.
+             */
             versionTexte: string;
             traitementDonnees: boolean;
             /** @description Ambulant seulement — position collectée uniquement quand il est disponible */
@@ -1410,6 +1429,10 @@ export interface components {
         HanoutPage: components["schemas"]["PageMeta"] & {
             contenu: components["schemas"]["Hanout"][];
         };
+        /**
+         * @description Libellés posés par l'import produits (colonnes categorie_libelle_*) ; `libelle.fr` vaut le
+         *     code tant qu'aucun libellé français n'a été importé.
+         */
         Categorie: {
             code: string;
             libelle: components["schemas"]["LibelleI18n"];
@@ -1478,7 +1501,7 @@ export interface components {
              */
             creeLe: string;
         };
-        Operation: components["schemas"]["OperationChargement"] | components["schemas"]["OperationRetour"] | components["schemas"]["OperationInventaire"] | components["schemas"]["OperationEmissionDocument"] | components["schemas"]["OperationAvoir"] | components["schemas"]["OperationVersement"] | components["schemas"]["OperationTarif"] | components["schemas"]["OperationHanout"] | components["schemas"]["OperationCreditHanout"] | components["schemas"]["OperationParametresAmbulant"] | components["schemas"]["OperationResolutionContestation"];
+        Operation: components["schemas"]["OperationChargement"] | components["schemas"]["OperationRetour"] | components["schemas"]["OperationInventaire"] | components["schemas"]["OperationEmissionDocument"] | components["schemas"]["OperationAvoir"] | components["schemas"]["OperationVersement"] | components["schemas"]["OperationTarif"] | components["schemas"]["OperationHanout"] | components["schemas"]["OperationCreditHanout"] | components["schemas"]["OperationParametresAmbulant"] | components["schemas"]["OperationProfilAmbulant"] | components["schemas"]["OperationResolutionContestation"];
         OperationChargement: components["schemas"]["OperationBase"] & {
             /** @constant */
             type: "CHARGEMENT";
@@ -1604,6 +1627,17 @@ export interface components {
              * @enum {string}
              */
             type: "PARAMETRES_AMBULANT";
+        };
+        OperationProfilAmbulant: components["schemas"]["OperationBase"] & {
+            /** @constant */
+            type: "PROFIL_AMBULANT";
+            donnees: components["schemas"]["ProfilAmbulantSaisie"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "PROFIL_AMBULANT";
         };
         OperationResolutionContestation: components["schemas"]["OperationBase"] & {
             /** @constant */
@@ -1822,9 +1856,47 @@ export interface components {
             plafond?: components["schemas"]["Montant"];
             delaiMaxJours?: number;
         };
+        /** @description Un champ absent garde sa valeur serveur. */
         ParametresAmbulantSaisie: {
             politiqueDepassementCredit?: components["schemas"]["PolitiqueDepassementCredit"];
             plafondRemisePonctuellePourcent?: number;
+            /**
+             * @description ICE, IF, RC et assujettissement à la TVA de l'ambulant auto-entrepreneur ou société
+             *     (§3.1, RG-F2) : c'est la partie fiscale du profil, gardée ici et non dans
+             *     `ProfilAmbulantSaisie`. Présentes, elles permettent la FACTURE (v0.5.0).
+             */
+            mentionsLegales?: components["schemas"]["MentionsLegales"];
+        };
+        /**
+         * @description Profil de l'ambulant (§3.1), saisi hors ligne. L'opération remplace tout le profil : un champ
+         *     facultatif absent est effacé. Le nom est montré aux grossistes et aux hanouts avec qui
+         *     l'ambulant travaille (jamais aux grands clients, §5.4). Un code de ville ou de catégorie
+         *     inconnu rend l'opération REJETEE, de même que l'absence de consentement CNDP actif
+         *     (…/consentement-requis). Un profil modifié plus récemment sur un autre appareil
+         *     est conservé (EN_CONFLIT, VERSION_SERVEUR_CONSERVEE). Les mentions légales (ICE, IF, RC, TVA)
+         *     sont dans `ParametresAmbulantSaisie.mentionsLegales`.
+         */
+        ProfilAmbulantSaisie: {
+            /** @example Youssef El Amrani */
+            nom: string;
+            /**
+             * @description Carte nationale d'identité, facultative ; visible du seul ambulant (droit d'accès compris)
+             * @example BK123456
+             */
+            cin?: string;
+            /** @example Triporteur Docker */
+            vehicule?: string;
+            /** @description Zones couvertes, au grain de la ville (codes de `GET /v1/regions`) */
+            villes?: string[];
+            /** @description Catégories vendues (codes de `GET /v1/categories`), utilisées par `Ciblage.categories` */
+            categories?: string[];
+        };
+        ProfilAmbulant: components["schemas"]["ProfilAmbulantSaisie"] & {
+            /**
+             * Format: date-time
+             * @description Horodatage de l'appareil de la dernière modification retenue
+             */
+            modifieLe: string;
         };
         /**
          * @description Comportement à la vente quand le plafond ou le délai d'un hanout est dépassé (RG-C3)
@@ -1900,7 +1972,7 @@ export interface components {
              */
             action: "UPSERT" | "SUPPRESSION";
         };
-        Changement: components["schemas"]["ChangementProduit"] | components["schemas"]["ChangementHanout"] | components["schemas"]["ChangementStock"] | components["schemas"]["ChangementMouvement"] | components["schemas"]["ChangementDocument"] | components["schemas"]["ChangementVersement"] | components["schemas"]["ChangementCompteCredit"] | components["schemas"]["ChangementTarif"] | components["schemas"]["ChangementPromo"] | components["schemas"]["ChangementReservation"] | components["schemas"]["ChangementAnomalie"] | components["schemas"]["ChangementParametres"] | components["schemas"]["ChangementBonSortie"] | components["schemas"]["ChangementContestation"];
+        Changement: components["schemas"]["ChangementProduit"] | components["schemas"]["ChangementHanout"] | components["schemas"]["ChangementStock"] | components["schemas"]["ChangementMouvement"] | components["schemas"]["ChangementDocument"] | components["schemas"]["ChangementVersement"] | components["schemas"]["ChangementCompteCredit"] | components["schemas"]["ChangementTarif"] | components["schemas"]["ChangementPromo"] | components["schemas"]["ChangementReservation"] | components["schemas"]["ChangementAnomalie"] | components["schemas"]["ChangementParametres"] | components["schemas"]["ChangementProfil"] | components["schemas"]["ChangementBonSortie"] | components["schemas"]["ChangementContestation"];
         ChangementProduit: components["schemas"]["ChangementBase"] & {
             /** @constant */
             entite?: "PRODUIT";
@@ -2033,6 +2105,17 @@ export interface components {
              */
             entite: "PARAMETRES";
         };
+        ChangementProfil: components["schemas"]["ChangementBase"] & {
+            /** @constant */
+            entite?: "PROFIL";
+            donnees?: components["schemas"]["ProfilAmbulant"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            entite: "PROFIL";
+        };
         ChangementBonSortie: components["schemas"]["ChangementBase"] & {
             /** @constant */
             entite?: "BON_SORTIE";
@@ -2060,7 +2143,7 @@ export interface components {
             plafondRemisePonctuellePourcent?: number;
             /** @description Écart d'inventaire au-delà duquel un motif est exigé (RG-S4), fixé par l'administrateur */
             seuilEcartInventairePourcent: number;
-            /** @description Présentes si l'ambulant peut émettre des factures (RG-F2), déclarées dans son profil */
+            /** @description Présentes si l'ambulant peut émettre des factures (RG-F2), déclarées par `ParametresAmbulantSaisie.mentionsLegales` */
             mentionsLegales?: components["schemas"]["MentionsLegales"];
         };
         /**
@@ -2442,7 +2525,13 @@ export interface components {
             regions?: string[];
             villes?: string[];
             zones?: components["schemas"]["ZoneGeo"][];
-            /** @description Codes des catégories vendues par les ambulants visés */
+            /**
+             * @description Codes de `GET /v1/categories` (§9). Vide ou absent : tous les ambulants. Sinon, l'offre
+             *     vise l'ambulant qui vend au moins une de ces catégories (`ProfilAmbulant.categories`), ou
+             *     qui a déjà acheté la marque du produit (un chargement, un retrait promo ou une vente d'un
+             *     produit de cette marque), ou qui n'a déclaré aucune catégorie (un compte neuf n'a pas un
+             *     fil vide avant de remplir son profil). Même règle pour la notification « promo confirmée ».
+             */
             categories?: string[];
             /** @description Distance maximale entre le grossiste dépositaire et la zone de tournée de l'ambulant */
             rayonM?: number;
