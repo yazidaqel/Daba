@@ -1,6 +1,6 @@
 # Cahier des charges — Daba, plateforme des grossistes ambulants
 
-Oct 24, 2026 · @Yazid Aqel · Version 0.1 — document de travail pour RED (red.ma)
+Nov 3, 2026 · @Yazid Aqel · Version 0.2 — document de travail pour RED (red.ma). La version 0.1 date du 24 octobre 2026 ; la 0.2 reporte les décisions prises pendant le lot 1 (§9, §10, §11, §14).
 
 ## 1. Contexte et objectifs
 
@@ -395,6 +395,12 @@ Les alertes de rupture et de promo sont les fonctions différenciantes : elles d
 
 - Les modèles de messages WhatsApp (templates) sont préparés dès le départ pour une validation rapide le jour de l'activation.
 
+- Fournisseurs du pilote (tranché le 3 novembre 2026) : SMS par Infobip, push par Firebase Cloud Messaging (Android). L'administrateur choisit le fournisseur de chaque canal parmi ceux configurés sur le serveur, depuis le back-office ; les clés d'accès restent dans l'environnement du serveur et ne sont jamais saisies ni affichées.
+
+- Les codes de connexion (OTP) partent toujours par SMS : ce canal ne peut pas être coupé pour eux.
+
+- Les notifications push ne contiennent ni nom ni numéro de téléphone, car elles s'affichent sur l'écran verrouillé ; le détail s'ouvre dans l'application, derrière le code PIN.
+
 ## 10. Exigences non fonctionnelles
 
 Le mode hors ligne est l'exigence la plus structurante : l'ambulant doit pouvoir vendre, facturer et encaisser une journée entière sans réseau.
@@ -405,7 +411,7 @@ Le mode hors ligne est l'exigence la plus structurante : l'ambulant doit pouvoir
 
 - Résolution des conflits côté serveur avec journal des mouvements (pas d'écrasement silencieux).
 
-- Exception : la réservation d'une promo exige une connexion, pour garantir la quantité disponible.
+- Deux exceptions exigent une connexion (tranché le 2 novembre 2026) : la réservation d'une promo, pour garantir la quantité disponible, et le dépannage (se déclarer disponible, accepter ou refuser une demande, partir en route), car le premier ambulant qui accepte doit être arbitré par le serveur (RG-D2). La livraison qui suit se saisit hors ligne comme une vente.
 
 - Compatibilité Android 8+ sur appareils d'entrée de gamme (2 Go de RAM) ; iOS en second temps.
 
@@ -418,6 +424,8 @@ Le mode hors ligne est l'exigence la plus structurante : l'ambulant doit pouvoir
 - Saisie minimale : favoris, dernière commande, scan code-barres.
 
 - Lecture vocale ou aide audio envisagée pour les utilisateurs peu à l'aise avec l'écrit.
+
+- Charte graphique commune à toutes les applications (tranché le 2 novembre 2026) : palette Zellige (teal, safran réservé aux promotions, sable, encre), polices IBM Plex Sans et IBM Plex Sans Arabic embarquées, icônes Phosphor (mobile) et Lucide (web). Détail dans `charte-graphique.md`.
 
 **Sécurité**
 
@@ -434,6 +442,10 @@ Le mode hors ligne est l'exigence la plus structurante : l'ambulant doit pouvoir
 - Loi 09-08 sur la protection des données personnelles : déclaration CNDP, consentement, droit d'accès. La géolocalisation de l'ambulant n'est collectée qu'avec son accord, et seulement quand il est disponible.
 
 - Hébergement des données : Azure pendant le pilote, puis VPS au Maroc, ce qui simplifie la conformité CNDP.
+
+- Sous-traitants hors du Maroc, à porter dans la déclaration CNDP et nommés dans le texte de consentement : Infobip (numéro de téléphone et texte des SMS, codes de connexion compris) et Google Firebase Cloud Messaging (identifiant de l'appareil et contenu des notifications). L'application n'envoie rien à Google avant le consentement.
+
+- Le nom de l'ambulant est montré aux grossistes et aux hanouts avec qui il travaille tant que son consentement est actif ; après un retrait, seules les pièces déjà émises gardent son nom. Aucune donnée nominative n'est montrée aux grands clients.
 
 - Mentions légales des factures et préparation à la facture électronique DGI.
 
@@ -453,19 +465,21 @@ Pour le MVP, un monolithe modulaire Spring Boot suffit et reste découpable en s
 
 architecture cible · 4 canaux, 6 modules
 
+Mise à jour du 3 novembre 2026, non reportée sur le schéma : les événements passent par une outbox PostgreSQL (pas de Kafka au MVP), la passerelle SMS est Infobip, et un back-office administrateur web s'ajoute aux portails.
+
 Le module Promos et dépannage porte la logique différenciante (géociblage, dispatch des demandes) ; les autres modules sont du standard métier.
 
 - **Mobile** : Flutter 3.47 (Dart 3.13) pour les applications ambulant et hanout, base locale SQLite, file d'opérations rejouée à la synchronisation, identifiants générés côté appareil (UUID).
 
-- **Back-end** : Java 25 (LTS), Spring Boot 4.1, API REST documentée (OpenAPI), événements publiés via le pattern outbox vers Kafka.
+- **Back-end** : Java 25 (LTS), Spring Boot 4.1, API REST documentée (OpenAPI). Les modules échangent des événements applicatifs enregistrés dans une outbox PostgreSQL (registre de publication d'événements de Spring Modulith), rejoués au redémarrage (tranché le 2 novembre 2026). Kafka n'est pas retenu au MVP ; il pourra être branché plus tard derrière la même outbox si la charge l'exige.
 
 - **Géociblage** : PostGIS pour trouver les ambulants proches d'un hanout en rupture ou d'un grossiste dépositaire (rayon, zones de tournée).
 
-- **Portails web** : React 19 + shadcn/ui (Tailwind CSS 4) ; le hanout dispose de son application mobile Flutter et d'une PWA légère ouverte depuis un lien SMS signé. Les messages automatiques passent par la couche canaux : SMS par défaut, WhatsApp Business API activable par configuration ; le partage manuel d'une facture vers WhatsApp depuis le téléphone reste possible.
+- **Portails web** : React 19 + shadcn/ui (Tailwind CSS 4) pour le portail grossiste, le portail grand client et le back-office administrateur ; le hanout dispose de son application mobile Flutter et d'une PWA légère ouverte depuis un lien SMS signé. Les messages automatiques passent par la couche canaux : SMS par défaut (Infobip), push par Firebase Cloud Messaging, WhatsApp Business API activable par configuration ; le partage manuel d'une facture vers WhatsApp depuis le téléphone reste possible.
 
 - **Reporting** : vues analytiques PostgreSQL au départ, export Excel et connecteur Power BI pour les marques.
 
-- **Hébergement** : Azure pendant le pilote, puis bascule possible vers un VPS au Maroc. Pour rester portable, tout est conteneurisé (Docker) et aucun service propre à Azure n'est indispensable : PostgreSQL, Kafka et un stockage objet compatible S3 tournent aussi sur le VPS.
+- **Hébergement** : Azure pendant le pilote, puis bascule possible vers un VPS au Maroc. Pour rester portable, tout est conteneurisé (Docker) et aucun service propre à Azure n'est indispensable : PostgreSQL et un stockage objet compatible S3 tournent aussi sur le VPS.
 
 **Versions cibles (vérifiées le 25 octobre 2026)**
 
@@ -477,9 +491,11 @@ Le module Promos et dépannage porte la logique différenciante (géociblage, di
 | React          | 19.x (dernière mineure stable) | shadcn/ui n'a pas de version : ses composants sont copiés dans le projet                             |
 | PostgreSQL     | 18.x                           | 19 en release candidate, sortie prévue le 19 novembre 2026                                           |
 | PostGIS        | 3.6.x                          | 3.7 en release candidate, à suivre avec PostgreSQL 19                                                |
-| Apache Kafka   | 4.3.x (mode KRaft)             | Dernière version stable publiée : 4.3.1                                                              |
+| Apache Kafka   | non retenu au MVP              | Outbox PostgreSQL à la place (2 novembre 2026) ; 4.3.1 était la dernière version stable au 25 octobre |
 
 Règle : les versions sont figées au démarrage du lot 1, puis chaque nouvelle version GA publiée pendant le projet est intégrée après passage des tests.
+
+Versions figées dans le dépôt au lot 1 : Java 25, Spring Boot 4.1.2, Flutter 3.47.9 / Dart 3.13.7, React 19.3.1, PostgreSQL 18 avec PostGIS 3.6 (image `postgis/postgis:18-3.6`).
 
 Sources : [Spring Boot 4.1.0](https://spring.io/blog/2026/06/10/spring-boot-4/), [versions Spring Boot sur GitHub](https://github.com/spring-projects/spring-boot/releases), [téléchargements Java Oracle](https://www.oracle.com/java/download/), [versions Flutter](https://docs.shorebird.dev/getting-started/flutter-version.md), [calendrier Flutter 2026](https://docs.flutter.dev/release/archive?tab=macos), [PostgreSQL 19 RC 1](https://www.postgresql.org/about/news/postgresql-19-rc-1-3409/), [PostGIS 3.7.0rc3](https://postgis.net/2026/10/PostGIS-3.7.0rc3/), [téléchargements Kafka](https://kafka.apache.org/community/downloads/), [cycle de vie React](https://endoflife.ai/article-react-eol.html).
 
@@ -533,7 +549,7 @@ Le MVP couvre le flux promo de bout en bout et le karni digital : c'est ce qui p
 
 ## 14. Hypothèses et questions ouvertes
 
-Les points marqués « tranché » ont été réglés le 25 octobre ; les autres restent à trancher avec RED au cadrage.
+Les points marqués « tranché » ont été réglés le 25 octobre, ou à la date indiquée ; les autres restent à trancher avec RED au cadrage.
 
 - [ ] Les « grands clients » regroupent les marques (Coca-Cola, Nestlé…) et d'autres typologies de distributeurs : confirmé.
 
@@ -560,3 +576,25 @@ Les points marqués « tranché » ont été réglés le 25 octobre ; les autres
 - [ ] La note REDLAB prévoit un démarrage sur WhatsApp : le pilote part sur appli web + SMS, WhatsApp s'activera par configuration dès qu'un compte WhatsApp Business sera disponible. Choix validé (tranché).
 
 - [ ] Canaux paramétrables au niveau du système (tranché). Reste à chiffrer : quel coût unitaire du SMS et du message WhatsApp, et qui le porte dans le modèle économique ?
+
+- [ ] Événements entre modules : outbox PostgreSQL, sans Kafka au MVP (tranché le 2 novembre 2026, §11).
+
+- [ ] Le dépannage exige le réseau, comme la réservation de promo (tranché le 2 novembre 2026, §10).
+
+- [ ] Charte graphique, typographie et icônes communes (tranché le 2 novembre 2026, §10).
+
+- [ ] Fournisseurs : SMS par Infobip, push par Firebase Cloud Messaging, choisis et activés par l'administrateur (tranché le 3 novembre 2026, §9).
+
+- [ ] CNDP : déclarer Infobip et Google comme sous-traitants hors du Maroc, et choisir un compte Infobip hébergé dans l'Union européenne ?
+
+- [ ] Des SMS (relevés, avis de document) partent vers des hanouts de la base POS qui n'ont pas encore de compte, donc sans consentement recueilli dans Daba : quelle base légale RED retient-elle ?
+
+- [ ] Coupure d'un canal « par organisation » (§9) : s'agit-il de l'organisation du destinataire (choix actuel) ou de celle qui émet ou paie le message (par exemple la marque) ?
+
+- [ ] Les prix saisis sont-ils toujours TTC (choix actuel), y compris pour un ambulant assujetti à la TVA qui émet une facture ?
+
+- [ ] Une livraison déjà confirmée par le hanout sur l'écran de l'ambulant ne peut plus être rouverte depuis la PWA : le hanout passe alors par une contestation. Ce fonctionnement convient-il ?
+
+- [ ] Le grossiste voit le nom et le numéro des ambulants qui lui sont rattachés : à confirmer, et à écrire dans le texte de consentement de l'ambulant.
+
+- [ ] Un signalement de rupture par photo seule (produit non identifié) : à quels ambulants l'envoyer ?
