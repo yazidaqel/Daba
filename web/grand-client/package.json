@@ -13,6 +13,8 @@
     "mock": "prism mock ../../api/openapi.yaml -p 4013"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-sans": "5.3.0",
+    "@fontsource/ibm-plex-sans-arabic": "5.3.0",
     "@tailwindcss/vite": "4.3.3",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",

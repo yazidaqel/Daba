@@ -1,12 +1,38 @@
 import { api, ok, type S } from '@/api/client'
 import { useCharge } from '@/lib/useCharge'
 
-/**
- * Référentiel produits, indexé par id, pour afficher les libellés des lignes de campagne.
- * ponytail: première page de 200 seulement — le contrat n'a ni GET /v1/produits/{id} ni filtre
- * « produits de ma marque » ; à remplacer dès que le back-end en expose un.
- */
-export function useProduits() {
-  const { data } = useCharge(() => api.GET('/v1/produits', { params: { query: { taille: 200 } } }).then(ok), [])
-  return new Map<string, S['Produit']>((data?.contenu ?? []).map((p) => [p.id, p]))
+const parId = (liste: S['Produit'][] = []) => new Map(liste.map((p) => [p.id, p]))
+
+/** Produits du grand client connecté (création de campagne, filtre de la carte des ruptures). */
+export function useMesProduits() {
+  const { data } = useCharge(() => api.GET('/v1/produits', { params: { query: { mesProduits: true, taille: 200 } } }).then(ok), [])
+  return parId(data?.contenu)
+}
+
+/** Libellés de produits précis (lignes de campagne et de dépôt), indexés par id. */
+export function useProduits(ids: string[]) {
+  // ponytail: une seule page de 200 ids (maxItems du contrat) ; découper si une campagne en compte plus.
+  const uniques = [...new Set(ids)].sort().slice(0, 200)
+  const { data } = useCharge(
+    () =>
+      uniques.length
+        ? api
+            .GET('/v1/produits', {
+              params: { query: { ids: uniques, taille: 200 } },
+              querySerializer: { array: { style: 'form', explode: false } },
+            })
+            .then(ok)
+        : Promise.resolve(undefined),
+    [uniques.join()],
+  )
+  return parId(data?.contenu)
+}
+
+export function useCategories() {
+  const { data } = useCharge(() => api.GET('/v1/categories').then(ok), [])
+  return new Map((data ?? []).map((c) => [c.code, c]))
+}
+
+export function useRegions() {
+  return useCharge(() => api.GET('/v1/regions').then(ok), []).data ?? []
 }

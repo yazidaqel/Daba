@@ -17,7 +17,7 @@ const fr = {
   'commun.precedent': 'Précédent',
   'commun.annuler': 'Annuler',
   'commun.retirer': 'Retirer',
-  'commun.retour': '← Campagnes',
+  'commun.retour': 'Campagnes',
   'commun.aucunResultat': 'Aucun résultat.',
 
   'erreur.http': 'Erreur {status}',
@@ -110,7 +110,6 @@ const fr = {
   'ciblage.aide': 'Laissez vide pour viser toute la zone des grossistes dépositaires.',
   'ciblage.regions': 'Régions',
   'ciblage.villes': 'Villes',
-  'ciblage.virgules': 'Séparées par des virgules.',
   'ciblage.rayon': 'Rayon autour du grossiste (m)',
   'ciblage.rayonAide': 'Entre 500 et 50 000 m.',
   'ciblage.categories': 'Catégories d’ambulants',
@@ -155,8 +154,8 @@ const fr = {
   'ruptures.titre': 'Carte des ruptures',
   'ruptures.tousProduits': 'Tous mes produits',
   'ruptures.precision': 'Maille',
-  'ruptures.precisionFine': 'Quartier (≈ 1,2 km)',
-  'ruptures.precisionLarge': 'Secteur (≈ 5 km)',
+  'ruptures.precisionFine': 'Quartier (env. 1,2 km)',
+  'ruptures.precisionLarge': 'Secteur (env. 5 km)',
   'ruptures.depuis': 'Du',
   'ruptures.jusqua': 'Au',
   'ruptures.zone': 'Zone',
@@ -188,6 +187,10 @@ const fr = {
   'donnees.telecharger': 'Télécharger mes données',
   'donnees.retirer': 'Retirer mon consentement',
   'donnees.confirmerRetrait': 'Retirer votre consentement ? Vous n’aurez plus accès au portail.',
+  'erreur.codeInvalide': 'Code incorrect ou expiré.',
+  'erreur.appareilRevoque': 'Cet appareil a été déconnecté à distance. Reconnectez-vous.',
+  'erreur.tropDeDemandes': 'Trop de tentatives. Réessayez dans quelques minutes.',
+  'ciblage.villesAide': 'Sans ville cochée : toutes les villes des régions choisies.',
 }
 
 export type Cle = keyof typeof fr
@@ -208,7 +211,7 @@ const ar: Record<Cle, string> = {
   'commun.precedent': 'السابق',
   'commun.annuler': 'إلغاء',
   'commun.retirer': 'حذف',
-  'commun.retour': '→ الحملات',
+  'commun.retour': 'الحملات',
   'commun.aucunResultat': 'لا توجد نتائج.',
 
   'erreur.http': 'خطأ {status}',
@@ -301,7 +304,6 @@ const ar: Record<Cle, string> = {
   'ciblage.aide': 'اتركه فارغًا لاستهداف كامل منطقة تجار الجملة المودَع لديهم.',
   'ciblage.regions': 'الجهات',
   'ciblage.villes': 'المدن',
-  'ciblage.virgules': 'مفصولة بفواصل.',
   'ciblage.rayon': 'الشعاع حول تاجر الجملة (متر)',
   'ciblage.rayonAide': 'بين 500 و50000 متر.',
   'ciblage.categories': 'فئات الباعة المتجوّلين',
@@ -346,8 +348,8 @@ const ar: Record<Cle, string> = {
   'ruptures.titre': 'خريطة نفاد المخزون',
   'ruptures.tousProduits': 'كل منتجاتي',
   'ruptures.precision': 'الدقة',
-  'ruptures.precisionFine': 'حي (≈ 1,2 كم)',
-  'ruptures.precisionLarge': 'قطاع (≈ 5 كم)',
+  'ruptures.precisionFine': 'حي (نحو 1,2 كم)',
+  'ruptures.precisionLarge': 'قطاع (نحو 5 كم)',
   'ruptures.depuis': 'من',
   'ruptures.jusqua': 'إلى',
   'ruptures.zone': 'المنطقة',
@@ -379,6 +381,10 @@ const ar: Record<Cle, string> = {
   'donnees.telecharger': 'تنزيل معطياتي',
   'donnees.retirer': 'سحب موافقتي',
   'donnees.confirmerRetrait': 'سحب موافقتك؟ لن تتمكن بعدها من الولوج إلى البوابة.',
+  'erreur.codeInvalide': 'الرمز غير صحيح أو منتهي الصلاحية.',
+  'erreur.appareilRevoque': 'تم قطع اتصال هذا الجهاز عن بُعد. سجّل الدخول من جديد.',
+  'erreur.tropDeDemandes': 'محاولات كثيرة. أعد المحاولة بعد بضع دقائق.',
+  'ciblage.villesAide': 'دون اختيار مدينة: كل مدن الجهات المختارة.',
 }
 
 const aryArab: Record<Cle, string> = {
@@ -388,7 +394,7 @@ const aryArab: Record<Cle, string> = {
   'langue.ary-Arab': 'الدارجة',
   'langue.ary-Latn': 'Darija',
   'nav.campagnes': 'الحملات',
-  'commun.retour': '→ الحملات',
+  'commun.retour': 'الحملات',
   'erreur.http': 'غلط {status}',
   'campagnes.titre': 'الحملات',
   'campagne.description': 'الشرح',
@@ -410,7 +416,7 @@ const aryArab: Record<Cle, string> = {
   'detail.offre': 'العرض',
   'depots.proposee': 'المقترحة',
   'ruptures.precision': 'الدقة',
-  'ruptures.precisionLarge': 'قطاع (≈ 5 كم)',
+  'ruptures.precisionLarge': 'قطاع (تقريبا 5 كم)',
   'ruptures.depuis': 'من',
   'ruptures.jusqua': 'حتى',
   'ruptures.zone': 'المنطقة',
@@ -499,7 +505,6 @@ const aryArab: Record<Cle, string> = {
   'ciblage.aide': 'خليه خاوي باش توصل لكاع المنطقة ديال الكرّوسيين المودع عندهم.',
   'ciblage.regions': 'الجهات',
   'ciblage.villes': 'المدن',
-  'ciblage.virgules': 'فرقهم بفاصلة.',
   'ciblage.rayon': 'المسافة على الكرّوسي (متر)',
   'ciblage.categories': 'أنواع البياعة المتجولين',
   'ciblage.zones': 'المناطق',
@@ -535,7 +540,7 @@ const aryArab: Record<Cle, string> = {
   'affectation.aucuneQuantite': 'دخل شي كمية على الأقل.',
   'ruptures.titre': 'خريطة دالقطعة',
   'ruptures.tousProduits': 'كاع السلعة ديالي',
-  'ruptures.precisionFine': 'حومة (≈ 1,2 كم)',
+  'ruptures.precisionFine': 'حومة (تقريبا 1,2 كم)',
   'ruptures.signalements': 'البلاغات',
   'ruptures.resolues': 'تقضات',
   'ruptures.enCours': 'باقة',
@@ -548,6 +553,10 @@ const aryArab: Record<Cle, string> = {
   'valid.quantites': 'الكميات خاصها تكون 1 ولا كثر.',
   'valid.plafond': 'الماكسيموم لكل بياع ما يفوتش الكمية كاملة.',
   'valid.remise': 'شي تخفيض ناقص.',
+  'erreur.codeInvalide': 'الكود غالط ولا سالا.',
+  'erreur.appareilRevoque': 'هاد الجهاز تقطع من بعيد. دخل من جديد.',
+  'erreur.tropDeDemandes': 'بزاف ديال المحاولات. عاود من بعد شي دقايق.',
+  'ciblage.villesAide': 'إلا ما ختاريتي حتى مدينة: كاع المدن ديال الجهات اللي ختاريتي.',
 }
 
 const aryLatn: Record<Cle, string> = {
@@ -566,7 +575,7 @@ const aryLatn: Record<Cle, string> = {
   'commun.precedent': 'Lli 9bel',
   'commun.annuler': 'Lghi',
   'commun.retirer': '7ayyed',
-  'commun.retour': '← Les campagnes',
+  'commun.retour': 'Les campagnes',
   'commun.aucunResultat': 'Makayn 7tta natija.',
 
   'erreur.http': 'Ghalat {status}',
@@ -659,7 +668,6 @@ const aryLatn: Record<Cle, string> = {
   'ciblage.aide': 'Khallih khawi bach twsel l ga3 lmanti9a dyal lgrossistes lmoudda3 3ndhom.',
   'ciblage.regions': 'Ljihat',
   'ciblage.villes': 'Lmoudoun',
-  'ciblage.virgules': 'Ferre9hom b virgule.',
   'ciblage.rayon': 'Lmasafa 3la lgrossiste (m)',
   'ciblage.rayonAide': 'Bin 500 o 50 000 m.',
   'ciblage.categories': 'Anwa3 lbiya3a lmtjawlin',
@@ -704,8 +712,8 @@ const aryLatn: Record<Cle, string> = {
   'ruptures.titre': 'Kharita dyal l9at3a',
   'ruptures.tousProduits': 'Ga3 sel3a dyali',
   'ruptures.precision': 'Dde9a',
-  'ruptures.precisionFine': '7ouma (≈ 1,2 km)',
-  'ruptures.precisionLarge': '9ita3 (≈ 5 km)',
+  'ruptures.precisionFine': '7ouma (ta9riban 1,2 km)',
+  'ruptures.precisionLarge': '9ita3 (ta9riban 5 km)',
   'ruptures.depuis': 'Mn',
   'ruptures.jusqua': 'L',
   'ruptures.zone': 'Manti9a',
@@ -737,6 +745,10 @@ const aryLatn: Record<Cle, string> = {
   'donnees.telecharger': 'Telechargi lma3loumat dyali',
   'donnees.retirer': '7ayyed lmouwafa9a dyali',
   'donnees.confirmerRetrait': 'T7ayyed lmouwafa9a dyalek? Ma ghatb9ach tdkhol l portail.',
+  'erreur.codeInvalide': 'Code ghalat wla sala.',
+  'erreur.appareilRevoque': 'Had l appareil t9te3 mn b3id. Dkhol mn jdid.',
+  'erreur.tropDeDemandes': 'Bzaf dyal lmo7awalat. 3awed mn ba3d chi d9aye9.',
+  'ciblage.villesAide': 'Ila ma khtariti 7ta mdina: ga3 lmoudoun dyal ljihat li khtariti.',
 }
 
 export const MESSAGES = { fr, ar, 'ary-Arab': aryArab, 'ary-Latn': aryLatn } as const

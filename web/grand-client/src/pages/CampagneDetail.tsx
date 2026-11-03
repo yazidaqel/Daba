@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import { api, ok, type S } from '@/api/client'
 import { useI18n, type Cle } from '@/i18n'
 import { useCharge } from '@/lib/useCharge'
-import { useProduits } from '@/lib/useProduits'
+import { useCategories, useProduits, useRegions } from '@/lib/useProduits'
 import { Carte } from '@/components/Carte'
+import { ListeVilles } from '@/components/ListeVilles'
 import { Erreur } from '@/components/Erreur'
 import { StatutCampagne, StatutDepot } from '@/components/Statut'
 import { Button } from '@/components/ui/button'
@@ -16,9 +18,11 @@ const ETAPES = ['depose', 'reserve', 'retire', 'revendu'] as const
 
 export function CampagneDetail({ id }: { id: string }) {
   const { t, libelle, date, nombre, montant } = useI18n()
-  const produits = useProduits()
   const chemin = { params: { path: { campagneId: id } } }
   const campagne = useCharge(() => api.GET('/v1/campagnes/{campagneId}', chemin).then(ok), [id])
+  const produits = useProduits(
+    (campagne.data?.lignes ?? []).flatMap((l) => (l.remise.type === 'PRODUIT_OFFERT' ? [l.produitId, l.remise.produitOffertId] : [l.produitId])),
+  )
   const depots = useCharge(() => api.GET('/v1/campagnes/{campagneId}/depots', chemin).then(ok), [id])
   const entonnoir = useCharge(() => api.GET('/v1/campagnes/{campagneId}/entonnoir', chemin).then(ok), [id])
   const [erreur, setErreur] = useState<unknown>()
@@ -56,14 +60,13 @@ export function CampagneDetail({ id }: { id: string }) {
     }
   }
 
-  // Libellés des catégories connues du référentiel (pas d'endpoint dédié au lot 1).
-  const categories = new Map([...produits.values()].map((p) => [p.categorie.code, libelle(p.categorie.libelle)]))
   const rangActuel = CYCLE.findIndex((etape) => etape.includes(c.statut))
 
   return (
     <section className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <a href="#/campagnes" className="text-sm text-muted-foreground hover:underline">
+        <a href="#/campagnes" className="flex items-center gap-1 text-sm text-muted-foreground hover:underline">
+          <ArrowLeft className="size-4 rtl:rotate-180" aria-hidden />
           {t('commun.retour')}
         </a>
         <h1 className="me-auto text-xl font-semibold">{libelle(c.nom)}</h1>
@@ -95,7 +98,7 @@ export function CampagneDetail({ id }: { id: string }) {
         {CYCLE.map((etape, i) => (
           <li
             key={etape.join()}
-            className={`rounded-full border px-3 py-1 ${i === rangActuel ? 'border-primary bg-primary text-primary-foreground' : i < rangActuel ? 'bg-secondary' : 'text-muted-foreground'}`}
+            className={`rounded-full border px-3 py-1 ${i === rangActuel ? 'border-promo bg-promo font-medium text-promo-foreground' : i < rangActuel ? 'border-promo-soft bg-promo-soft text-promo-soft-foreground' : 'text-muted-foreground'}`}
           >
             {etape.map((s) => t(`statut.${s}`)).join(' / ')}
           </li>
@@ -133,7 +136,7 @@ export function CampagneDetail({ id }: { id: string }) {
               ))}
             </TableBody>
           </Table>
-          <Ciblage ciblage={c.ciblage} categories={categories} />
+          <Ciblage ciblage={c.ciblage} />
         </CardContent>
       </Card>
 
@@ -199,6 +202,7 @@ export function CampagneDetail({ id }: { id: string }) {
                               <div className="mt-2 flex gap-1">
                                 <Button
                                   size="sm"
+                                  variant="outline"
                                   onClick={() =>
                                     action(async () =>
                                       ok(await api.POST('/v1/depots/{depotId}/reponse-marque', { params: { path: { depotId: d.id } }, body: { decision: 'ACCEPTER' } })),
@@ -256,14 +260,22 @@ export function CampagneDetail({ id }: { id: string }) {
   )
 }
 
-function Ciblage({ ciblage, categories }: { ciblage?: S['Ciblage']; categories: Map<string, string> }) {
-  const { t, nombre, liste } = useI18n()
+function Ciblage({ ciblage }: { ciblage?: S['Ciblage'] }) {
+  const { t, nombre, liste, libelle } = useI18n()
+  const categories = useCategories()
+  const regions = useRegions()
+  // Codes de GET /v1/regions ; une ancienne saisie libre s'affiche telle quelle.
+  const lieux = new Map(regions.flatMap((r) => [[r.code, r.nom] as const, ...r.villes.map((v) => [v.code, v.nom] as const)]))
+  const nom = (code: string) => {
+    const n = lieux.get(code)
+    return n ? libelle(n) : code
+  }
   const cv = (cle: Cle, valeur: string) => t('commun.cleValeur', { cle: t(cle), valeur })
   const c = ciblage ?? {}
   const morceaux = [
-    c.regions?.length && cv('ciblage.regions', liste(c.regions)),
-    c.villes?.length && cv('ciblage.villes', liste(c.villes)),
-    c.categories?.length && cv('ciblage.categories', liste(c.categories.map((k) => categories.get(k) ?? k))),
+    c.regions?.length && cv('ciblage.regions', liste(c.regions.map(nom))),
+    c.villes?.length && cv('ciblage.villes', liste(c.villes.map(nom))),
+    c.categories?.length && cv('ciblage.categories', liste(c.categories.map((k) => (categories.has(k) ? libelle(categories.get(k)!.libelle) : k)))),
     c.zones?.length && cv('ciblage.zones', nombre(c.zones.length)),
     c.rayonM && cv('ciblage.rayon', nombre(c.rayonM)),
   ].filter(Boolean)
@@ -278,8 +290,8 @@ function Barres({ e }: { e: S['EtapesEntonnoir'] }) {
       {ETAPES.map((k) => (
         <div key={k} className="grid grid-cols-[8rem_1fr_auto] items-center gap-2 text-sm">
           <span>{t(`entonnoir.${k}`)}</span>
-          <div className="h-5 rounded bg-secondary">
-            <div className="h-5 rounded bg-primary" style={{ inlineSize: `${Math.min(100, (100 * e[k]) / base)}%` }} />
+          <div className="h-5 rounded bg-promo-soft">
+            <div className="h-5 rounded bg-promo" style={{ inlineSize: `${Math.min(100, (100 * e[k]) / base)}%` }} />
           </div>
           <span className="tabular-nums">
             {nombre(e[k])} · {t('unite.pourcent', { n: nombre(Math.round((100 * e[k]) / base)) })}
@@ -380,7 +392,8 @@ function Affectation({
       <CardContent className="space-y-4">
         <div className="flex flex-wrap gap-2">
           <Input className="max-w-xs" placeholder={t('affectation.recherche')} value={q} onChange={(e) => setQ(e.target.value)} />
-          <Input className="max-w-xs" placeholder={t('ciblage.villes')} value={ville} onChange={(e) => setVille(e.target.value)} />
+          <Input className="max-w-xs" list="villes-grossistes" placeholder={t('ciblage.villes')} value={ville} onChange={(e) => setVille(e.target.value)} />
+          <ListeVilles id="villes-grossistes" />
         </div>
         <Erreur erreur={grossistes.erreur} />
         <div className="grid gap-4 lg:grid-cols-2">
@@ -389,7 +402,7 @@ function Affectation({
               id: g.id,
               lat: g.position.lat,
               lon: g.position.lon,
-              couleur: g.id === choisi?.id ? '#0f766e' : dejaProposes.has(g.id) ? '#b45309' : undefined,
+              couleur: g.id === choisi?.id ? 'primary' : dejaProposes.has(g.id) ? 'promo' : undefined,
             }))}
             onPoint={(gid) => setChoisi(liste.find((g) => g.id === gid))}
           />

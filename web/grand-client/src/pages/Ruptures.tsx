@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { api, ok } from '@/api/client'
 import { useI18n } from '@/i18n'
 import { useCharge } from '@/lib/useCharge'
-import { useProduits } from '@/lib/useProduits'
+import { bornes, classe, echelle, jeton, useSombre } from '@/lib/jetons'
+import { useMesProduits } from '@/lib/useProduits'
 import { Carte } from '@/components/Carte'
+import { ListeVilles } from '@/components/ListeVilles'
 import { Erreur } from '@/components/Erreur'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -11,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 /** Carte des ruptures agrégée par cellule geohash (§5.3, §5.4) : aucune donnée par hanout ni ambulant. */
 export function Ruptures() {
   const { t, libelle, nombre, date } = useI18n()
-  const produits = useProduits()
+  const produits = useMesProduits()
   const [produitId, setProduitId] = useState('')
   const [ville, setVille] = useState('')
   const [precision, setPrecision] = useState<5 | 6>(6)
@@ -37,6 +39,11 @@ export function Ruptures() {
   )
   const cellules = carte.data?.cellules ?? []
   const max = Math.max(1, ...cellules.map((c) => c.signalements))
+  // Échelle séquentielle sur `danger` (charte graphique), du plus clair au plus soutenu ; recalculée en mode sombre.
+  // Elle part un cran au-dessus de `danger-soft`, trop pâle pour se voir sur le fond de carte.
+  useSombre()
+  const CLASSES = 4
+  const teintes = echelle(jeton('destructive-soft'), jeton('destructive'), CLASSES + 1).slice(1)
   const nomProduit = (pid: string) => {
     const p = produits.get(pid)
     return p ? libelle(p.libelle) : pid.slice(0, 8)
@@ -60,8 +67,9 @@ export function Ruptures() {
         </label>
         <label className="space-y-1">
           <span className="block">{t('ciblage.villes')}</span>
-          <Input className="w-40" value={ville} onChange={(e) => setVille(e.target.value)} />
+          <Input className="w-40" list="villes-ruptures" value={ville} onChange={(e) => setVille(e.target.value)} />
         </label>
+        <ListeVilles id="villes-ruptures" />
         <label className="space-y-1">
           <span className="block">{t('ruptures.precision')}</span>
           <select className={filtre} value={precision} onChange={(e) => setPrecision(Number(e.target.value) as 5 | 6)}>
@@ -87,9 +95,20 @@ export function Ruptures() {
           lon: c.centre.lon,
           rayon: 8 + 22 * Math.sqrt(c.signalements / max),
           etiquette: String(c.signalements),
-          couleur: c.enCours > 0 ? '#dc2626' : '#0f766e',
+          couleur: teintes[classe(c.signalements, max, CLASSES)],
         }))}
       />
+      {!!cellules.length && (
+        <figure className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          <figcaption className="font-medium">{t('ruptures.signalements')}</figcaption>
+          {bornes(max, CLASSES).map((b) => (
+            <span key={b.classe} className="flex items-center gap-1">
+              <span className="size-3 rounded-full border border-border" style={{ backgroundColor: teintes[b.classe] }} aria-hidden />
+              <bdi className="tabular-nums">{b.de === b.a ? nombre(b.de) : `${nombre(b.de)}–${nombre(b.a)}`}</bdi>
+            </span>
+          ))}
+        </figure>
+      )}
       {carte.data && (
         <p className="text-xs text-muted-foreground">
           {t('ruptures.anonymat', { n: carte.data.seuilAnonymat })} · {t('ruptures.genereLe', { d: date(carte.data.genereLe) })}

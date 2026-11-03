@@ -1,16 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import { LngLatBounds, Map as Carto, NavigationControl, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl'
 import { useI18n } from '@/i18n'
+import { jeton, lisible, useSombre } from '@/lib/jetons'
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 
 // Tuiles OpenFreeMap : libres, sans clé ni compte.
-const STYLE = 'https://tiles.openfreemap.org/styles/liberty'
+const STYLE = { clair: 'https://tiles.openfreemap.org/styles/liberty', sombre: 'https://tiles.openfreemap.org/styles/dark' }
 // Worker fourni par Vite (?worker&url) : MapLibre calcule son URL à l'exécution, ce que Vite ne suit pas.
 setWorkerUrl(new URL(workerUrl, location.href).href)
 
 const CASABLANCA: [number, number] = [-7.5898, 33.5731]
 
+/** `couleur` : nom d'un jeton de src/index.css (`primary`, `promo`…) ou valeur hexadécimale. */
 export type Point = { id: string; lat: number; lon: number; rayon?: number; etiquette?: string; couleur?: string }
+
+const teinte = (c: string) => (c.startsWith('#') ? c : jeton(c))
 
 type Props = {
   points?: Point[]
@@ -33,8 +37,10 @@ export function Carte({ points: tous = [], onPoint, zones = [], trace = [], onCl
   const conteneur = useRef<HTMLDivElement>(null)
   const carte = useRef<Carto | null>(null)
   const rappels = useRef({ onPoint, onClic })
-  const [prete, setPrete] = useState(false)
+  // Carte chargée : l'instance elle-même, car un changement de langue la recrée.
+  const [prete, setPrete] = useState<Carto | null>(null)
   const { t, langue } = useI18n()
+  const sombre = useSombre()
   const cadrage = useRef('')
 
   useEffect(() => {
@@ -44,7 +50,7 @@ export function Carte({ points: tous = [], onPoint, zones = [], trace = [], onCl
   useEffect(() => {
     const m = new Carto({
       container: conteneur.current!,
-      style: STYLE,
+      style: sombre ? STYLE.sombre : STYLE.clair,
       center: CASABLANCA,
       zoom: 10.5,
       locale: { 'NavigationControl.ZoomIn': t('carte.zoomPlus'), 'NavigationControl.ZoomOut': t('carte.zoomMoins') },
@@ -53,9 +59,11 @@ export function Carte({ points: tous = [], onPoint, zones = [], trace = [], onCl
     m.addControl(new NavigationControl({ showCompass: false }))
     m.on('load', () => {
       for (const id of ['points', 'zones', 'trace']) m.addSource(id, { type: 'geojson', data: vide })
-      m.addLayer({ id: 'zones', type: 'fill', source: 'zones', paint: { 'fill-color': '#0f766e', 'fill-opacity': 0.2 } })
-      m.addLayer({ id: 'zones-bord', type: 'line', source: 'zones', paint: { 'line-color': '#0f766e', 'line-width': 2 } })
-      m.addLayer({ id: 'trace', type: 'line', source: 'trace', paint: { 'line-color': '#b45309', 'line-width': 2, 'line-dasharray': [2, 1] } })
+      // Zones de ciblage d'une campagne : safran, couleur des promotions.
+      const promo = jeton('promo')
+      m.addLayer({ id: 'zones', type: 'fill', source: 'zones', paint: { 'fill-color': promo, 'fill-opacity': 0.25 } })
+      m.addLayer({ id: 'zones-bord', type: 'line', source: 'zones', paint: { 'line-color': promo, 'line-width': 2 } })
+      m.addLayer({ id: 'trace', type: 'line', source: 'trace', paint: { 'line-color': promo, 'line-width': 2, 'line-dasharray': [2, 1] } })
       m.addLayer({
         id: 'points',
         type: 'circle',
@@ -64,7 +72,7 @@ export function Carte({ points: tous = [], onPoint, zones = [], trace = [], onCl
           'circle-radius': ['get', 'rayon'],
           'circle-color': ['get', 'couleur'],
           'circle-opacity': 0.7,
-          'circle-stroke-color': '#ffffff',
+          'circle-stroke-color': jeton('card'),
           'circle-stroke-width': 1.5,
         },
       })
@@ -72,8 +80,9 @@ export function Carte({ points: tous = [], onPoint, zones = [], trace = [], onCl
         id: 'etiquettes',
         type: 'symbol',
         source: 'points',
-        layout: { 'text-field': ['get', 'etiquette'], 'text-size': 12, 'text-allow-overlap': true },
-        paint: { 'text-color': '#ffffff' },
+        // Glyphes servis par OpenFreeMap (la pile par défaut de MapLibre y répond 404) ; les étiquettes ne portent que des chiffres.
+        layout: { 'text-field': ['get', 'etiquette'], 'text-font': ['Noto Sans Regular'], 'text-size': 12, 'text-allow-overlap': true },
+        paint: { 'text-color': ['get', 'texte'] },
       })
       m.on('click', 'points', (e) => {
         const id = e.features?.[0]?.properties?.id
@@ -82,27 +91,31 @@ export function Carte({ points: tous = [], onPoint, zones = [], trace = [], onCl
       m.on('click', (e) => rappels.current.onClic?.(e.lngLat.lng, e.lngLat.lat))
       m.on('mouseenter', 'points', () => (m.getCanvas().style.cursor = 'pointer'))
       m.on('mouseleave', 'points', () => (m.getCanvas().style.cursor = ''))
-      setPrete(true)
+      setPrete(m)
     })
     return () => {
       m.remove()
-      setPrete(false)
+      setPrete(null)
       cadrage.current = ''
     }
-    // Recréée au changement de langue, pour les infobulles des contrôles.
+    // Recréée au changement de langue (infobulles des contrôles) et de mode sombre (couleurs).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [langue])
+  }, [langue, sombre])
 
   useEffect(() => {
-    const m = carte.current
-    if (!prete || !m) return
+    const m = prete
+    // Dans le rendu qui suit un changement de langue, `prete` désigne encore l'ancienne carte, déjà retirée.
+    if (!m || m !== carte.current) return
     ;(m.getSource('points') as GeoJSONSource).setData({
       type: 'FeatureCollection',
-      features: points.map((p) => ({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
-        properties: { id: p.id, rayon: p.rayon ?? 8, etiquette: p.etiquette ?? '', couleur: p.couleur ?? '#64748b' },
-      })),
+      features: points.map((p) => {
+        const couleur = teinte(p.couleur ?? 'muted-foreground')
+        return {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
+          properties: { id: p.id, rayon: p.rayon ?? 8, etiquette: p.etiquette ?? '', couleur, texte: lisible(couleur, [jeton('foreground'), jeton('card')]) },
+        }
+      }),
     })
     ;(m.getSource('zones') as GeoJSONSource).setData({
       type: 'FeatureCollection',

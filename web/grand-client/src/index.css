@@ -2,28 +2,104 @@
 @import "tw-animate-css";
 @import "maplibre-gl/dist/maplibre-gl.css";
 
-@custom-variant dark (&:is(.dark *));
+/* Typographie commune Daba (src/fonts.css) : IBM Plex Sans pour le latin, IBM Plex Sans Arabic pour l'arabe. */
+@theme {
+  --font-sans: "IBM Plex Sans", "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
+  --font-arabe: "IBM Plex Sans Arabic", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Écriture arabe (ar, darija en graphie arabe) : la face arabe passe devant, chiffres et latin compris. */
+:root:lang(ar),
+:root:lang(ary-Arab) {
+  font-family: var(--font-arabe);
+}
+
+/* Contrôles et attribution de MapLibre (sa feuille impose Helvetica). */
+.maplibregl-map {
+  font-family: inherit;
+}
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.46 0.13 160);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+}
+
+/*
+ * Palette Zellige (docs/charte-graphique.md), reliée aux variables de shadcn/ui.
+ * Valeurs en hexadécimal : la carte (WebGL) les relit telles quelles (src/lib/jetons.ts).
+ * Le mode sombre suit le réglage du système.
+ */
+:root {
+  --background: #F6F1E7;
+  --foreground: #1D2B2A;
+  --card: #FFFDF8;
+  --card-foreground: #1D2B2A;
+  --popover: #FFFDF8;
+  --popover-foreground: #1D2B2A;
+  --primary: #0F5E59;
+  --primary-hover: #0B4A46;
+  --primary-soft: #E6F2F1;
+  --primary-foreground: #FFFFFF;
+  --secondary: #E6F2F1;
+  --secondary-foreground: #1D2B2A;
+  --muted: #F6F1E7;
+  --muted-foreground: #6B6559;
+  --accent: #E6F2F1;
+  --accent-foreground: #1D2B2A;
+  --destructive: #B42318;
+  --destructive-soft: #FDECEA;
+  --destructive-foreground: #FFFFFF;
+  --promo: #E0A526;
+  --promo-soft: #FBEFD3;
+  --promo-foreground: #3D2A02;
+  --promo-soft-foreground: #3D2A02;
+  --success: #2E7D32;
+  --success-soft: #E6F2E6;
+  --success-foreground: #FFFFFF;
+  --warning: #B45309;
+  --warning-soft: #FDEBD8;
+  --warning-foreground: #FFFFFF;
+  --border: #E4DCCB;
+  --input: #E4DCCB;
+  --ring: #0F5E59;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --background: #121A19;
+    --foreground: #ECE7DC;
+    --card: #1A2423;
+    --card-foreground: #ECE7DC;
+    --popover: #1A2423;
+    --popover-foreground: #ECE7DC;
+    --primary: #4FB3A9;
+    --primary-hover: #6CC4BB;
+    --primary-soft: #123B38;
+    --primary-foreground: #062B29;
+    --secondary: #123B38;
+    --secondary-foreground: #ECE7DC;
+    --muted: #121A19;
+    --muted-foreground: #A39D90;
+    --accent: #123B38;
+    --accent-foreground: #ECE7DC;
+    --destructive: #F2867A;
+    --destructive-soft: #3A1714;
+    --destructive-foreground: #3A1714;
+    --promo: #EFC764;
+    --promo-soft: #3A2C0A;
+    --promo-foreground: #3D2A02;
+    /* Sur le fond safran sombre, le texte reprend le safran (on-promo y serait illisible). */
+    --promo-soft-foreground: #EFC764;
+    --success: #6BBF6F;
+    --success-soft: #16301A;
+    --success-foreground: #16301A;
+    --warning: #F0A060;
+    --warning-soft: #3A2410;
+    --warning-foreground: #3A2410;
+    --border: #2C3A38;
+    --input: #2C3A38;
+    --ring: #4FB3A9;
+  }
 }
 
 @theme inline {
@@ -38,6 +114,8 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -46,6 +124,18 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-promo: var(--promo);
+  --color-promo-soft: var(--promo-soft);
+  --color-promo-foreground: var(--promo-foreground);
+  --color-promo-soft-foreground: var(--promo-soft-foreground);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-foreground: var(--warning-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
