@@ -22,6 +22,10 @@ Depuis `backend/`, avec un JDK 25 dans `JAVA_HOME` (le wrapper télécharge Mave
 - Configuration : `DB_URL`, `DB_USER`, `DB_PASSWORD` (défaut : `jdbc:postgresql://localhost:5433/daba`, `daba`/`daba`) ; `DABA_JWT_SECRET` (obligatoire hors poste de dev), `DABA_ADMIN_TELEPHONES` (numéros administrateurs), `DABA_LIENS_BASE_URL`, `DABA_CANAUX_ACTIFS`. Le reste est dans `application.properties`.
 - Persistance : `JdbcClient` et SQL (pas de JPA). Les modules publient leurs événements dans l'outbox avec `@ApplicationModuleListener`.
 - Tout ce que l'app ambulant doit recevoir hors ligne passe par `Journal.publier` (commun) ; les tests d'intégration étendent `TestIntegration`.
-- En dev, les SMS (codes OTP compris) sont seulement écrits dans les logs (`FournisseursJournal`).
+- En dev, les SMS (codes OTP compris) sont seulement écrits dans les logs (`FournisseursJournal`), tant qu'aucun vrai fournisseur n'est configuré ; ensuite JOURNAL n'écrit plus que le type et le numéro masqué, et ne peut plus être choisi pour un canal qui a un vrai fournisseur.
+- Canaux (§9) : l'administrateur active ou coupe chaque canal (système, type de message, organisation du destinataire), choisit le routage principal + repli et le fournisseur par canal (`GET`/`PUT /v1/admin/canaux`, table `configuration_canaux`, journal d'audit `journal_audit`). `DABA_CANAUX_ACTIFS` et `daba.canaux.routage.<TYPE>` ne sont que les valeurs par défaut. Fournisseur par défaut d'un canal : le vrai opérateur s'il est configuré, sinon JOURNAL.
+- Identifiants des fournisseurs, uniquement par l'environnement (jamais en base, jamais renvoyés par l'API) :
+  - SMS Infobip : `DABA_INFOBIP_BASE_URL` (base URL du compte, `xxxxx.api.infobip.com`), `DABA_INFOBIP_API_KEY` (secret, portée `sms:message:send`), `DABA_INFOBIP_SENDER` (expéditeur, optionnel).
+  - Push FCM : `DABA_FCM_PROJECT_ID` (identifiant du projet Firebase), `DABA_FCM_CREDENTIALS` (chemin du fichier JSON du compte de service, monté en lecture seule ; le contenu ne passe jamais par une variable).
 - Nouvelle migration : `src/main/resources/db/migration/V<n>__<description>.sql`.
 - `ModulesTest` (Spring Modulith) échoue si un module utilise les classes internes d'un autre : l'API publique d'un module est son package racine, le reste va dans des sous-packages.

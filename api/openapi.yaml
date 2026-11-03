@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Daba API
-  version: 0.5.1
+  version: 0.6.0
   description: |
     Contrat unique entre le back-end, les apps mobiles (ambulant, hanout) et les portails web.
     Changement incompatible = nouvelle version de l'endpoint (/v2/...), jamais de rupture silencieuse.
@@ -47,6 +47,26 @@ info:
     (un produit = un code EAN et un conditionnement).
 
     **Erreurs** au format RFC 9457 ; `regle` nomme la règle de gestion violée (ex. RG-P3).
+
+    **Notifications push (FCM).** Chaque push porte un titre et un texte dans la langue de l'appareil
+    (`JetonPush.langue`) et des `data` (chaînes) : `type` (`TypeMessage`) et `cibleId`, l'objet à
+    ouvrir : demande de dépannage (RUPTURE_SIGNALEE, DEMANDE_*), dépôt (PROPOSITION_DEPOT,
+    PROMO_CONFIRMEE : `OffrePromo.depotId`), réservation (RESERVATION_EXPIRE_BIENTOT,
+    RETRAIT_EFFECTUE), document (DOCUMENT_EMIS, RECEPTION_ECART), contestation (CONTESTATION).
+    Sur Android, `android.notification.channel_id` suit la priorité du tableau §9 (canaux créés par
+    l'app) : `haute` avec la priorité FCM HIGH pour RUPTURE_SIGNALEE, DEMANDE_ACCEPTEE,
+    DEMANDE_EN_ROUTE, DEMANDE_LIVREE, PROMO_CONFIRMEE, RESERVATION_EXPIRE_BIENTOT, PROPOSITION_DEPOT
+    (et OTP) ; `moyenne` (NORMAL) pour DEMANDE_SANS_REPONSE, RETRAIT_EFFECTUE, DOCUMENT_EMIS et,
+    hors tableau, DEMANDE_PRISE, RECEPTION_ECART, CONTESTATION ; `basse` (NORMAL) réservé aux
+    alertes de stock embarqué (aucun type encore).
+    Le texte d'un push s'affiche sur l'écran verrouillé, hors du code PIN de l'app : il ne contient
+    jamais de nom ni de téléphone d'un hanout ou d'un ambulant, ni de lien signé (CNDP) ; l'app
+    ouvre le détail depuis `cibleId`. Les SMS gardent leur texte complet. Un appareil dont la
+    session est fermée (`POST /v1/auth/deconnexion`) ne reçoit plus de push jusqu'à sa prochaine
+    connexion par OTP et un nouvel envoi de son jeton.
+    Un jeton refusé par FCM (UNREGISTERED, ou INVALID_ARGUMENT sur le jeton) est effacé de
+    l'appareil : l'app le renvoie par `PUT /v1/appareils/{appareilId}/push` à chaque démarrage et
+    à chaque rotation du jeton.
   license:
     name: Propriétaire
     identifier: LicenseRef-Daba-Proprietaire
@@ -72,6 +92,8 @@ tags:
     description: Ruptures signalées par les hanouts et dispatch (§7.1, RG-D*)
   - name: analytique
     description: Données agrégées et anonymisées pour les grands clients (§5.4)
+  - name: canaux
+    description: Couche canaux (push, SMS, WhatsApp) paramétrée par l'administrateur (§9)
 
 paths:
   # ---------------------------------------------------------------- comptes
@@ -340,6 +362,83 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+
+  /v1/admin/canaux:
+    get:
+      tags: [canaux]
+      operationId: lireConfigurationCanaux
+      summary: Configuration effective des canaux de notification (§9, « Canaux configurables »)
+      description: |
+        Configuration en vigueur : ce qui a été enregistré par `PUT`, complété par les valeurs par
+        défaut du serveur (tableau §9 du pilote) pour tout ce qui n'a pas été enregistré. Pour
+        chaque canal, `fournisseursDisponibles` liste les fournisseurs de ce serveur et dit si leurs
+        identifiants sont configurés. Aucun secret (clé d'API, compte de service) n'est jamais
+        renvoyé : ils viennent des variables d'environnement ou de fichiers montés du serveur.
+        Fournisseur par défaut d'un canal : le vrai opérateur s'il est configuré, sinon JOURNAL.
+        La base URL Infobip doit être en HTTPS (la clé part dans l'en-tête), sinon Infobip est
+        présenté comme non configuré.
+      x-roles: [ADMIN]
+      responses:
+        '200':
+          description: Configuration effective
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigurationCanaux'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [canaux]
+      operationId: modifierConfigurationCanaux
+      summary: Active ou coupe les canaux, choisit les fournisseurs et le routage par type de message
+      description: |
+        Remplace la configuration enregistrée ; prise en compte dès l'envoi suivant, sans
+        redémarrage ni développement. Un canal, un type de message ou une organisation absent de la
+        requête reprend la valeur par défaut du serveur. Un message part par le canal `principal`,
+        puis par le canal `repli` si le principal échoue, refuse le message, est coupé (au niveau du
+        système, du type de message ou de l'organisation du destinataire) ou si le destinataire n'y
+        est pas joignable (aucun jeton push, aucun téléphone).
+        Un fournisseur dont les identifiants ne sont pas configurés sur le serveur ne peut pas être
+        choisi (422, `type` …/fournisseur-non-configure) ; JOURNAL (messages écrits dans les logs) ne
+        peut plus l'être pour un canal dont un vrai fournisseur est configuré (422, `type`
+        …/journal-interdit). Dès qu'un vrai fournisseur est configuré sur le serveur, JOURNAL n'écrit
+        plus que le type de message et le numéro masqué.
+        L'OTP part seulement par SMS (`principal` SMS, sans `repli`, SMS absent de `inactifs`) et le
+        SMS ne peut pas être coupé au niveau du système : sinon personne, administrateur compris, ne
+        pourrait se connecter (400). La coupure par organisation ne s'applique pas à l'OTP. Une
+        `organisationId` inconnue répond 400.
+        Opération sensible inscrite au journal d'audit (auteur, date, configuration enregistrée),
+        que la base refuse de modifier ou d'effacer.
+      x-roles: [ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigurationCanaux'
+      responses:
+        '200':
+          description: Configuration effective après enregistrement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigurationCanaux'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          description: |
+            Fournisseur non configuré sur ce serveur (`type` …/fournisseur-non-configure), ou JOURNAL
+            choisi alors qu'un vrai fournisseur du canal est configuré (`type` …/journal-interdit)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 
   /v1/photos/{photoId}:
     get:
@@ -2714,6 +2813,96 @@ components:
                 format: uuid
               telephone:
                 $ref: '#/components/schemas/Telephone'
+
+    # ---------------------------------------------------------------- canaux
+    Canal:
+      type: string
+      enum: [PUSH, SMS, WHATSAPP]
+    TypeMessage:
+      type: string
+      description: Type de message de la couche canaux (lignes du tableau §9)
+      enum: [OTP, RUPTURE_SIGNALEE, DEMANDE_ACCEPTEE, DEMANDE_PRISE, DEMANDE_EN_ROUTE, DEMANDE_LIVREE,
+        DEMANDE_SANS_REPONSE, PROMO_CONFIRMEE, RESERVATION_EXPIRE_BIENTOT, PROPOSITION_DEPOT,
+        RETRAIT_EFFECTUE, DOCUMENT_EMIS, RECEPTION_ECART, CONTESTATION]
+    FournisseurCanal:
+      type: string
+      description: |
+        Fournisseur d'un canal. JOURNAL écrit seulement le message dans les logs du serveur (poste de
+        dev, démo) ; INFOBIP (SMS) et FCM (push, Firebase Cloud Messaging) sont les vrais opérateurs.
+        WhatsApp n'a encore que JOURNAL.
+      enum: [JOURNAL, INFOBIP, FCM]
+    ConfigurationCanaux:
+      type: object
+      required: [canaux, types, organisations]
+      properties:
+        canaux:
+          type: array
+          description: Niveau système, un élément par canal
+          items:
+            $ref: '#/components/schemas/ParametreCanal'
+        types:
+          type: array
+          description: Routage par type de message
+          items:
+            $ref: '#/components/schemas/RoutageMessage'
+        organisations:
+          type: array
+          description: Canaux coupés pour les destinataires d'une organisation (les autres restent actifs)
+          items:
+            $ref: '#/components/schemas/CanauxOrganisation'
+    ParametreCanal:
+      type: object
+      required: [canal, actif, fournisseur]
+      properties:
+        canal:
+          $ref: '#/components/schemas/Canal'
+        actif:
+          type: boolean
+          description: Canal ouvert au niveau du système
+        fournisseur:
+          $ref: '#/components/schemas/FournisseurCanal'
+        fournisseursDisponibles:
+          type: array
+          readOnly: true
+          description: Fournisseurs de ce canal sur ce serveur (ignoré en écriture)
+          items:
+            type: object
+            required: [code, configure]
+            properties:
+              code:
+                $ref: '#/components/schemas/FournisseurCanal'
+              configure:
+                type: boolean
+                description: Identifiants présents sur le serveur ; seul un fournisseur configuré peut être choisi
+    RoutageMessage:
+      type: object
+      required: [type, principal]
+      properties:
+        type:
+          $ref: '#/components/schemas/TypeMessage'
+        principal:
+          $ref: '#/components/schemas/Canal'
+        repli:
+          $ref: '#/components/schemas/Canal'
+          description: Canal de repli, différent du principal ; absent = pas de repli
+        inactifs:
+          type: array
+          description: Canaux coupés pour ce type de message
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Canal'
+    CanauxOrganisation:
+      type: object
+      required: [organisationId, inactifs]
+      properties:
+        organisationId:
+          type: string
+          format: uuid
+        inactifs:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Canal'
 
     FichierImport:
       type: object

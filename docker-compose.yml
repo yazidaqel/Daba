@@ -25,6 +25,17 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-daba}
       # Aucun administrateur par défaut : la démo passe le sien (DABA_ADMIN_TELEPHONES=+212600000001, voir CLAUDE.md).
       DABA_ADMIN_TELEPHONES: ${DABA_ADMIN_TELEPHONES:-}
+      # Fournisseurs des canaux (§9). Vides : SMS et push restent sur JOURNAL (logs, codes OTP compris).
+      # Les secrets viennent d'un .env non versionné ou de l'environnement, jamais de ce fichier.
+      DABA_INFOBIP_BASE_URL: ${DABA_INFOBIP_BASE_URL:-}
+      DABA_INFOBIP_API_KEY: ${DABA_INFOBIP_API_KEY:-}
+      DABA_INFOBIP_SENDER: ${DABA_INFOBIP_SENDER:-}
+      DABA_FCM_PROJECT_ID: ${DABA_FCM_PROJECT_ID:-}
+      # Chemin dans le conteneur du JSON du compte de service Firebase, à monter (volume ci-dessous).
+      DABA_FCM_CREDENTIALS: ${DABA_FCM_CREDENTIALS:-}
+    # Pour FCM : décommenter et poser le fichier hors du dépôt, puis DABA_FCM_CREDENTIALS=/run/secrets/fcm.json
+    # volumes:
+    #   - ${DABA_FCM_CREDENTIALS_HOTE}:/run/secrets/fcm.json:ro
     ports:
       - "8080:8080"
     depends_on:

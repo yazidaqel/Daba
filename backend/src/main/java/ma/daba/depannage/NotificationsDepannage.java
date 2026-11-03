@@ -33,7 +33,7 @@ class NotificationsDepannage {
 		var distances = depannage.destinataires(evenement.demandeId()).stream()
 			.collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 		for (var ambulant : evenement.ambulants()) {
-			canaux.envoyer(TypeMessage.RUPTURE_SIGNALEE, comptes.destinataire(ambulant), distances.getOrDefault(ambulant, 0),
+			canaux.envoyer(TypeMessage.RUPTURE_SIGNALEE, evenement.demandeId(), comptes.destinataire(ambulant), distances.getOrDefault(ambulant, 0),
 					produit(demande), demande.quantite());
 		}
 	}
@@ -43,20 +43,21 @@ class NotificationsDepannage {
 		var demande = depannage.resume(evenement.demandeId());
 		var hanout = comptes.destinataire(demande.hanoutUtilisateurId());
 		var produit = produit(demande);
+		var id = evenement.demandeId();
 		switch (evenement.statut()) {
 			case "ACCEPTEE" -> {
-				canaux.envoyer(TypeMessage.DEMANDE_ACCEPTEE, hanout, produit, comptes.nom(demande.ambulantId()),
+				canaux.envoyer(TypeMessage.DEMANDE_ACCEPTEE, id, hanout, produit, comptes.nom(demande.ambulantId()),
 						comptes.telephone(demande.ambulantId()).orElse(""));
 				// Les autres ambulants sont prévenus que la demande est prise (§3.7).
 				for (var autre : depannage.destinataires(evenement.demandeId())) {
 					if (!autre.getKey().equals(demande.ambulantId())) {
-						canaux.envoyer(TypeMessage.DEMANDE_PRISE, comptes.destinataire(autre.getKey()), produit);
+						canaux.envoyer(TypeMessage.DEMANDE_PRISE, id, comptes.destinataire(autre.getKey()), produit);
 					}
 				}
 			}
-			case "EN_ROUTE" -> canaux.envoyer(TypeMessage.DEMANDE_EN_ROUTE, hanout, comptes.nom(demande.ambulantId()), produit);
-			case "LIVREE" -> canaux.envoyer(TypeMessage.DEMANDE_LIVREE, hanout, produit);
-			case "SANS_REPONSE" -> canaux.envoyer(TypeMessage.DEMANDE_SANS_REPONSE, hanout, produit);
+			case "EN_ROUTE" -> canaux.envoyer(TypeMessage.DEMANDE_EN_ROUTE, id, hanout, comptes.nom(demande.ambulantId()), produit);
+			case "LIVREE" -> canaux.envoyer(TypeMessage.DEMANDE_LIVREE, id, hanout, produit);
+			case "SANS_REPONSE" -> canaux.envoyer(TypeMessage.DEMANDE_SANS_REPONSE, id, hanout, produit);
 			default -> {
 			}
 		}

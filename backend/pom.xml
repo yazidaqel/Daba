@@ -13,7 +13,7 @@
 	<version>0.0.1-SNAPSHOT</version>
 	<name>daba</name>
 
-	<!-- Versions vérifiées le 29 oct. 2026 (PDFBox, ICU4J, polices DejaVu : 2 nov. 2026). Flyway reste sur la version gérée par Spring Boot (12.x) :
+	<!-- Versions vérifiées le 29 oct. 2026 (PDFBox, ICU4J, polices DejaVu : 2 nov. 2026 ; Google Auth Library : 3 nov. 2026). Flyway reste sur la version gérée par Spring Boot (12.x) :
 	     la 13.x existe mais n'est gérée ni par Boot 4.1 ni par Boot 4.2. -->
 	<properties>
 		<java.version>25</java.version>
@@ -22,6 +22,7 @@
 		<pdfbox.version>3.0.8</pdfbox.version>
 		<icu4j.version>79.1</icu4j.version>
 		<dejavu.version>7.1.1</dejavu.version>
+		<google-auth.version>1.55.0</google-auth.version>
 	</properties>
 
 	<dependencies>
@@ -70,6 +71,12 @@
 			<artifactId>jasperreports-fonts</artifactId>
 			<version>${dejavu.version}</version>
 			<scope>runtime</scope>
+		</dependency>
+		<!-- Push FCM (API HTTP v1) : seulement le jeton d'accès OAuth 2 du compte de service, sans firebase-admin. -->
+		<dependency>
+			<groupId>com.google.auth</groupId>
+			<artifactId>google-auth-library-oauth2-http</artifactId>
+			<version>${google-auth.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.postgresql</groupId>

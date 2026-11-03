@@ -12,12 +12,14 @@ import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import ma.daba.canaux.Canaux;
 import ma.daba.canaux.Canaux.Destinataire;
 import ma.daba.commun.Acces;
 import ma.daba.commun.Appelant;
@@ -33,7 +35,7 @@ import tools.jackson.core.type.TypeReference;
 
 /** API publique des comptes : coordonnées des utilisateurs, liens signés, contrôles d'accès du compte. */
 @Service
-public class Comptes implements Acces.VerificationCompte {
+public class Comptes implements Acces.VerificationCompte, Acces.Organisations {
 
 	/** Consentement CNDP enregistré ; publié dans l'outbox pour couper la disponibilité si la géolocalisation est retirée. */
 	public record ConsentementEnregistre(UUID utilisateurId, boolean traitementDonnees, boolean geolocalisation) {
@@ -98,25 +100,42 @@ public class Comptes implements Acces.VerificationCompte {
 		}
 	}
 
-	/** Téléphone, jetons push des appareils actifs et langue du dernier appareil. */
+	/** Téléphone, jetons push des appareils ni révoqués ni déconnectés (session ouverte) et langue du dernier appareil. */
 	public Destinataire destinataire(UUID utilisateurId) {
-		var telephone = jdbc.sql("SELECT telephone FROM utilisateur WHERE id = :u").param("u", utilisateurId)
-			.query(String.class).optional().orElse(null);
+		var utilisateur = jdbc.sql("SELECT telephone, organisation_id FROM utilisateur WHERE id = :u").param("u", utilisateurId)
+			.query((rs, i) -> Map.entry(rs.getString(1), rs.getObject(2, UUID.class))).optional();
+		var telephone = utilisateur.map(Map.Entry::getKey).orElse(null);
 		var appareils = jdbc.sql("""
-				SELECT jeton_push, langue FROM appareil WHERE utilisateur_id = :u AND NOT revoque
+				SELECT CASE WHEN session IS NOT NULL THEN jeton_push END AS jeton_push, langue
+				FROM appareil WHERE utilisateur_id = :u AND NOT revoque
 				ORDER BY derniere_connexion DESC NULLS LAST
 				""").param("u", utilisateurId)
 			.query((rs, i) -> Map.entry(String.valueOf(rs.getString("jeton_push")), String.valueOf(rs.getString("langue"))))
 			.list();
 		var jetonsPush = appareils.stream().map(Map.Entry::getKey).filter(j -> !"null".equals(j)).toList();
 		var langue = appareils.stream().map(Map.Entry::getValue).filter(l -> !"null".equals(l)).findFirst().orElse("fr");
-		return new Destinataire(utilisateurId, telephone, jetonsPush, langue);
+		return new Destinataire(utilisateurId, utilisateur.map(Map.Entry::getValue).orElse(null), telephone, jetonsPush, langue);
 	}
 
 	/** Destinataire d'un numéro qui n'a pas forcément de compte (OTP, SMS au hanout). */
 	public Destinataire destinataireTelephone(String telephone, String langue) {
 		return utilisateurParTelephone(telephone).map(this::destinataire)
-			.orElse(new Destinataire(null, telephone, List.of(), langue == null ? "fr" : langue));
+			.orElse(new Destinataire(null, null, telephone, List.of(), langue == null ? "fr" : langue));
+	}
+
+	@Override
+	public java.util.Set<UUID> inconnues(Collection<UUID> organisations) {
+		var inconnues = new java.util.HashSet<>(organisations);
+		if (!inconnues.isEmpty()) {
+			inconnues.removeAll(jdbc.sql("SELECT id FROM organisation WHERE id IN (:o)").param("o", inconnues).query(UUID.class).list());
+		}
+		return inconnues;
+	}
+
+	/** Jeton refusé définitivement par le fournisseur push (désinstallation, jeton expiré) : effacé pour ne plus être réessayé. */
+	@ApplicationModuleListener
+	void jetonPushInvalide(Canaux.JetonPushInvalide evenement) {
+		jdbc.sql("UPDATE appareil SET jeton_push = NULL WHERE jeton_push = :j").param("j", evenement.jeton()).update();
 	}
 
 	/**

@@ -39,7 +39,7 @@ class NotificationsPromos {
 	void depotPropose(Promos.DepotPropose evenement) {
 		var depot = promos.depot(evenement.depotId());
 		for (var membre : comptes.membres(depot.grossiste().id())) {
-			canaux.envoyer(TypeMessage.PROPOSITION_DEPOT, comptes.destinataire(membre), depot.marque().nom(), depot.campagne().nom());
+			canaux.envoyer(TypeMessage.PROPOSITION_DEPOT, depot.id(), comptes.destinataire(membre), depot.marque().nom(), depot.campagne().nom());
 		}
 	}
 
@@ -54,7 +54,7 @@ class NotificationsPromos {
 		var nom = promos.nomsCampagnes(Set.of(depot.campagne().id())).get(depot.campagne().id());
 		var fin = DateTimeFormatter.ofPattern("dd/MM").withZone(CASABLANCA).format(depot.finCampagne());
 		for (var ambulant : promos.ambulantsVises(depot.id())) {
-			canaux.envoyer(TypeMessage.PROMO_CONFIRMEE, comptes.destinataire(ambulant), nom, depot.grossiste().nom(), fin);
+			canaux.envoyer(TypeMessage.PROMO_CONFIRMEE, depot.id(), comptes.destinataire(ambulant), nom, depot.grossiste().nom(), fin);
 		}
 	}
 
@@ -66,7 +66,7 @@ class NotificationsPromos {
 		var destinataires = new java.util.ArrayList<>(comptes.membres(depot.grossiste().id()));
 		destinataires.addAll(comptes.membres(depot.marque().id()));
 		for (var membre : destinataires) {
-			canaux.envoyer(TypeMessage.RETRAIT_EFFECTUE, comptes.destinataire(membre), reservation.quantiteRetiree(), nom);
+			canaux.envoyer(TypeMessage.RETRAIT_EFFECTUE, reservation.id(), comptes.destinataire(membre), reservation.quantiteRetiree(), nom);
 		}
 	}
 
@@ -75,7 +75,7 @@ class NotificationsPromos {
 		var reservation = promos.reservation(evenement.reservationId(), false);
 		var produit = referentiel.produit(reservation.produitId()).map(Referentiel.Produit::libelle).orElse(null);
 		var heure = DateTimeFormatter.ofPattern("HH:mm").withZone(CASABLANCA).format(reservation.expireLe());
-		canaux.envoyer(TypeMessage.RESERVATION_EXPIRE_BIENTOT, comptes.destinataire(reservation.ambulant().id()), produit,
+		canaux.envoyer(TypeMessage.RESERVATION_EXPIRE_BIENTOT, reservation.id(), comptes.destinataire(reservation.ambulant().id()), produit,
 				reservation.grossiste().nom(), heure);
 	}
 

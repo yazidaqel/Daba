@@ -1,7 +1,6 @@
 package ma.daba.comptes;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.verify;
 
@@ -21,10 +20,12 @@ class ComptesTest extends TestIntegration {
 	Comptes comptes;
 
 	private String codeEnvoye(String telephone) {
-		var texte = ArgumentCaptor.forClass(String.class);
+		var message = ArgumentCaptor.forClass(Canaux.Message.class);
 		verify(sms, org.mockito.Mockito.atLeastOnce())
-			.envoyer(argThat((Canaux.Destinataire d) -> telephone.equals(d.telephone())), texte.capture());
-		return texte.getValue().replaceAll(".*code est ([0-9]{6}).*", "$1");
+			.envoyer(argThat((Canaux.Message m) -> telephone.equals(m.destinataire().telephone())));
+		verify(sms, org.mockito.Mockito.atLeastOnce()).envoyer(message.capture());
+		return message.getAllValues().stream().filter(m -> telephone.equals(m.destinataire().telephone())).toList().getLast()
+			.texte().replaceAll(".*code est ([0-9]{6}).*", "$1");
 	}
 
 	@Test
@@ -88,6 +89,33 @@ class ComptesTest extends TestIntegration {
 			.exchange()).hasStatus(401);
 		assertThat(mvc.get().uri("/v1/moi/donnees").header("Authorization", "Bearer " + autre.get("accessToken").asString())
 			.exchange()).hasStatusOk();
+	}
+
+	@Test
+	void appareilDeconnecteNeRecoitPlusDePushJusquALaProchaineConnexion() {
+		var tel = telephone();
+		var appareil = UUID.randomUUID();
+		var bearer = "Bearer " + connecter(tel, appareil).get("accessToken").asString();
+		var utilisateur = comptes.utilisateurParTelephone(tel).orElseThrow();
+		jdbc.sql("INSERT INTO consentement (utilisateur_id, version_texte, traitement_donnees) VALUES (:u, 'v1', true)")
+			.param("u", utilisateur).update();
+		var jeton = m("jeton", "fcm-" + appareil, "plateforme", "ANDROID");
+		assertThat(mvc.put().uri("/v1/appareils/" + appareil + "/push").header("Authorization", bearer)
+			.contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(json.writeValueAsString(jeton)).exchange())
+			.hasStatus(204);
+		assertThat(comptes.destinataire(utilisateur).jetonsPush()).containsExactly("fcm-" + appareil);
+
+		assertThat(mvc.post().uri("/v1/auth/deconnexion").header("Authorization", bearer).exchange()).hasStatus(204);
+		assertThat(comptes.destinataire(utilisateur).jetonsPush()).isEmpty();
+		// Même si un jeton restait en base, un appareil sans session ouverte est exclu.
+		jdbc.sql("UPDATE appareil SET jeton_push = 'reste' WHERE id = :a").param("a", appareil).update();
+		assertThat(comptes.destinataire(utilisateur).jetonsPush()).isEmpty();
+
+		var nouveau = "Bearer " + connecter(tel, appareil).get("accessToken").asString();
+		assertThat(mvc.put().uri("/v1/appareils/" + appareil + "/push").header("Authorization", nouveau)
+			.contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(json.writeValueAsString(jeton)).exchange())
+			.hasStatus(204);
+		assertThat(comptes.destinataire(utilisateur).jetonsPush()).containsExactly("fcm-" + appareil);
 	}
 
 	@Test
@@ -201,7 +229,7 @@ class ComptesTest extends TestIntegration {
 		var page = lire(get(grandClient(), "/v1/grossistes?q=Derb&lat=33.59&lon=-7.61&rayonM=1000"));
 		assertThat(page.get("contenu").get(0).get("id").asString()).isEqualTo(cree.get("id").asString());
 		assertThat(page.get("contenu").get(0).get("distanceM").asInt()).isLessThan(10);
-		verify(sms, org.mockito.Mockito.never()).envoyer(argThat(d -> tel.equals(d.telephone())), any());
+		verify(sms, org.mockito.Mockito.never()).envoyer(argThat(m -> tel.equals(m.destinataire().telephone())));
 	}
 
 }

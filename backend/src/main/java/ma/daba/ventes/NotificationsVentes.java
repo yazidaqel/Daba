@@ -41,7 +41,7 @@ class NotificationsVentes {
 			return;
 		}
 		var lien = comptes.lien(Comptes.CibleLien.DOCUMENT, document.id(), telephone, VALIDITE_LIEN);
-		canaux.envoyer(Canaux.TypeMessage.DOCUMENT_EMIS, comptes.destinataireTelephone(telephone, null),
+		canaux.envoyer(Canaux.TypeMessage.DOCUMENT_EMIS, document.id(), comptes.destinataireTelephone(telephone, null),
 				document.ambulant().nom(), document.numero(), dirhams(document.total()), lien);
 	}
 
@@ -49,7 +49,7 @@ class NotificationsVentes {
 	@ApplicationModuleListener
 	void ecartSignale(AvisHanout.EcartSignale evenement) {
 		var document = ventes.document(evenement.documentId());
-		canaux.envoyer(Canaux.TypeMessage.RECEPTION_ECART, comptes.destinataire(document.ambulant().id()),
+		canaux.envoyer(Canaux.TypeMessage.RECEPTION_ECART, document.id(), comptes.destinataire(document.ambulant().id()),
 				document.hanout().nom(), document.numero());
 	}
 
@@ -58,7 +58,7 @@ class NotificationsVentes {
 	void contestationOuverte(AvisHanout.ContestationOuverte evenement) {
 		var c = avis.contestation(evenement.contestationId());
 		Object objet = "DOCUMENT".equals(c.cible()) ? ventes.document(c.cibleId()).numero() : SOLDE;
-		canaux.envoyer(Canaux.TypeMessage.CONTESTATION, comptes.destinataire(c.ambulant().id()), c.hanout().nom(), objet);
+		canaux.envoyer(Canaux.TypeMessage.CONTESTATION, c.id(), comptes.destinataire(c.ambulant().id()), c.hanout().nom(), objet);
 	}
 
 	private static final Map<String, String> SOLDE = Map.of("fr", "le solde", "ar", "الرصيد", "ary-Arab", "الحساب",

@@ -41,6 +41,14 @@ public final class Acces {
 
 	}
 
+	/** Existence des organisations, fournie par le module comptes (paramétrage des canaux sans dépendance circulaire). */
+	public interface Organisations {
+
+		/** Identifiants parmi ceux-ci qui ne désignent aucune organisation. */
+		java.util.Set<java.util.UUID> inconnues(java.util.Collection<java.util.UUID> organisations);
+
+	}
+
 	/** Contribution d'un module à l'export des données personnelles (droit d'accès, loi 09-08). */
 	public interface ContributeurExport {
 

@@ -93,8 +93,8 @@ class AvisHanoutTest extends TestIntegration {
 				"cibleId", l.documentId(), "motif", "MONTANT"))).hasStatus(404);
 
 		// Sans jeton push, la notification à l'ambulant part par SMS (canal de repli).
-		verify(sms, timeout(5000)).envoyer(argThat((Canaux.Destinataire d) -> l.ambulant().telephone().equals(d.telephone())),
-				argThat((String texte) -> texte.contains(l.ambulant().prefixe() + "-BL-000001")));
+		verify(sms, timeout(5000)).envoyer(argThat((Canaux.Message m) -> l.ambulant().telephone().equals(m.destinataire().telephone())
+				&& m.texte().contains(l.ambulant().prefixe() + "-BL-000001")));
 
 		var vue = lire(get(l.hanout(), "/v1/contestations?cibleId=" + l.documentId()));
 		assertThat(vue.get("total").asInt()).isEqualTo(1);

@@ -5,29 +5,26 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.text.MessageFormat;
 import java.util.Arrays;
-import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.env.Environment;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 
 /**
- * Couche canaux unique (§9) : chaque type de message a un canal principal et un canal de repli,
- * modifiables par configuration ({@code daba.canaux.routage.<TYPE>=PRINCIPAL,REPLI}) ; chaque canal
- * s'active ou se coupe par {@code daba.canaux.actifs}, sans développement.
+ * Couche canaux unique (§9) : chaque type de message a un canal principal et un canal de repli ;
+ * chaque canal s'active ou se coupe au niveau du système, du type de message et de l'organisation du
+ * destinataire, et utilise le fournisseur choisi par l'administrateur, sans développement
+ * ({@code /v1/admin/canaux}, {@link ParametresCanaux}).
  */
 @Service
 public class Canaux {
@@ -38,80 +35,132 @@ public class Canaux {
 		PUSH, SMS, WHATSAPP
 	}
 
-	/** Types de message et routage par défaut du pilote (tableau §9). */
+	/**
+	 * Priorité d'un message (colonne « Priorité » du tableau §9) : canal de notification Android
+	 * ({@code channel_id} créé par l'app) et priorité FCM. Aucun type BASSE encore (alertes de stock embarqué).
+	 */
+	public enum Priorite {
+
+		HAUTE("haute", "HIGH"), MOYENNE("moyenne", "NORMAL"), BASSE("basse", "NORMAL");
+
+		final String canalAndroid;
+		final String prioriteFcm;
+
+		Priorite(String canalAndroid, String prioriteFcm) {
+			this.canalAndroid = canalAndroid;
+			this.prioriteFcm = prioriteFcm;
+		}
+
+	}
+
+	/**
+	 * Types de message, avec la priorité et le routage par défaut du pilote (tableau §9). Hors tableau :
+	 * OTP (code valable 5 min) en HAUTE ; DEMANDE_PRISE, RECEPTION_ECART, CONTESTATION en MOYENNE.
+	 */
 	public enum TypeMessage {
 
-		OTP(Canal.SMS),
-		RUPTURE_SIGNALEE(Canal.PUSH, Canal.SMS),
-		DEMANDE_ACCEPTEE(Canal.SMS),
-		DEMANDE_PRISE(Canal.PUSH),
-		DEMANDE_EN_ROUTE(Canal.SMS),
-		DEMANDE_LIVREE(Canal.SMS),
-		DEMANDE_SANS_REPONSE(Canal.SMS),
-		PROMO_CONFIRMEE(Canal.PUSH, Canal.SMS),
-		RESERVATION_EXPIRE_BIENTOT(Canal.PUSH),
-		PROPOSITION_DEPOT(Canal.PUSH, Canal.SMS),
-		RETRAIT_EFFECTUE(Canal.PUSH),
-		DOCUMENT_EMIS(Canal.SMS),
-		RECEPTION_ECART(Canal.PUSH),
-		CONTESTATION(Canal.PUSH, Canal.SMS);
+		OTP(Priorite.HAUTE, Canal.SMS),
+		RUPTURE_SIGNALEE(Priorite.HAUTE, Canal.PUSH, Canal.SMS),
+		DEMANDE_ACCEPTEE(Priorite.HAUTE, Canal.SMS),
+		DEMANDE_PRISE(Priorite.MOYENNE, Canal.PUSH),
+		DEMANDE_EN_ROUTE(Priorite.HAUTE, Canal.SMS),
+		DEMANDE_LIVREE(Priorite.HAUTE, Canal.SMS),
+		DEMANDE_SANS_REPONSE(Priorite.MOYENNE, Canal.SMS),
+		PROMO_CONFIRMEE(Priorite.HAUTE, Canal.PUSH, Canal.SMS),
+		RESERVATION_EXPIRE_BIENTOT(Priorite.HAUTE, Canal.PUSH),
+		PROPOSITION_DEPOT(Priorite.HAUTE, Canal.PUSH, Canal.SMS),
+		RETRAIT_EFFECTUE(Priorite.MOYENNE, Canal.PUSH),
+		DOCUMENT_EMIS(Priorite.MOYENNE, Canal.SMS),
+		RECEPTION_ECART(Priorite.MOYENNE, Canal.PUSH),
+		CONTESTATION(Priorite.MOYENNE, Canal.PUSH, Canal.SMS);
 
-		private final List<Canal> route;
+		final Priorite priorite;
+		final List<Canal> route;
 
-		TypeMessage(Canal... route) {
+		TypeMessage(Priorite priorite, Canal... route) {
+			this.priorite = priorite;
 			this.route = List.of(route);
 		}
 
 	}
 
-	/** Coordonnées d'un utilisateur, résolues par le module comptes. */
-	public record Destinataire(UUID utilisateurId, String telephone, List<String> jetonsPush, String langue) {
+	/** Coordonnées d'un utilisateur, résolues par le module comptes ; organisation absente = numéro sans compte. */
+	public record Destinataire(UUID utilisateurId, UUID organisationId, String telephone, List<String> jetonsPush,
+			String langue) {
 	}
 
-	/** Fournisseur d'un canal (opérateur SMS, FCM, WhatsApp Business API). */
+	/** Message prêt à partir, dans la langue du destinataire : texte complet (SMS), titre (push) ; {@code cibleId} = objet à ouvrir. */
+	public record Message(TypeMessage type, UUID cibleId, Destinataire destinataire, String titre, String texte) {
+	}
+
+	/** Jeton push refusé définitivement par le fournisseur : le module comptes l'efface de l'appareil. */
+	public record JetonPushInvalide(String jeton) {
+	}
+
+	/** Fournisseur d'un canal (opérateur SMS, FCM, WhatsApp Business API, ou journal applicatif). */
 	public interface Fournisseur {
+
+		enum Code {
+			JOURNAL, INFOBIP, FCM
+		}
 
 		Canal canal();
 
+		Code code();
+
+		/** Vrai si les identifiants du fournisseur sont présents sur ce serveur. */
+		default boolean configure() {
+			return true;
+		}
+
 		/** Vrai si le message est accepté par le fournisseur. */
-		boolean envoyer(Destinataire destinataire, String texte);
+		boolean envoyer(Message message);
 
 	}
 
-	private final Map<Canal, Fournisseur> fournisseurs;
-	private final Set<Canal> actifs;
-	private final Environment env;
+	private final List<Fournisseur> fournisseurs;
+	private final ParametresCanaux parametres;
 	private final JdbcClient jdbc;
 	private final Map<String, Properties> textes;
 
-	Canaux(List<Fournisseur> fournisseurs, @Value("${daba.canaux.actifs}") Set<Canal> actifs, Environment env,
-			JdbcClient jdbc) {
-		this.fournisseurs = new EnumMap<>(Canal.class);
-		fournisseurs.forEach(f -> this.fournisseurs.put(f.canal(), f));
-		this.actifs = actifs;
-		this.env = env;
+	Canaux(List<Fournisseur> fournisseurs, ParametresCanaux parametres, JdbcClient jdbc) {
+		this.fournisseurs = fournisseurs;
+		this.parametres = parametres;
 		this.jdbc = jdbc;
 		this.textes = Arrays.stream(new String[] { "fr", "ar", "ary-Arab", "ary-Latn" })
 			.collect(Collectors.toMap(Function.identity(), Canaux::charger));
 	}
 
 	/**
-	 * Envoie par le canal principal, puis par le canal de repli en cas d'échec ou si le destinataire
-	 * n'y est pas joignable. Renvoie le canal qui a réussi.
+	 * Envoie par le canal principal, puis par le canal de repli si le principal échoue, est coupé ou
+	 * si le destinataire n'y est pas joignable. {@code cibleId} : objet que l'app ouvre (push). Renvoie
+	 * le canal qui a réussi.
 	 */
-	public Optional<Canal> envoyer(TypeMessage type, Destinataire destinataire, Object... arguments) {
-		var texte = texte(type, destinataire.langue(), arguments);
-		for (var canal : route(type)) {
-			if (!actifs.contains(canal) || !joignable(canal, destinataire)) {
+	public Optional<Canal> envoyer(TypeMessage type, UUID cibleId, Destinataire destinataire, Object... arguments) {
+		var config = parametres.effective();
+		var routage = config.routage(type);
+		var langue = langue(destinataire.langue());
+		var titre = textes.get(langue).getProperty("TITRE", "Daba");
+		for (var canal : routage.canaux()) {
+			if (!config.actif(canal, type, destinataire.organisationId()) || !joignable(canal, destinataire)) {
 				continue;
 			}
+			var message = new Message(type, cibleId, destinataire, titre, texte(type, canal, langue, arguments));
+			var code = config.fournisseur(canal);
+			var fournisseur = fournisseurs.stream().filter(f -> f.canal() == canal && f.code() == code).findFirst();
 			boolean ok;
-			try {
-				ok = fournisseurs.get(canal).envoyer(destinataire, texte);
-			}
-			catch (RuntimeException e) {
-				log.warn("Échec d'envoi {} par {}", type, canal, e);
+			if (fournisseur.isEmpty() || !fournisseur.get().configure()) {
+				log.warn("Fournisseur {} du canal {} non configuré : {} non envoyé par ce canal", code, canal, type);
 				ok = false;
+			}
+			else {
+				try {
+					ok = fournisseur.get().envoyer(message);
+				}
+				catch (RuntimeException e) {
+					log.warn("Échec d'envoi {} par {} ({}) : {}", type, canal, code, e.getClass().getSimpleName());
+					ok = false;
+				}
 			}
 			jdbc.sql("INSERT INTO notification (type, utilisateur_id, canal, envoyee) VALUES (:type, :u, :canal, :ok)")
 				.param("type", type.name())
@@ -126,25 +175,39 @@ public class Canaux {
 		return Optional.empty();
 	}
 
-	List<Canal> route(TypeMessage type) {
-		var configure = env.getProperty("daba.canaux.routage." + type.name());
-		return configure == null ? type.route
-				: Arrays.stream(configure.split(",")).map(String::trim).map(Canal::valueOf).toList();
+	private static boolean joignable(Canal canal, Destinataire d) {
+		return canal == Canal.PUSH ? d.jetonsPush() != null && !d.jetonsPush().isEmpty() : d.telephone() != null;
 	}
 
-	private boolean joignable(Canal canal, Destinataire d) {
-		return fournisseurs.containsKey(canal)
-				&& (canal == Canal.PUSH ? d.jetonsPush() != null && !d.jetonsPush().isEmpty() : d.telephone() != null);
+	private String langue(String langue) {
+		return langue == null || !textes.containsKey(langue) ? "fr" : langue;
 	}
 
-	/** Texte dans la langue du destinataire (fr par défaut) ; un argument libellé multilingue (Map) est lu dans cette langue. */
 	String texte(TypeMessage type, String langue, Object... arguments) {
-		var cle = langue == null || !textes.containsKey(langue) ? "fr" : langue;
-		var modele = textes.get(cle).getProperty(type.name(), textes.get("fr").getProperty(type.name(), type.name()));
+		return texte(type, null, langue, arguments);
+	}
+
+	/**
+	 * Texte dans la langue du destinataire (fr par défaut) ; un argument libellé multilingue (Map) est lu
+	 * dans cette langue. PUSH : variante {@code <TYPE>.PUSH} si elle existe, sans nom ni téléphone ni lien
+	 * (écran verrouillé, CNDP), préférée en français plutôt que le texte nominatif dans la langue.
+	 */
+	String texte(TypeMessage type, Canal canal, String langue, Object... arguments) {
+		var cle = langue(langue);
+		var fr = textes.get("fr");
+		var modele = textes.get(cle).getProperty(type.name(), fr.getProperty(type.name(), type.name()));
+		if (canal == Canal.PUSH) {
+			modele = textes.get(cle).getProperty(type.name() + ".PUSH", fr.getProperty(type.name() + ".PUSH", modele));
+		}
 		var traduits = Arrays.stream(arguments)
 			.map(a -> a instanceof Map<?, ?> libelle ? String.valueOf(libelle.get(libelle.containsKey(cle) ? cle : "fr")) : a)
 			.toArray();
 		return new MessageFormat(modele, Locale.ROOT).format(traduits);
+	}
+
+	/** Texte sans le préfixe « Daba : », déjà porté par le titre d'un push. */
+	static String corps(String texte, String titre) {
+		return texte.startsWith(titre) ? texte.substring(titre.length()).replaceFirst("^\\s*:\\s*", "") : texte;
 	}
 
 	private static Properties charger(String langue) {

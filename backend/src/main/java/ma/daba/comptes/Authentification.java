@@ -75,7 +75,7 @@ class Authentification {
 		if (envois > ENVOIS_MAX_PAR_HEURE) {
 			throw trop("Trop de codes demandés, réessayez dans une heure");
 		}
-		canaux.envoyer(Canaux.TypeMessage.OTP, comptes.destinataireTelephone(telephone, langue), code);
+		canaux.envoyer(Canaux.TypeMessage.OTP, null, comptes.destinataireTelephone(telephone, langue), code);
 	}
 
 	/** Vérifie le code, crée le compte à la première connexion et ouvre une session sur l'appareil. */
