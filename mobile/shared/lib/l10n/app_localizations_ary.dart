@@ -58,7 +58,7 @@ class TAry extends T {
 
   @override
   String get consentementTexte =>
-      'دابا كيسجل البيعات، السلعة والكريدي ديال الكليان باش يعاونك (قانون 09-08، تصريح CNDP). السمية ديالك كتبان لموالين الجملة وللحوانت اللي خدام معاهم. حتى معلومة شخصية ما كتمشي للماركات. البلاصة ديالك ما كتتاخدش غير إلا قبلتي، وغير ملي تكون «موجود» للدبانة. تقدر تحيد الموافقة وتطلب المعلومات ديالك فأي وقت.';
+      'دابا كيسجل البيعات، السلعة والكريدي ديال الكليان باش يعاونك (قانون 09-08، تصريح CNDP). السمية ديالك كتبان لموالين الجملة وللحوانت اللي خدام معاهم. حتى معلومة شخصية ما كتمشي للماركات. البلاصة ديالك ما كتتاخدش غير إلا قبلتي، وغير ملي تكون «موجود» للدبانة. جوج شركات خدامين معانا برا المغرب: Google Firebase Cloud Messaging للإشعارات (واحد المعرّف ديال التيليفون ديالك والمحتوى ديال الإشعارات) وInfobip للميساجات (النمرة ديالك والنص ديال الميساجات، حتى الكودات ديال الدخول). تقدر تحيد الموافقة وتطلب المعلومات ديالك فأي وقت.';
 
   @override
   String get consentementDonnees => 'موافق على المعالجة ديال المعلومات ديالي';
@@ -870,7 +870,7 @@ class TAry extends T {
 
   @override
   String get consentementNouveauTexte =>
-      'النص ديال المعلومات ديالك تبدل: دابا السمية ديالك كتبان لموالين الجملة وللحوانت اللي خدام معاهم.';
+      'النص ديال المعلومات ديالك تبدل: السمية ديالك كتبان لموالين الجملة وللحوانت اللي خدام معاهم، والإشعارات والميساجات كيدوزو عبر Google Firebase Cloud Messaging وInfobip، برا المغرب.';
 
   @override
   String get lireEtAccepter => 'قرا وقبل';
@@ -878,6 +878,15 @@ class TAry extends T {
   @override
   String get profilConsentementRequis =>
       'قبل الأول النص الجديد ديال المعلومات ديالك باش تسجل البروفيل.';
+
+  @override
+  String get canalHaute => 'مستعجل: الدبانة، البروموات، الريزيرفاسيونات';
+
+  @override
+  String get canalMoyenne => 'التتبع: الكريدي، الطلبات، الشكايات';
+
+  @override
+  String get canalBasse => 'السلعة لي معاك';
 }
 
 /// The translations for Moroccan Arabic, using the Latin script (`ary_Latn`).
@@ -933,7 +942,7 @@ class TAryLatn extends TAry {
 
   @override
   String get consentementTexte =>
-      'Daba kaysajjel lbi3at, sel3a w lcrédit dyal lclients bach y3awnek (9anoun 09-08, tasri7 CNDP). Smiya dyalek katban l lgrossistes w l l7wanet li khddam m3ahom. 7ta ma3louma chakhsiya ma katmchi l marques. Blassa dyalek ma kattakhed ghir ila 9bilti, w ghir mli tkoun « mojoud » l dépannage. T9der t7iyed lmowafa9a w tetlob lma3loumat dyalek f ay we9t.';
+      'Daba kaysajjel lbi3at, sel3a w lcrédit dyal lclients bach y3awnek (9anoun 09-08, tasri7 CNDP). Smiya dyalek katban l lgrossistes w l l7wanet li khddam m3ahom. 7ta ma3louma chakhsiya ma katmchi l marques. Blassa dyalek ma kattakhed ghir ila 9bilti, w ghir mli tkoun « mojoud » l dépannage. Jouj charikat khddamin m3ana berra lmaghrib : Google Firebase Cloud Messaging l notifications (wa7ed l\'identifiant dyal tilifoun dyalek w lmo7tawa dyal notifications) w Infobip l les SMS (nemra dyalek w nass dyal les messages, 7ta les codes dyal connexion). T9der t7iyed lmowafa9a w tetlob lma3loumat dyalek f ay we9t.';
 
   @override
   String get consentementDonnees =>
@@ -1751,7 +1760,7 @@ class TAryLatn extends TAry {
 
   @override
   String get consentementNouveauTexte =>
-      'Nass dyal lma3loumat dyalek tbeddel : daba smiya dyalek katban l lgrossistes w l l7wanet li khddam m3ahom.';
+      'Nass dyal lma3loumat dyalek tbeddel : smiya dyalek katban l lgrossistes w l l7wanet li khddam m3ahom, w notifications w les SMS kaydouzou 3la Google Firebase Cloud Messaging w Infobip, berra lmaghrib.';
 
   @override
   String get lireEtAccepter => '9ra w 9bel';
@@ -1759,4 +1768,13 @@ class TAryLatn extends TAry {
   @override
   String get profilConsentementRequis =>
       '9bel lowel nass jdid dyal lma3loumat dyalek bach tsajjel profil.';
+
+  @override
+  String get canalHaute => 'Mosta3jal: dépannage, promos, réservations';
+
+  @override
+  String get canalMoyenne => 'Tatabbo3: lcrédit, talabat, chkayat';
+
+  @override
+  String get canalBasse => 'Sel3a li m3ak';
 }

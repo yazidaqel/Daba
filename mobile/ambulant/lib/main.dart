@@ -21,6 +21,7 @@ class AppAmbulant extends StatelessWidget {
         child: ListenableBuilder(
           listenable: daba,
           builder: (context, _) => MaterialApp(
+            navigatorKey: daba.navigateur,
             onGenerateTitle: (c) => T.of(c).titreApp,
             debugShowCheckedModeBanner: false,
             locale: daba.locale,

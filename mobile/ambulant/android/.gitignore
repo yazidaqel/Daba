@@ -12,3 +12,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Configuration Firebase du projet (push FCM), fournie hors dépôt : voir mobile/CLAUDE.md
+google-services.json

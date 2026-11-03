@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Logo Daba (web/hanout/public/logo.svg), blanc sur transparent : petite icône des notifications. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M136,176h240l-24,200H160z M226,276a30,30 0 1,0 60,0a30,30 0 1,0 -60,0z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="28"
+        android:pathData="M200,176v-24a56,56 0 0,1 112,0v24" />
+</vector>

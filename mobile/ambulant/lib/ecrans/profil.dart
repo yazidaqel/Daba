@@ -72,7 +72,7 @@ class _EcranProfilState extends State<EcranProfil> {
   Widget build(BuildContext context) {
     final t = context.t;
     final regions = context.daba.referentiel('regions');
-    final aJour = context.daba.consentementAJour;
+    final aJour = context.daba.consentementProfil;
     final connues = {for (final r in regions) for (final v in (r['villes'] as List).cast<Map>()) v['code']};
     final categories = _listeCategories();
     final titre = Theme.of(context).textTheme.titleMedium;

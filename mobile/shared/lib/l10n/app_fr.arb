@@ -15,7 +15,7 @@
   "recevoirCode": "Recevoir le code",
   "seConnecter": "Se connecter",
   "consentementTitre": "Vos données personnelles",
-  "consentementTexte": "Daba enregistre vos ventes, votre stock et le crédit de vos clients pour vous rendre service (loi 09-08, déclaration CNDP). Votre nom est montré aux grossistes et aux hanouts avec qui vous travaillez. Aucune donnée nominative n'est transmise aux marques. Votre position n'est collectée que si vous l'acceptez, et seulement quand vous êtes « disponible » pour le dépannage. Vous pouvez retirer votre accord et demander vos données à tout moment.",
+  "consentementTexte": "Daba enregistre vos ventes, votre stock et le crédit de vos clients pour vous rendre service (loi 09-08, déclaration CNDP). Votre nom est montré aux grossistes et aux hanouts avec qui vous travaillez. Aucune donnée nominative n'est transmise aux marques. Votre position n'est collectée que si vous l'acceptez, et seulement quand vous êtes « disponible » pour le dépannage. Deux sous-traitants hors du Maroc interviennent : Google Firebase Cloud Messaging pour les notifications (un identifiant de votre téléphone et le contenu des notifications) et Infobip pour les SMS (votre numéro et le texte des messages, codes de connexion compris). Vous pouvez retirer votre accord et demander vos données à tout moment.",
   "consentementDonnees": "J'accepte le traitement de mes données",
   "consentementGeo": "J'accepte la géolocalisation quand je suis disponible",
   "consentementGeoDemande": "Pour recevoir les demandes de dépannage, Daba doit connaître votre position, seulement quand vous êtes disponible. Acceptez-vous ?",
@@ -466,7 +466,10 @@
   "registreCommerce": "Registre du commerce (RC)",
   "assujettiTva": "Assujetti à la TVA",
   "offreNonCiblee": "Cette offre ne vous est plus proposée.",
-  "consentementNouveauTexte": "Le texte sur vos données a changé : votre nom est maintenant montré aux grossistes et aux hanouts avec qui vous travaillez.",
+  "consentementNouveauTexte": "Le texte sur vos données a changé : votre nom est montré aux grossistes et aux hanouts avec qui vous travaillez, et les notifications et les SMS passent par Google Firebase Cloud Messaging et Infobip, hors du Maroc.",
   "lireEtAccepter": "Lire et accepter",
-  "profilConsentementRequis": "Acceptez d'abord le nouveau texte sur vos données pour enregistrer votre profil."
+  "profilConsentementRequis": "Acceptez d'abord le nouveau texte sur vos données pour enregistrer votre profil.",
+  "canalHaute": "Urgent : dépannage, promos, réservations",
+  "canalMoyenne": "Suivi : crédit, demandes, contestations",
+  "canalBasse": "Stock embarqué"
 }

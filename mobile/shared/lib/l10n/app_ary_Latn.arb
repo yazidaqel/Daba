@@ -15,7 +15,7 @@
   "recevoirCode": "Siftli l code",
   "seConnecter": "Dkhel",
   "consentementTitre": "Lma3loumat chakhsiya dyalek",
-  "consentementTexte": "Daba kaysajjel lbi3at, sel3a w lcrédit dyal lclients bach y3awnek (9anoun 09-08, tasri7 CNDP). Smiya dyalek katban l lgrossistes w l l7wanet li khddam m3ahom. 7ta ma3louma chakhsiya ma katmchi l marques. Blassa dyalek ma kattakhed ghir ila 9bilti, w ghir mli tkoun « mojoud » l dépannage. T9der t7iyed lmowafa9a w tetlob lma3loumat dyalek f ay we9t.",
+  "consentementTexte": "Daba kaysajjel lbi3at, sel3a w lcrédit dyal lclients bach y3awnek (9anoun 09-08, tasri7 CNDP). Smiya dyalek katban l lgrossistes w l l7wanet li khddam m3ahom. 7ta ma3louma chakhsiya ma katmchi l marques. Blassa dyalek ma kattakhed ghir ila 9bilti, w ghir mli tkoun « mojoud » l dépannage. Jouj charikat khddamin m3ana berra lmaghrib : Google Firebase Cloud Messaging l notifications (wa7ed l'identifiant dyal tilifoun dyalek w lmo7tawa dyal notifications) w Infobip l les SMS (nemra dyalek w nass dyal les messages, 7ta les codes dyal connexion). T9der t7iyed lmowafa9a w tetlob lma3loumat dyalek f ay we9t.",
   "consentementDonnees": "Mowafe9 3la lmou3alaja dyal lma3loumat dyali",
   "consentementGeo": "Mowafe9 yt3ref blassa dyali mli nkoun mojoud",
   "consentementGeoDemande": "Bach ywsslouk talabat dépannage, Daba khasso y3ref blassa dyalek ghir mli tkoun mojoud. Mowafe9?",
@@ -262,7 +262,10 @@
   "registreCommerce": "Registre du commerce (RC)",
   "assujettiTva": "Katkhlles TVA",
   "offreNonCiblee": "Had lpromo ma b9atch lik.",
-  "consentementNouveauTexte": "Nass dyal lma3loumat dyalek tbeddel : daba smiya dyalek katban l lgrossistes w l l7wanet li khddam m3ahom.",
+  "consentementNouveauTexte": "Nass dyal lma3loumat dyalek tbeddel : smiya dyalek katban l lgrossistes w l l7wanet li khddam m3ahom, w notifications w les SMS kaydouzou 3la Google Firebase Cloud Messaging w Infobip, berra lmaghrib.",
   "lireEtAccepter": "9ra w 9bel",
-  "profilConsentementRequis": "9bel lowel nass jdid dyal lma3loumat dyalek bach tsajjel profil."
+  "profilConsentementRequis": "9bel lowel nass jdid dyal lma3loumat dyalek bach tsajjel profil.",
+  "canalHaute": "Mosta3jal: dépannage, promos, réservations",
+  "canalMoyenne": "Tatabbo3: lcrédit, talabat, chkayat",
+  "canalBasse": "Sel3a li m3ak"
 }

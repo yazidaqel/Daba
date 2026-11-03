@@ -4,6 +4,11 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Push FCM : sans google-services.json (non versionné), l'app se construit et tourne sans push.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "ma.daba.daba_ambulant"
     compileSdk = flutter.compileSdkVersion

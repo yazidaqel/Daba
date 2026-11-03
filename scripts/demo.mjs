@@ -140,9 +140,10 @@ async function connecter(telephone, n) {
   return session
 }
 
+// Version du texte de chaque app (sinon elle redemande le consentement) : ambulant = versionTexteCndp de mobile/ambulant/lib/etat.dart.
 async function consentir(session, geolocalisation) {
   await appel(session, 'PUT', '/v1/moi/consentement', {
-    versionTexte: 'cndp-2026-10-fr',
+    versionTexte: geolocalisation ? '2026-11-v3' : 'cndp-2026-10-fr',
     traitementDonnees: true,
     ...(geolocalisation ? { geolocalisation: true } : {}),
     langue: 'fr',

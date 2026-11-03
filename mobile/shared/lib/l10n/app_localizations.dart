@@ -193,7 +193,7 @@ abstract class T {
   /// No description provided for @consentementTexte.
   ///
   /// In fr, this message translates to:
-  /// **'Daba enregistre vos ventes, votre stock et le crédit de vos clients pour vous rendre service (loi 09-08, déclaration CNDP). Votre nom est montré aux grossistes et aux hanouts avec qui vous travaillez. Aucune donnée nominative n\'est transmise aux marques. Votre position n\'est collectée que si vous l\'acceptez, et seulement quand vous êtes « disponible » pour le dépannage. Vous pouvez retirer votre accord et demander vos données à tout moment.'**
+  /// **'Daba enregistre vos ventes, votre stock et le crédit de vos clients pour vous rendre service (loi 09-08, déclaration CNDP). Votre nom est montré aux grossistes et aux hanouts avec qui vous travaillez. Aucune donnée nominative n\'est transmise aux marques. Votre position n\'est collectée que si vous l\'acceptez, et seulement quand vous êtes « disponible » pour le dépannage. Deux sous-traitants hors du Maroc interviennent : Google Firebase Cloud Messaging pour les notifications (un identifiant de votre téléphone et le contenu des notifications) et Infobip pour les SMS (votre numéro et le texte des messages, codes de connexion compris). Vous pouvez retirer votre accord et demander vos données à tout moment.'**
   String get consentementTexte;
 
   /// No description provided for @consentementDonnees.
@@ -1675,7 +1675,7 @@ abstract class T {
   /// No description provided for @consentementNouveauTexte.
   ///
   /// In fr, this message translates to:
-  /// **'Le texte sur vos données a changé : votre nom est maintenant montré aux grossistes et aux hanouts avec qui vous travaillez.'**
+  /// **'Le texte sur vos données a changé : votre nom est montré aux grossistes et aux hanouts avec qui vous travaillez, et les notifications et les SMS passent par Google Firebase Cloud Messaging et Infobip, hors du Maroc.'**
   String get consentementNouveauTexte;
 
   /// No description provided for @lireEtAccepter.
@@ -1689,6 +1689,24 @@ abstract class T {
   /// In fr, this message translates to:
   /// **'Acceptez d\'abord le nouveau texte sur vos données pour enregistrer votre profil.'**
   String get profilConsentementRequis;
+
+  /// No description provided for @canalHaute.
+  ///
+  /// In fr, this message translates to:
+  /// **'Urgent : dépannage, promos, réservations'**
+  String get canalHaute;
+
+  /// No description provided for @canalMoyenne.
+  ///
+  /// In fr, this message translates to:
+  /// **'Suivi : crédit, demandes, contestations'**
+  String get canalMoyenne;
+
+  /// No description provided for @canalBasse.
+  ///
+  /// In fr, this message translates to:
+  /// **'Stock embarqué'**
+  String get canalBasse;
 }
 
 class _TDelegate extends LocalizationsDelegate<T> {

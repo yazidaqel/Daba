@@ -8,16 +8,23 @@ import 'package:geolocator/geolocator.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'domaine.dart';
+import 'push.dart';
 
 enum Etape { connexion, consentement, pinCreation, verrouille, pret }
 
 /// Version du texte d'information CNDP affiché (journalisée avec le consentement). v2 : le nom de
-/// l'ambulant est montré à ses grossistes et à ses hanouts (contrat v0.5.0).
-const versionTexteCndp = '2026-11-v2';
+/// l'ambulant est montré à ses grossistes et à ses hanouts (contrat v0.5.0). v3 : sous-traitants hors
+/// du Maroc, Google Firebase Cloud Messaging (notifications) et Infobip (SMS, codes OTP compris).
+const versionTexteCndp = '2026-11-v3';
+
+/// Textes de l'app qui montrent le nom de l'ambulant : le profil en dépend (v2 et suivants). Une
+/// version inconnue (posée par un autre client) ne compte pas : liste, pas comparaison de chaînes.
+const textesAvecNom = {'2026-11-v2', versionTexteCndp};
 
 /// État de l'app : session, synchronisation, disponibilité (dépannage).
 class Daba extends ChangeNotifier with WidgetsBindingObserver {
-  Daba(this.stockage, this.api, this._coffre) {
+  Daba(this.stockage, this.api, this._coffre, [Push? push]) : push = push ?? Push() {
+    declarationPush = DeclarationPush(api, this.push.jeton);
     final session = stockage.lire('session');
     if (session != null) _ouvrir(jsonDecode(session) as Map<String, dynamic>);
     locale = localeDuCode(stockage.lire('langue'));
@@ -38,12 +45,15 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
       const FlutterSecureStorage(),
     );
     await daba.chargerSecrets();
+    unawaited(daba.rejouerDeconnexion());
     return daba;
   }
 
   final Stockage stockage;
   final Api api;
   final FlutterSecureStorage _coffre;
+  final Push push;
+  late final DeclarationPush declarationPush;
 
   Etape etape = Etape.connexion;
   late Locale locale;
@@ -69,6 +79,7 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
     locale = l;
     api.langue = codeLangue(l);
     stockage.ecrire('langue', codeLangue(l));
+    push.nommerCanaux(lookupT(l)); // le jeton est redéclaré avec la langue à la prochaine synchro
     notifyListeners();
   }
 
@@ -134,6 +145,10 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
       stockage.ecrire('appareilId', id);
     }
     await _enregistrerJetons(session);
+    declarationPush.nouvelleSession(); // nouvelle session : jeton push redéclaré à la première synchro
+    // La nouvelle session remplace l'ancienne sur cet appareil, et son jeton push sera redéclaré.
+    await _coffre.delete(key: 'sessionAFermer');
+    stockage.ecrire('push.aOublier', null);
     _ouvrir(session);
     if (!consentementAJour) {
       try {
@@ -183,9 +198,12 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
   bool get _consentementDonne => _consentement['traitementDonnees'] == true;
 
   /// Consentement donné sur le texte actuel. Un ancien texte ne bloque que ce qui dépend du nouveau :
-  /// le profil, dont le nom est montré aux grossistes et aux hanouts (v2). Le nouveau texte est
-  /// proposé sans bloquer quand le réseau est là.
-  bool get consentementAJour => _consentement['versionTexte'] == versionTexteCndp;
+  /// le profil (v2, nom montré aux grossistes et aux hanouts) et le push (v3, FCM). Le nouveau texte
+  /// est proposé sans bloquer quand le réseau est là.
+  bool get consentementAJour => _consentementDonne && _consentement['versionTexte'] == versionTexteCndp;
+
+  /// Consentement sur un texte qui montre le nom (v2 ou plus récent) : profil modifiable.
+  bool get consentementProfil => _consentementDonne && textesAvecNom.contains(_consentement['versionTexte']);
 
   /// Enregistre un consentement actif et relance les opérations qui l'attendaient.
   void _consentementActif(Map<String, dynamic> c) {
@@ -242,12 +260,19 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) _misEnFond = DateTime.now();
-    if (state == AppLifecycleState.resumed && etape == Etape.pret && _misEnFond != null &&
-        DateTime.now().difference(_misEnFond!) > const Duration(minutes: 2)) {
+    if (state != AppLifecycleState.resumed) return;
+    if (etape == Etape.pret && _misEnFond != null && DateTime.now().difference(_misEnFond!) > const Duration(minutes: 2)) {
       etape = Etape.verrouille;
-      notifyListeners();
+      _fermerEcrans();
     }
+    notifyListeners(); // une notification touchée en fond s'ouvre maintenant, ou après le PIN
   }
+
+  /// Navigateur de l'app : verrouillage et déconnexion ferment tous les écrans ouverts au-dessus de
+  /// l'accueil, pour qu'aucun ne reste par-dessus le PIN ou la connexion.
+  final navigateur = GlobalKey<NavigatorState>();
+
+  void _fermerEcrans() => navigateur.currentState?.popUntil((r) => r.isFirst);
 
   /// Ferme la session : pousse d'abord la file, puis ferme la session côté serveur. Sans réseau,
   /// les opérations restent sur l'appareil. `effacer` : appareil déconnecté à distance (§10),
@@ -256,13 +281,25 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
     _minuteurSync?.cancel();
     _minuteurDispo?.cancel();
     if (!effacer) {
+      var joignable = true;
       try {
         if (disponible) await changerDisponibilite(false);
         await _sync?.pousser();
-        await api.post('/v1/auth/deconnexion');
+      } on HorsLigne {
+        joignable = false; // la file attend sur le téléphone
       } catch (_) {
-        // Hors ligne : la session expirera d'elle-même, la file attend sur le téléphone.
+        // refus du serveur : la file attend aussi, la session se ferme quand même
       }
+      try {
+        if (joignable) await api.post('/v1/auth/deconnexion');
+      } on HorsLigne {
+        joignable = false;
+      } on ProblemeApi {
+        // 401 : session déjà fermée ou remplacée côté serveur
+      }
+      // Hors ligne, le serveur garderait la session et son jeton push : fermeture rejouée (§10).
+      final jeton = api.jeton;
+      if (!joignable && jeton != null) await _coffre.write(key: 'sessionAFermer', value: jeton);
     }
     disponible = false;
     position = null;
@@ -270,10 +307,43 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
     await _coffre.delete(key: 'refresh');
     await _coffre.delete(key: 'pin');
     api.jeton = null;
+    declarationPush.oublier();
+    cibleEnAttente = null;
     if (effacer) stockage.effacerTout();
+    stockage.ecrire('push.aOublier', '1');
+    unawaited(rejouerDeconnexion()); // appels réseau : ne retardent pas la déconnexion hors ligne
     _essais = 0;
     etape = Etape.connexion;
+    _fermerEcrans();
     notifyListeners();
+  }
+
+  Timer? _minuteurDeconnexion;
+  Future<void>? _rejeu;
+
+  /// Déconnexion faite hors ligne (§10) : fermeture de la session (`sessionAFermer`) et invalidation
+  /// du jeton push chez FCM (`push.aOublier`), rejouées au démarrage puis chaque minute jusqu'à
+  /// réussite. Une nouvelle connexion OTP les rend inutiles.
+  Future<void> rejouerDeconnexion() => _rejeu ??= _rejouer().whenComplete(() => _rejeu = null);
+
+  Future<void> _rejouer() async {
+    // ponytail: rejoue avec le jeton d'accès de la session (24 h) ; au-delà le serveur répond 401 et la
+    // session reste ouverte jusqu'à son refreshToken, mais le jeton push est déjà invalidé chez FCM.
+    final session = await _coffre.read(key: 'sessionAFermer');
+    if (session != null) {
+      try {
+        await api.post('/v1/auth/deconnexion', null, {'Authorization': 'Bearer $session'});
+        await _coffre.delete(key: 'sessionAFermer');
+      } on ProblemeApi {
+        await _coffre.delete(key: 'sessionAFermer'); // 401 : déjà fermée, expirée ou remplacée
+      } on HorsLigne {
+        // réessayé dans une minute
+      }
+    }
+    if (stockage.lire('push.aOublier') != null && await push.oublierJeton()) stockage.ecrire('push.aOublier', null);
+    final reste = await _coffre.read(key: 'sessionAFermer') != null || stockage.lire('push.aOublier') != null;
+    _minuteurDeconnexion?.cancel();
+    _minuteurDeconnexion = reste ? Timer(const Duration(minutes: 1), rejouerDeconnexion) : null;
   }
 
   // ------------------------------------------------------------------ synchronisation
@@ -289,9 +359,11 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> synchroniser() async {
     final sync = _sync;
     if (sync == null || reconnexionRequise) return;
+    if (_pushAutorise) await _activerPush();
     try {
       await sync.synchroniser();
       if (!_referentielsCharges) await chargerReferentiels().catchError((_) {}); // réessayé au prochain tour
+      if (_pushAutorise) await declarationPush.declarer(appareilId).catchError((_) {}); // idem, rien en file
       horsLigne = false;
       derniereSync = DateTime.now();
       if (!disponible && stockage.lire('couperDisponibilite') != null) {
@@ -328,6 +400,57 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
   void apresGeste() {
     notifyListeners();
     synchroniser();
+  }
+
+  // ------------------------------------------------------------------ push (§9)
+  final _avisPush = StreamController<({Cible? cible, String texte})>.broadcast();
+
+  /// Notification reçue app ouverte : bandeau dans l'app au lieu d'une notification système.
+  Stream<({Cible? cible, String texte})> get avisPush => _avisPush.stream;
+
+  /// Écran à ouvrir après le toucher d'une notification, pris par l'accueil (après le PIN s'il le faut).
+  Cible? cibleEnAttente;
+
+  /// Push seulement session ouverte (PIN passé) et consentement au texte qui nomme FCM (v3, CNDP) :
+  /// avant, aucun jeton n'est demandé à Google (initialisation automatique coupée dans le manifeste).
+  bool get _pushAutorise => etape == Etape.pret && consentementAJour;
+
+  Future<void> _activerPush() async {
+    if (push.actif) return;
+    await push.demarrer(
+      nouveauJeton: (j) {
+        declarationPush.jeton = j;
+        if (_pushAutorise) declarationPush.declarer(appareilId).catchError((_) {});
+      },
+      premierPlan: (m) {
+        if (etape != Etape.pret) return; // PIN ou connexion à l'écran : rien ne s'affiche ni ne part
+        final cible = ciblePush(m.data);
+        synchroniser();
+        if (cible?.vers == Vers.depannage && disponible) {
+          chargerDemandes().catchError((_) {});
+          // Rupture proche : l'alerte de demande existante (son, vibration) en tient lieu.
+          if (m.data['type'] == 'RUPTURE_SIGNALEE') return;
+        }
+        final texte = m.notification?.body ?? m.data['texte'] as String?;
+        if (texte != null) _avisPush.add((cible: cible, texte: texte));
+      },
+      ouverte: (m) {
+        if (metier == null) return; // pas de session sur ce téléphone : l'accueil n'est pas joignable
+        // Gardée jusqu'au retour au premier plan et au PIN : l'accueil l'ouvre ensuite.
+        cibleEnAttente = ciblePush(m.data);
+        if (etape != Etape.pret) return;
+        synchroniser();
+        notifyListeners();
+      },
+    );
+    if (push.actif) await push.nommerCanaux(lookupT(locale));
+  }
+
+  /// Permission des notifications, demandée une fois, à la première ouverture de l'accueil.
+  void proposerNotifications() {
+    if (!push.actif || !_pushAutorise || stockage.lire('push.permissionDemandee') != null) return;
+    stockage.ecrire('push.permissionDemandee', '1');
+    push.demanderPermission().catchError((_) {});
   }
 
   // ------------------------------------------------------------------ dépannage (en ligne, §3.7)
@@ -436,6 +559,7 @@ class Daba extends ChangeNotifier with WidgetsBindingObserver {
   void dispose() {
     _minuteurSync?.cancel();
     _minuteurDispo?.cancel();
+    _minuteurDeconnexion?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

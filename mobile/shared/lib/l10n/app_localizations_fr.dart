@@ -58,7 +58,7 @@ class TFr extends T {
 
   @override
   String get consentementTexte =>
-      'Daba enregistre vos ventes, votre stock et le crédit de vos clients pour vous rendre service (loi 09-08, déclaration CNDP). Votre nom est montré aux grossistes et aux hanouts avec qui vous travaillez. Aucune donnée nominative n\'est transmise aux marques. Votre position n\'est collectée que si vous l\'acceptez, et seulement quand vous êtes « disponible » pour le dépannage. Vous pouvez retirer votre accord et demander vos données à tout moment.';
+      'Daba enregistre vos ventes, votre stock et le crédit de vos clients pour vous rendre service (loi 09-08, déclaration CNDP). Votre nom est montré aux grossistes et aux hanouts avec qui vous travaillez. Aucune donnée nominative n\'est transmise aux marques. Votre position n\'est collectée que si vous l\'acceptez, et seulement quand vous êtes « disponible » pour le dépannage. Deux sous-traitants hors du Maroc interviennent : Google Firebase Cloud Messaging pour les notifications (un identifiant de votre téléphone et le contenu des notifications) et Infobip pour les SMS (votre numéro et le texte des messages, codes de connexion compris). Vous pouvez retirer votre accord et demander vos données à tout moment.';
 
   @override
   String get consentementDonnees => 'J\'accepte le traitement de mes données';
@@ -887,7 +887,7 @@ class TFr extends T {
 
   @override
   String get consentementNouveauTexte =>
-      'Le texte sur vos données a changé : votre nom est maintenant montré aux grossistes et aux hanouts avec qui vous travaillez.';
+      'Le texte sur vos données a changé : votre nom est montré aux grossistes et aux hanouts avec qui vous travaillez, et les notifications et les SMS passent par Google Firebase Cloud Messaging et Infobip, hors du Maroc.';
 
   @override
   String get lireEtAccepter => 'Lire et accepter';
@@ -895,4 +895,13 @@ class TFr extends T {
   @override
   String get profilConsentementRequis =>
       'Acceptez d\'abord le nouveau texte sur vos données pour enregistrer votre profil.';
+
+  @override
+  String get canalHaute => 'Urgent : dépannage, promos, réservations';
+
+  @override
+  String get canalMoyenne => 'Suivi : crédit, demandes, contestations';
+
+  @override
+  String get canalBasse => 'Stock embarqué';
 }
