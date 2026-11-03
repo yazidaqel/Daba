@@ -58,11 +58,30 @@ class Synchronisation {
             final c = stockage.objet('CONTESTATION', id);
             if (c != null) stockage.enregistrer('CONTESTATION', id, {...c, 'statut': 'OUVERTE'}..remove('resolueLe'));
           }
+          if (r['conflit'] case {'resolution': 'VERSION_SERVEUR_CONSERVEE', 'versionServeur': final Map v}) {
+            versionServeur(op['type'] as String, v.cast<String, dynamic>());
+          }
         }
       });
       // Un serveur qui n'acquitte rien ferait boucler : on retentera à la prochaine synchro.
       if (resultats.isEmpty) return;
     }
+  }
+
+  /// Geste plus ancien qu'une modification faite ailleurs : le serveur a gardé sa valeur, que le
+  /// tirage ne renverra pas (elle n'a pas changé) ; l'appareil la reprend à la place de la sienne.
+  void versionServeur(String typeOperation, Map<String, dynamic> v) {
+    final (entite, where, args) = switch (typeOperation) {
+      'TARIF' => ('TARIF', "json_extract(donnees, '\$.produitId') = ? AND json_extract(donnees, '\$.hanoutId') IS ?",
+          [v['produitId'], v['hanoutId']]),
+      'CREDIT_HANOUT' => ('COMPTE_CREDIT', "json_extract(donnees, '\$.hanout.id') = ?", [v['hanout']?['id']]),
+      'PARAMETRES_AMBULANT' => ('PARAMETRES', '1', <Object?>[]),
+      _ => (null, '', <Object?>[]),
+    };
+    if (entite == null) return;
+    final local = stockage.db.select('SELECT id FROM objet WHERE entite = ? AND ($where)', [entite, ...args]).firstOrNull;
+    final id = (v['id'] ?? local?['id'] ?? Stockage.nouvelId()) as String;
+    appliquer({'entite': entite, 'id': id, 'action': 'UPSERT', 'donnees': v});
   }
 
   /// Vrai si le serveur n'a plus de changements à donner.
@@ -119,6 +138,12 @@ class Synchronisation {
       case 'PARAMETRES':
         // Les paramètres du serveur (mentions légales, politique) remplacent toute copie locale.
         stockage.db.execute("DELETE FROM objet WHERE entite = 'PARAMETRES' AND id <> ?", [id]);
+      case 'TARIF':
+        // Un tarif saisi sur l'appareil est remplacé par celui du serveur (même produit, même hanout).
+        stockage.db.execute(
+            "DELETE FROM objet WHERE entite = 'TARIF' AND id <> ? AND json_extract(donnees, '\$.produitId') = ? "
+            "AND json_extract(donnees, '\$.hanoutId') IS ?",
+            [id, donnees['produitId'], donnees['hanoutId']]);
       case 'COMPTE_CREDIT':
         // Un compte créé sur l'appareil (plafond saisi hors ligne) est remplacé par celui du serveur.
         stockage.db.execute(

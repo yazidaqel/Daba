@@ -138,7 +138,7 @@ class EcranHanout extends StatelessWidget {
         ListTile(
           leading: const Ico(PhosphorIconsRegular.user),
           title: Text((h['gerant'] ?? '-') as String),
-          subtitle: Text([h['telephone'], h['adresse'], h['ville'], if (h['ice'] != null) 'ICE ${h['ice']}']
+          subtitle: Text([if (h['telephone'] case final String tel) ltr(tel), h['adresse'], h['ville'], if (h['ice'] != null) 'ICE ${h['ice']}']
               .whereType<String>()
               .join(' · ')),
         ),

@@ -291,6 +291,9 @@ class TAry extends T {
   String get remise => 'تخفيض';
 
   @override
+  String get retenirPrixHanout => 'خلّي هاد الثمن لهاد الحانوت';
+
+  @override
   String get remisePromo => 'تخفيض البرومو';
 
   @override
@@ -1092,6 +1095,9 @@ class TAryLatn extends TAry {
 
   @override
   String get remise => 'Takhfid';
+
+  @override
+  String get retenirPrixHanout => 'Khelli had taman l had l7anout';
 
   @override
   String get remisePromo => 'Takhfid promo';

@@ -285,8 +285,11 @@ void main() {
   });
 
   test('format des montants', () {
-    expect(dh(12550), '125,50 DH');
-    expect(dh(-5), '-0,05 DH');
+    expect(sansIsolats(dh(12550)), '125,50 DH');
+    expect(sansIsolats(dh(-5)), '-0,05 DH');
+    // Isolé du texte arabe : le signe reste devant le montant en RTL.
+    expect(dh(-5), '\u2066-0,05 DH\u2069');
+    expect(distance(1240), '1,2 km');
     expect(centimes('12,5'), 1250);
     expect(centimes('abc'), isNull);
     expect(distanceM(33.5731, -7.5898, 33.5731, -7.5898), 0);

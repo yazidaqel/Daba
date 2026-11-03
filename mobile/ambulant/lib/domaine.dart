@@ -13,11 +13,12 @@ class VenteRefusee implements Exception {
 enum Depassement { aucun, plafond, delai, plafondEtDelai }
 
 class LigneVente {
-  LigneVente({required this.produitId, required this.quantite, required this.prixUnitaire, this.tarif = 'STANDARD', this.remise = 0});
+  LigneVente({required this.produitId, required this.quantite, required this.prixUnitaire, this.tarif = 'STANDARD', this.remise = 0, this.retenir = false});
   final String produitId;
   int quantite;
   int prixUnitaire; // centimes
   String tarif;
+  bool retenir; // prix connu modifié : à retenir comme tarif négocié du hanout (choix explicite)
   int remise; // centimes, remise ponctuelle sur la ligne (ligne séparée, RG-F3)
   int get brut => quantite * prixUnitaire;
 }
@@ -133,6 +134,30 @@ class Ambulant {
     return (prix: standard.firstOrNull?['prixUnitaire'] as int?, tarif: 'STANDARD');
   }
 
+  /// Ligne locale du tarif (standard si [hanoutId] est null), pour la mettre à jour sur place.
+  ({String id, int prix})? _tarif(String produitId, String? hanoutId) {
+    final r = s.db.select(
+        "SELECT id, ${_j}prixUnitaire') prix FROM objet WHERE entite = 'TARIF' AND ${_j}produitId') = ? AND ${_j}hanoutId') IS ?",
+        [produitId, hanoutId]).firstOrNull;
+    return r == null ? null : (id: r['id'] as String, prix: r['prix'] as int);
+  }
+
+  /// Tarifs retenus à la vente (§3.4) : le premier prix d'un produit sans tarif devient le tarif
+  /// standard ; un prix connu modifié ne devient le tarif négocié du hanout que si l'ambulant l'a
+  /// demandé ([LigneVente.retenir]), sinon il ne vaut que pour cette vente (rabais du jour).
+  /// À appeler dans la transaction de la vente.
+  void _retenirTarifs(String hanoutId, List<LigneVente> lignes) {
+    for (final l in lignes) {
+      final h = l.retenir ? hanoutId : null;
+      if (h == null && prix(l.produitId, hanoutId).prix != null) continue;
+      final connu = _tarif(l.produitId, h);
+      if (l.prixUnitaire <= 0 || connu?.prix == l.prixUnitaire) continue;
+      final tarif = {'produitId': l.produitId, 'hanoutId': ?h, 'prixUnitaire': l.prixUnitaire};
+      s.enfiler('TARIF', tarif);
+      s.enregistrer('TARIF', connu?.id ?? Stockage.nouvelId(), tarif, local: true);
+    }
+  }
+
   // ------------------------------------------------------------------ karni
   Map<String, dynamic>? compte(String hanoutId) =>
       s.objets('COMPTE_CREDIT', where: '${_j}hanout.id\') = ?', args: [hanoutId]).firstOrNull;
@@ -239,6 +264,7 @@ class Ambulant {
     }
 
     return s.transaction(() {
+      _retenirTarifs(hanoutId, lignes);
       final serie = Synchronisation.series[type]!;
       final sequence = s.sequenceSuivante(serie);
       final numero = Stockage.numero(prefixe, serie, sequence);

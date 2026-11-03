@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:daba_shared/daba_shared.dart';
+import 'package:daba_shared/daba_shared.dart' as shared show dh;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:path_provider/path_provider.dart';
@@ -20,6 +21,8 @@ Future<File> documentPdf(Map<String, dynamic> doc, T t, Locale locale) async {
   final rtl = locale.languageCode == 'ar' || (locale.languageCode == 'ary' && locale.scriptCode != 'Latn');
   final mentions = doc['mentionsLegales'] as Map?;
   String lib(Object? l) => libelle(l, locale);
+  // Le PDF n'a pas de glyphe pour les isolats LRI/PDI des montants à l'écran.
+  String dh(int centimes) => sansIsolats(shared.dh(centimes));
 
   final pdf = pw.Document(theme: pw.ThemeData.withFont(base: latine, bold: latineGras, fontFallback: [arabe]));
   pdf.addPage(pw.Page(

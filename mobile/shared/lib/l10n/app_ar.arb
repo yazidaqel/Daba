@@ -87,6 +87,7 @@
   "reglementSuperieur": "المبلغ المدفوع يتجاوز المجموع",
   "prixUnitaire": "ثمن الوحدة",
   "remise": "تخفيض",
+  "retenirPrixHanout": "اعتماد هذا الثمن لهذه البقالة",
   "remisePromo": "تخفيض العرض",
   "tarifNegocie": "سعر متفاوض عليه",
   "stockInsuffisant": "المخزون {n}",

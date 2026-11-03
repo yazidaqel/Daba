@@ -291,6 +291,9 @@ class TAr extends T {
   String get remise => 'تخفيض';
 
   @override
+  String get retenirPrixHanout => 'اعتماد هذا الثمن لهذه البقالة';
+
+  @override
   String get remisePromo => 'تخفيض العرض';
 
   @override

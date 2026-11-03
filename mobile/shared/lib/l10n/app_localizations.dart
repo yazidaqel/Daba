@@ -622,6 +622,12 @@ abstract class T {
   /// **'Remise'**
   String get remise;
 
+  /// No description provided for @retenirPrixHanout.
+  ///
+  /// In fr, this message translates to:
+  /// **'Retenir ce prix pour ce hanout'**
+  String get retenirPrixHanout;
+
   /// No description provided for @remisePromo.
   ///
   /// In fr, this message translates to:

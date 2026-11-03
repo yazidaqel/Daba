@@ -57,18 +57,30 @@ class _EcranVenteState extends State<EcranVente> {
     final t = context.t;
     final prix = TextEditingController(text: (l.prixUnitaire / 100).toStringAsFixed(2));
     final remise = TextEditingController(text: l.remise == 0 ? '' : (l.remise / 100).toStringAsFixed(2));
+    // Prix déjà connu (standard ou négocié) : le changer vaut pour cette vente, sauf choix explicite.
+    final connu = context.daba.m.prix(l.produitId, widget.hanoutId).prix != null;
+    var retenir = l.retenir;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (c) => AlertDialog(
-        title: Text(context.lib(context.daba.m.produit(l.produitId)?['libelle'])),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          ChampMontant(controleur: prix, etiquette: t.prixUnitaire),
-          ChampMontant(controleur: remise, etiquette: t.remise),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t.annuler)),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(t.valider)),
-        ],
+      builder: (c) => StatefulBuilder(
+        builder: (c, setDialog) => AlertDialog(
+          title: Text(context.lib(context.daba.m.produit(l.produitId)?['libelle'])),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            ChampMontant(controleur: prix, etiquette: t.prixUnitaire),
+            ChampMontant(controleur: remise, etiquette: t.remise),
+            if (connu)
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                value: retenir,
+                onChanged: (v) => setDialog(() => retenir = v!),
+                title: Text(t.retenirPrixHanout),
+              ),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: Text(t.annuler)),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(t.valider)),
+          ],
+        ),
       ),
     );
     if (ok != true) return;
@@ -76,9 +88,10 @@ class _EcranVenteState extends State<EcranVente> {
       final p = centimes(prix.text);
       if (p != null && p != l.prixUnitaire) {
         // Changer un prix connu = tarif négocié ; saisir le premier prix d'un produit reste le tarif standard.
-        if (l.prixUnitaire != 0) l.tarif = 'NEGOCIE';
+        if (connu) l.tarif = 'NEGOCIE';
         l.prixUnitaire = p;
       }
+      l.retenir = connu && retenir;
       l.remise = centimes(remise.text) ?? 0;
     });
   }
@@ -87,6 +100,8 @@ class _EcranVenteState extends State<EcranVente> {
     final t = context.t;
     final daba = context.daba;
     if (_lignes.isEmpty) return;
+    // Produit sans tarif connu (livraison d'un dépannage) : le prix est saisi avant d'émettre.
+    if (_lignes.where((l) => l.prixUnitaire <= 0).firstOrNull case final l?) return _modifier(l);
     if (_credit < 0) return context.message(t.reglementSuperieur);
     if (_montantCheque > 0 && _chequeNumero.text.trim().isEmpty) return context.message(t.champObligatoire(t.chequeNumero));
     try {

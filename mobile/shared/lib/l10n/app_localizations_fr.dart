@@ -293,6 +293,9 @@ class TFr extends T {
   String get remise => 'Remise';
 
   @override
+  String get retenirPrixHanout => 'Retenir ce prix pour ce hanout';
+
+  @override
   String get remisePromo => 'Remise promo';
 
   @override

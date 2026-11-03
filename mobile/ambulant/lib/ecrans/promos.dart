@@ -52,10 +52,10 @@ class OngletPromos extends StatelessWidget {
 String descriptionRemise(BuildContext context, Map r) {
   final t = context.t;
   return switch (r['type']) {
-    'POURCENTAGE' => t.remisePourcent('${r['pourcentage']}'),
+    'POURCENTAGE' => ltr(t.remisePourcent('${r['pourcentage']}')),
     'PRIX_NET' => t.remisePrixNet(dh(r['prixNet'] as int)),
     'PRODUIT_OFFERT' => t.remiseOfferte('${r['quantiteAchetee']}', '${r['quantiteOfferte']}'),
-    'PALIER' => t.remisePalier((r['paliers'] as List).map((p) => '${p['quantiteMin']}+ : ${p['pourcentage']} %').join(', ')),
+    'PALIER' => t.remisePalier((r['paliers'] as List).map((p) => ltr('${p['quantiteMin']}+ : ${p['pourcentage']} %')).join(', ')),
     _ => '',
   };
 }

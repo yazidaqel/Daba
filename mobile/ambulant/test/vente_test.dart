@@ -70,6 +70,62 @@ void main() {
       expect(m.stockPromo(coca).single.quantite, 0);
     });
 
+    test('premier prix retenu comme tarif standard ; prix connu changé retenu seulement sur demande (§3.4)', () {
+      final m = monter();
+      const the = '77777777-7777-4777-8777-777777777777';
+      m.emettre(hanoutId: hanoutId, lignes: [LigneVente(produitId: the, quantite: 1, prixUnitaire: 1500), coca1(1)]);
+      expect(m.prix(the, hanoutId), (prix: 1500, tarif: 'STANDARD'));
+      expect([for (final o in m.s.enAttente()) o['type']], ['TARIF', 'EMISSION_DOCUMENT'], reason: 'coca au tarif connu');
+
+      m.emettre(hanoutId: hanoutId, lignes: [LigneVente(produitId: the, quantite: 1, prixUnitaire: 1200, tarif: 'NEGOCIE')]);
+      expect(m.prix(the, hanoutId), (prix: 1500, tarif: 'STANDARD'), reason: 'rabais du jour : rien de retenu');
+      expect(m.s.enAttente().where((o) => o['type'] == 'TARIF').length, 1);
+
+      m.emettre(hanoutId: hanoutId, lignes: [LigneVente(produitId: the, quantite: 1, prixUnitaire: 1400, tarif: 'NEGOCIE', retenir: true)]);
+      expect(m.prix(the, hanoutId), (prix: 1400, tarif: 'NEGOCIE'));
+      expect(m.prix(the, 'autre-hanout'), (prix: 1500, tarif: 'STANDARD'));
+      m.emettre(hanoutId: hanoutId, lignes: [LigneVente(produitId: the, quantite: 1, prixUnitaire: 1400, tarif: 'NEGOCIE', retenir: true)]);
+      expect(m.s.enAttente().where((o) => o['type'] == 'TARIF').length, 2, reason: 'prix inchangé : pas de nouveau tarif');
+
+      Synchronisation(m.s, Api('http://serveur'), appareilId: appareil, prefixe: 'K7Q2').appliquer({
+        'entite': 'TARIF', 'id': '88888888-8888-4888-8888-888888888888', 'action': 'UPSERT',
+        'donnees': {'produitId': the, 'prixUnitaire': 1550},
+      });
+      expect(m.s.objets('TARIF', where: "json_extract(donnees, '\$.produitId') = ?", args: [the]).length, 2);
+      expect(m.prix(the, 'autre-hanout').prix, 1550);
+    });
+
+    test("tarif ou plafond en conflit : l'appareil reprend la version gardée par le serveur", () async {
+      final m = monter();
+      m.emettre(hanoutId: hanoutId, lignes: [LigneVente(produitId: coca, quantite: 1, prixUnitaire: 900, tarif: 'NEGOCIE', retenir: true)]);
+      expect(m.prix(coca, hanoutId).prix, 900);
+      m.definirCredit(hanoutId, plafond: 100000);
+      const compteServeur = {'id': '99999999-0000-4000-8000-000000000000', 'hanout': {'id': hanoutId, 'nom': 'Hanout Derb Omar'},
+        'solde': 0, 'plafond': 50000};
+      final client = MockClient((req) async {
+        if (req.url.path == '/v1/sync/operations') {
+          final ops = (jsonDecode(req.body)['operations'] as List).cast<Map>();
+          return http.Response(jsonEncode({'resultats': [
+            for (final o in ops)
+              o['type'] == 'TARIF'
+                  ? {'operationId': o['id'], 'statut': 'EN_CONFLIT', 'conflit': {
+                      'code': 'MODIFIE_AILLEURS', 'resolution': 'VERSION_SERVEUR_CONSERVEE',
+                      'versionServeur': {'produitId': coca, 'hanoutId': hanoutId, 'prixUnitaire': 850}}}
+                  : o['type'] == 'CREDIT_HANOUT'
+                      ? {'operationId': o['id'], 'statut': 'EN_CONFLIT', 'conflit': {
+                          'code': 'MODIFIE_AILLEURS', 'resolution': 'VERSION_SERVEUR_CONSERVEE', 'versionServeur': compteServeur}}
+                      : {'operationId': o['id'], 'statut': 'APPLIQUEE'}
+          ]}), 200);
+        }
+        return http.Response(jsonEncode({'curseur': 'c', 'plusDeChangements': false, 'changements': []}), 200);
+      });
+      await Synchronisation(m.s, Api('http://serveur', client: client), appareilId: appareil, prefixe: 'K7Q2').synchroniser();
+      expect(m.prix(coca, hanoutId), (prix: 850, tarif: 'NEGOCIE'));
+      expect(m.s.objets('TARIF').length, 2, reason: 'standard + négocié, sans doublon');
+      expect(m.compte(hanoutId)?['plafond'], 50000);
+      expect(m.s.objets('COMPTE_CREDIT').length, 1);
+    });
+
     test('une vente qui rend le stock négatif est enregistrée (RG-S1)', () {
       final m = monter();
       m.emettre(hanoutId: hanoutId, lignes: [coca1(200)]);
@@ -231,7 +287,7 @@ void main() {
     final schemaDe = {
       'EMISSION_DOCUMENT': 'EmissionDocument', 'VERSEMENT': 'VersementSaisie', 'CHARGEMENT': 'Chargement',
       'HANOUT': 'NouveauHanout', 'CREDIT_HANOUT': 'CreditHanoutSaisie', 'PARAMETRES_AMBULANT': 'ParametresAmbulantSaisie',
-      'RESOLUTION_CONTESTATION': 'ResolutionContestation',
+      'RESOLUTION_CONTESTATION': 'ResolutionContestation', 'TARIF': 'Tarif',
     };
 
     final m = monter(parametres: {
@@ -241,6 +297,7 @@ void main() {
     final h = m.creerHanout(nomHanout: 'Nouveau', telephone: '+212612345678');
     m.emettre(hanoutId: h['id'] as String, lignes: [coca1(7)..remise = 100], type: 'FACTURE',
         reglements: [const Reglement('CHEQUE', 1000, chequeNumero: '123')], confirmeParHanout: true);
+    m.emettre(hanoutId: hanoutId, lignes: [LigneVente(produitId: coca, quantite: 1, prixUnitaire: 750, tarif: 'NEGOCIE', retenir: true)]);
     m.versement(hanoutId, 500);
     m.definirCredit(hanoutId, plafond: 100000, delaiMaxJours: 30);
     m.definirPolitique('BLOQUER');

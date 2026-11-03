@@ -139,6 +139,7 @@
   "reglementSuperieur": "Le règlement dépasse le total",
   "prixUnitaire": "Prix unitaire",
   "remise": "Remise",
+  "retenirPrixHanout": "Retenir ce prix pour ce hanout",
   "remisePromo": "Remise promo",
   "tarifNegocie": "tarif négocié",
   "stockInsuffisant": "stock {n}",
