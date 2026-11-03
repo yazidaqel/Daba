@@ -50,7 +50,9 @@ export interface paths {
         /**
          * Renouvelle la session de l'appareil avec le refreshToken (valable 90 jours)
          * @description L'accessToken vaut 24 h ; l'app le renouvelle ici, sans nouvel OTP, tant que l'appareil
-         *     n'est pas déconnecté à distance. 401 si le refreshToken est invalide ou l'appareil révoqué.
+         *     n'est pas déconnecté à distance. 401 si le refreshToken est invalide, ou si la session a été
+         *     fermée (déconnexion, nouvelle connexion, compte désactivé). 403 `…/appareil-revoque` (v0.7.0,
+         *     avant : 401) si l'appareil a été révoqué : l'app efface ses données locales.
          */
         post: operations["rafraichirSession"];
         delete?: never;
@@ -178,15 +180,237 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Liste les grossistes et les grands clients inscrits (back-office)
+         * @description Seules les organisations GROSSISTE et GRAND_CLIENT sont listées ; les ambulants, hanouts et
+         *     administrateurs ont chacun leur organisation personnelle, qu'on retrouve par
+         *     `GET /v1/admin/utilisateurs`. Tri par nom.
+         */
+        get: operations["listerOrganisations"];
         put?: never;
         /**
          * L'administrateur inscrit un grossiste ou un grand client et ses utilisateurs
          * @description Les ambulants s'inscrivent seuls par OTP ; un numéro présent dans la base POS devient un
          *     compte HANOUT à sa première connexion. Grossistes et grands clients sont créés ici ; leurs
-         *     utilisateurs se connectent ensuite par OTP. 409 si un numéro est déjà inscrit.
+         *     utilisateurs se connectent ensuite par OTP. 409 si un numéro est déjà inscrit. Inscrit au
+         *     journal d'audit (ORGANISATION_CREEE, v0.7.0).
          */
         post: operations["creerOrganisation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/organisations/{organisationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Détail d'une organisation et de ses utilisateurs (back-office)
+         * @description Toute organisation, y compris l'organisation personnelle d'un ambulant, d'un hanout ou d'un
+         *     administrateur (`UtilisateurAdmin.organisation.id`).
+         */
+        get: operations["lireOrganisation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/organisations/{organisationId}/utilisateurs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ajoute un utilisateur à un grossiste ou à un grand client existant
+         * @description L'utilisateur prend le rôle de l'organisation (GROSSISTE ou GRAND_CLIENT) et se connecte
+         *     ensuite par OTP ; aucun SMS ne part à l'ajout. 409 si le numéro est déjà inscrit (quel que
+         *     soit le rôle), ou si l'organisation n'est ni un grossiste ni un grand client (les
+         *     organisations personnelles n'ont qu'un utilisateur, et les administrateurs viennent de la
+         *     configuration du serveur). Inscrit au journal d'audit (UTILISATEUR_AJOUTE).
+         */
+        post: operations["ajouterUtilisateurOrganisation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/utilisateurs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recherche d'utilisateurs, tous rôles (support)
+         * @description `q` cherche dans le téléphone (chiffres, sous toute forme : 0612…, 212612…, +212612…, ou une
+         *     partie), dans le nom de l'utilisateur et dans celui de son organisation. Chaque résultat
+         *     porte ses rôles, son organisation, son dernier consentement CNDP et ses appareils. Tri du
+         *     plus récent au plus ancien inscrit.
+         */
+        get: operations["chercherUtilisateurs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/utilisateurs/{utilisateurId}/desactivation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Désactive un compte (modération) ; ses sessions se ferment
+         * @description Toutes les sessions de l'utilisateur se ferment, ses jetons push sont effacés, sa
+         *     disponibilité de dépannage est coupée, il n'est plus ciblé par les notifications (promos,
+         *     propositions de dépôt) et ne peut plus se connecter : `POST /v1/auth/otp/verify` répond 403
+         *     `…/utilisateur-desactive`. Rien n'est effacé : ses pièces, son karni et la file hors ligne de
+         *     son téléphone attendent une réactivation. Un administrateur ne peut pas se désactiver
+         *     lui-même (409). Sans effet sur un compte déjà désactivé. Inscrit au journal d'audit
+         *     (UTILISATEUR_DESACTIVE).
+         */
+        post: operations["desactiverUtilisateur"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/utilisateurs/{utilisateurId}/reactivation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Réactive un compte désactivé ; l'utilisateur se reconnecte par OTP
+         * @description Les sessions fermées ne se rouvrent pas : l'utilisateur repasse par l'OTP, et un ambulant
+         *     réactive lui-même sa disponibilité. Sans effet sur un compte actif. Inscrit au journal
+         *     d'audit (UTILISATEUR_REACTIVE).
+         */
+        post: operations["reactiverUtilisateur"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/appareils/{appareilId}/revocation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Déconnexion à distance d'un appareil perdu ou volé (§10)
+         * @description L'appareil est révoqué, définitivement pour cet `appareilId` : sa session se ferme, son jeton
+         *     push est effacé, et son prochain appel (`POST /v1/sync/operations`, `POST /v1/auth/refresh`
+         *     ou tout autre) répond 403 `…/appareil-revoque`, sur quoi l'app efface ses données locales.
+         *     Les opérations hors ligne pas encore synchronisées sur ce téléphone sont perdues. Une
+         *     connexion OTP sur un autre appareil (ou après effacement, avec un nouvel `appareilId`)
+         *     fonctionne, avec un nouveau préfixe de numérotation (RG-F1). La disponibilité de dépannage
+         *     de l'utilisateur est coupée (sa dernière position venait peut-être de ce téléphone). Sans
+         *     effet sur un appareil déjà révoqué. Inscrit au journal d'audit (APPAREIL_REVOQUE, avec
+         *     `utilisateurIds` : tous les comptes de l'appareil).
+         *     La révocation vise l'appareil physique, pas un compte (v0.8.0) : un téléphone partagé par
+         *     plusieurs comptes s'efface pour tous, et aucun d'eux ne peut plus s'y reconnecter. Seul le
+         *     compte courant (`compteActuel`) y avait une session ; c'est sa disponibilité qui est coupée.
+         */
+        post: operations["revoquerAppareil"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Journal d'audit des opérations sensibles (§10), en lecture seule
+         * @description Du plus récent au plus ancien. Le journal est en ajout seul : la base refuse toute
+         *     modification ou suppression, et l'API n'offre aucune écriture.
+         */
+        get: operations["lireJournalAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/canaux": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Configuration effective des canaux de notification (§9, « Canaux configurables »)
+         * @description Configuration en vigueur : ce qui a été enregistré par `PUT`, complété par les valeurs par
+         *     défaut du serveur (tableau §9 du pilote) pour tout ce qui n'a pas été enregistré. Pour
+         *     chaque canal, `fournisseursDisponibles` liste les fournisseurs de ce serveur et dit si leurs
+         *     identifiants sont configurés. Aucun secret (clé d'API, compte de service) n'est jamais
+         *     renvoyé : ils viennent des variables d'environnement ou de fichiers montés du serveur.
+         *     Fournisseur par défaut d'un canal : le vrai opérateur s'il est configuré, sinon JOURNAL.
+         *     La base URL Infobip doit être en HTTPS (la clé part dans l'en-tête), sinon Infobip est
+         *     présenté comme non configuré.
+         */
+        get: operations["lireConfigurationCanaux"];
+        /**
+         * Active ou coupe les canaux, choisit les fournisseurs et le routage par type de message
+         * @description Remplace la configuration enregistrée ; prise en compte dès l'envoi suivant, sans
+         *     redémarrage ni développement. Un canal, un type de message ou une organisation absent de la
+         *     requête reprend la valeur par défaut du serveur. Un message part par le canal `principal`,
+         *     puis par le canal `repli` si le principal échoue, refuse le message, est coupé (au niveau du
+         *     système, du type de message ou de l'organisation du destinataire) ou si le destinataire n'y
+         *     est pas joignable (aucun jeton push, aucun téléphone).
+         *     Un fournisseur dont les identifiants ne sont pas configurés sur le serveur ne peut pas être
+         *     choisi (422, `type` …/fournisseur-non-configure) ; JOURNAL (messages écrits dans les logs) ne
+         *     peut plus l'être pour un canal dont un vrai fournisseur est configuré (422, `type`
+         *     …/journal-interdit). Dès qu'un vrai fournisseur est configuré sur le serveur, JOURNAL n'écrit
+         *     plus que le type de message et le numéro masqué.
+         *     L'OTP part seulement par SMS (`principal` SMS, sans `repli`, SMS absent de `inactifs`) et le
+         *     SMS ne peut pas être coupé au niveau du système : sinon personne, administrateur compris, ne
+         *     pourrait se connecter (400). La coupure par organisation ne s'applique pas à l'OTP. Une
+         *     `organisationId` inconnue répond 400.
+         *     Opération sensible inscrite au journal d'audit (auteur, date, configuration enregistrée),
+         *     que la base refuse de modifier ou d'effacer.
+         */
+        put: operations["modifierConfigurationCanaux"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -343,6 +567,8 @@ export interface paths {
          * @description CSV UTF-8, séparateur « ; » ou « , », première ligne d'en-têtes : code_pos, nom, gerant,
          *     telephone, lat, lon, adresse, ville, ice. Clé : code_pos (réimporter met à jour). Téléphones
          *     06…, 2126… ou 002126… acceptés. Une ligne invalide est rejetée avec son numéro, les autres passent.
+         *     Bilan inscrit au journal d'audit (IMPORT_HANOUTS, v0.7.0). Pour consulter la base importée,
+         *     l'administrateur utilise `GET /v1/hanouts` (toute la base, sans cloisonnement).
          */
         post: operations["importerHanouts"];
         delete?: never;
@@ -370,6 +596,8 @@ export interface paths {
          *     categorie_libelle_ary_arab, categorie_libelle_ary_latn. Une valeur non vide crée ou remplace
          *     ce libellé de la catégorie (les autres langues sont gardées) ; une catégorie créée sans
          *     libellé français prend son code. Les produits de la catégorie sont republiés (entité PRODUIT).
+         *     Bilan inscrit au journal d'audit (IMPORT_PRODUITS, v0.7.0). Pour consulter le référentiel,
+         *     l'administrateur utilise `GET /v1/produits` (tous les produits, toutes marques).
          */
         post: operations["importerProduits"];
         delete?: never;
@@ -1255,8 +1483,10 @@ export interface components {
              *     - `requete-invalide` (400, détail par champ dans `erreurs`)
              *     - `non-authentifie` (401 : jeton absent, invalide, expiré, ou session fermée)
              *     - `code-invalide` (401, OTP faux ou expiré)
-             *     - `appareil-revoque` (403 sur tout appel authentifié, 401 à `POST /v1/auth/otp/verify` :
-             *       appareil déconnecté à distance, l'app efface ses données locales)
+             *     - `appareil-revoque` (403 sur tout appel authentifié et à `POST /v1/auth/refresh`, 401 à
+             *       `POST /v1/auth/otp/verify` : appareil déconnecté à distance, l'app efface ses données locales)
+             *     - `utilisateur-desactive` (403 sur tout appel authentifié et à `POST /v1/auth/otp/verify` :
+             *       compte désactivé par l'administrateur ; rien n'est effacé)
              *     - `consentement-requis` (403 : consentement CNDP à recueillir, `PUT /v1/moi/consentement`)
              *     - `role-non-autorise` (403)
              *     - `appareil-different` (403 : `appareilId` du corps différent de celui de la session)
@@ -1396,6 +1626,201 @@ export interface components {
                 id: string;
                 telephone: components["schemas"]["Telephone"];
             }[];
+        };
+        MembreSaisie: {
+            telephone: components["schemas"]["Telephone"];
+            nom?: string;
+        };
+        OrganisationAdmin: {
+            /**
+             * Format: uuid
+             * @description Pour un grossiste, c'est aussi son grossisteId
+             */
+            id: string;
+            type: components["schemas"]["TypeOrganisation"];
+            nom: string;
+            /** Format: date-time */
+            creeLe: string;
+            nombreUtilisateurs: number;
+            /** @description Fiche du grossiste (position, adresse, ville) ; présente pour le type GROSSISTE */
+            grossiste?: components["schemas"]["Grossiste"];
+        };
+        /**
+         * @description PLATEFORME = organisation d'un administrateur
+         * @enum {string}
+         */
+        TypeOrganisation: "AMBULANT" | "HANOUT" | "GROSSISTE" | "GRAND_CLIENT" | "PLATEFORME";
+        OrganisationAdminPage: components["schemas"]["PageMeta"] & {
+            contenu: components["schemas"]["OrganisationAdmin"][];
+        };
+        OrganisationDetail: components["schemas"]["OrganisationAdmin"] & {
+            utilisateurs: components["schemas"]["UtilisateurAdmin"][];
+        };
+        /**
+         * @description Fiche de support d'un utilisateur (ADMIN seulement, CNDP). Jamais de code OTP, de jeton
+         *     (accès, refresh, push) ni de session.
+         */
+        UtilisateurAdmin: {
+            /** Format: uuid */
+            id: string;
+            telephone: components["schemas"]["Telephone"];
+            nom?: string;
+            roles: ("AMBULANT" | "HANOUT" | "GROSSISTE" | "GRAND_CLIENT" | "ADMIN")[];
+            organisation: {
+                /** Format: uuid */
+                id: string;
+                type: components["schemas"]["TypeOrganisation"];
+                nom: string;
+            };
+            /**
+             * Format: uuid
+             * @description Fiche hanout (base POS), pour le rôle HANOUT
+             */
+            hanoutId?: string;
+            /** @description Faux si l'administrateur a désactivé le compte */
+            actif: boolean;
+            /**
+             * Format: date-time
+             * @description Présent si le compte est désactivé
+             */
+            desactiveLe?: string;
+            /** Format: date-time */
+            creeLe: string;
+            /** @description Dernier consentement CNDP enregistré ; absent s'il n'en a jamais donné */
+            consentement?: components["schemas"]["Consentement"];
+            /**
+             * @description Appareils sur lesquels ce compte s'est connecté (v0.8.0 : y compris un téléphone partagé
+             *     dont un autre compte est depuis le compte courant), du plus récemment vu au plus ancien.
+             */
+            appareils: components["schemas"]["AppareilAdmin"][];
+        };
+        /**
+         * @description Un appareil vu depuis un compte. Plusieurs comptes peuvent utiliser le même téléphone (un
+         *     préfixe de numérotation par couple ambulant/appareil, RG-F1) ; l'appareil n'a qu'une session
+         *     à la fois, celle du dernier compte connecté (`compteActuel`). Les dates (`creeLe`,
+         *     `derniereConnexion`, `vuLe`) et le préfixe sont ceux de ce compte sur cet appareil ;
+         *     `plateforme`, `langue`, `revoque` et `revoqueLe` sont ceux de l'appareil physique.
+         *     La révocation vaut pour l'appareil, donc pour tous ses comptes (`autresComptes`).
+         */
+        AppareilAdmin: {
+            /** Format: uuid */
+            appareilId: string;
+            /**
+             * @description Connue dès que l'appareil a déclaré un jeton push
+             * @enum {string}
+             */
+            plateforme?: "ANDROID" | "IOS";
+            langue?: components["schemas"]["Langue"];
+            prefixeNumerotation?: components["schemas"]["PrefixeNumerotation"];
+            /**
+             * Format: date-time
+             * @description Première connexion de ce compte sur cet appareil
+             */
+            creeLe: string;
+            /**
+             * Format: date-time
+             * @description Dernière connexion par OTP de ce compte sur cet appareil
+             */
+            derniereConnexion?: string;
+            /**
+             * Format: date-time
+             * @description Dernier appel authentifié de ce compte sur cet appareil (à 5 minutes près ; posé dès la connexion)
+             */
+            vuLe?: string;
+            /** @description Ce compte est le dernier connecté sur l'appareil, le seul qui peut y avoir une session */
+            compteActuel: boolean;
+            /** @description Ce compte a une session ouverte sur l'appareil (jamais vrai si `compteActuel` est faux) */
+            sessionOuverte: boolean;
+            /** @description Un jeton push est enregistré pour la session ouverte de ce compte (le jeton n'est jamais renvoyé) */
+            pushActif: boolean;
+            /** @description Appareil révoqué (§10), pour tous ses comptes */
+            revoque: boolean;
+            /** Format: date-time */
+            revoqueLe?: string;
+            /** @description Autres comptes qui se sont connectés sur cet appareil, du plus ancien au plus récent */
+            autresComptes: components["schemas"]["CompteAppareil"][];
+        };
+        CompteAppareil: {
+            /** Format: uuid */
+            id: string;
+            telephone: components["schemas"]["Telephone"];
+            nom?: string;
+        };
+        UtilisateurAdminPage: components["schemas"]["PageMeta"] & {
+            contenu: components["schemas"]["UtilisateurAdmin"][];
+        };
+        /**
+         * @description Opération inscrite au journal d'audit : CONFIGURATION_CANAUX, ORGANISATION_CREEE,
+         *     UTILISATEUR_AJOUTE, UTILISATEUR_DESACTIVE, UTILISATEUR_REACTIVE, APPAREIL_REVOQUE,
+         *     IMPORT_HANOUTS, IMPORT_PRODUITS. Liste ouverte : une valeur inconnue s'affiche telle quelle.
+         * @example APPAREIL_REVOQUE
+         */
+        OperationAudit: string;
+        EntreeAudit: {
+            /** Format: int64 */
+            id: number;
+            /** Format: date-time */
+            le: string;
+            /** @description Utilisateur qui a fait l'opération (`nom`, ou son téléphone s'il n'a pas de nom) */
+            auteur?: components["schemas"]["Reference"];
+            /** Format: uuid */
+            appareilId?: string;
+            operation: components["schemas"]["OperationAudit"];
+            /**
+             * @description Contexte de l'opération : identifiants (`utilisateurId`, `organisationId`, `appareilId`),
+             *     bilan d'un import, configuration enregistrée. Jamais de téléphone, de code ni de secret.
+             */
+            details?: Record<string, never>;
+        };
+        EntreeAuditPage: components["schemas"]["PageMeta"] & {
+            contenu: components["schemas"]["EntreeAudit"][];
+        };
+        /** @enum {string} */
+        Canal: "PUSH" | "SMS" | "WHATSAPP";
+        /**
+         * @description Type de message de la couche canaux (lignes du tableau §9)
+         * @enum {string}
+         */
+        TypeMessage: "OTP" | "RUPTURE_SIGNALEE" | "DEMANDE_ACCEPTEE" | "DEMANDE_PRISE" | "DEMANDE_EN_ROUTE" | "DEMANDE_LIVREE" | "DEMANDE_SANS_REPONSE" | "PROMO_CONFIRMEE" | "RESERVATION_EXPIRE_BIENTOT" | "PROPOSITION_DEPOT" | "RETRAIT_EFFECTUE" | "DOCUMENT_EMIS" | "RECEPTION_ECART" | "CONTESTATION";
+        /**
+         * @description Fournisseur d'un canal. JOURNAL écrit seulement le message dans les logs du serveur (poste de
+         *     dev, démo) ; INFOBIP (SMS) et FCM (push, Firebase Cloud Messaging) sont les vrais opérateurs.
+         *     WhatsApp n'a encore que JOURNAL.
+         * @enum {string}
+         */
+        FournisseurCanal: "JOURNAL" | "INFOBIP" | "FCM";
+        ConfigurationCanaux: {
+            /** @description Niveau système, un élément par canal */
+            canaux: components["schemas"]["ParametreCanal"][];
+            /** @description Routage par type de message */
+            types: components["schemas"]["RoutageMessage"][];
+            /** @description Canaux coupés pour les destinataires d'une organisation (les autres restent actifs) */
+            organisations: components["schemas"]["CanauxOrganisation"][];
+        };
+        ParametreCanal: {
+            canal: components["schemas"]["Canal"];
+            /** @description Canal ouvert au niveau du système */
+            actif: boolean;
+            fournisseur: components["schemas"]["FournisseurCanal"];
+            /** @description Fournisseurs de ce canal sur ce serveur (ignoré en écriture) */
+            readonly fournisseursDisponibles?: {
+                code: components["schemas"]["FournisseurCanal"];
+                /** @description Identifiants présents sur le serveur ; seul un fournisseur configuré peut être choisi */
+                configure: boolean;
+            }[];
+        };
+        RoutageMessage: {
+            type: components["schemas"]["TypeMessage"];
+            principal: components["schemas"]["Canal"];
+            /** @description Canal de repli, différent du principal ; absent = pas de repli */
+            repli?: components["schemas"]["Canal"];
+            /** @description Canaux coupés pour ce type de message */
+            inactifs?: components["schemas"]["Canal"][];
+        };
+        CanauxOrganisation: {
+            /** Format: uuid */
+            organisationId: string;
+            inactifs: components["schemas"]["Canal"][];
         };
         FichierImport: {
             fichier: string;
@@ -2863,8 +3288,8 @@ export interface components {
             };
         };
         /**
-         * @description Rôle non autorisé (`…/role-non-autorise`), consentement CNDP manquant (`…/consentement-requis`)
-         *     ou appareil déconnecté à distance (`…/appareil-revoque`)
+         * @description Rôle non autorisé (`…/role-non-autorise`), consentement CNDP manquant (`…/consentement-requis`),
+         *     appareil déconnecté à distance (`…/appareil-revoque`) ou compte désactivé (`…/utilisateur-desactive`)
          */
         Forbidden: {
             headers: {
@@ -2935,6 +3360,8 @@ export interface components {
         /** @description Borne supérieure exclue */
         Jusqua: string;
         AppareilId: string;
+        OrganisationId: string;
+        UtilisateurId: string;
         DocumentId: string;
         CampagneId: string;
         DepotId: string;
@@ -2997,6 +3424,15 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
+            /** @description Compte désactivé par l'administrateur (`…/utilisateur-desactive`), code juste */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             410: components["responses"]["LienExpire"];
             429: components["responses"]["Problem"];
         };
@@ -3027,6 +3463,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AppareilRevoque"];
         };
     };
     seDeconnecter: {
@@ -3168,6 +3605,35 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    listerOrganisations: {
+        parameters: {
+            query?: {
+                type?: "GROSSISTE" | "GRAND_CLIENT";
+                /** @description Partie du nom de l'organisation (sans casse) */
+                q?: string;
+                page?: components["parameters"]["Page"];
+                taille?: components["parameters"]["Taille"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page d'organisations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganisationAdminPage"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     creerOrganisation: {
         parameters: {
             query?: never;
@@ -3194,6 +3660,263 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    lireOrganisation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organisationId: components["parameters"]["OrganisationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Organisation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganisationDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    ajouterUtilisateurOrganisation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organisationId: components["parameters"]["OrganisationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MembreSaisie"];
+            };
+        };
+        responses: {
+            /** @description Utilisateur ajouté */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UtilisateurAdmin"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    chercherUtilisateurs: {
+        parameters: {
+            query?: {
+                q?: string;
+                role?: "AMBULANT" | "HANOUT" | "GROSSISTE" | "GRAND_CLIENT" | "ADMIN";
+                page?: components["parameters"]["Page"];
+                taille?: components["parameters"]["Taille"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page d'utilisateurs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UtilisateurAdminPage"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    desactiverUtilisateur: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                utilisateurId: components["parameters"]["UtilisateurId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Utilisateur désactivé */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UtilisateurAdmin"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    reactiverUtilisateur: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                utilisateurId: components["parameters"]["UtilisateurId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Utilisateur actif */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UtilisateurAdmin"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    revoquerAppareil: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                appareilId: components["parameters"]["AppareilId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Appareil révoqué ; renvoie son compte courant, avec tous ses appareils ; l'entrée de cet
+             *     appareil liste dans `autresComptes` les autres comptes touchés
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UtilisateurAdmin"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    lireJournalAudit: {
+        parameters: {
+            query?: {
+                /** @description Borne inférieure incluse */
+                depuis?: components["parameters"]["Depuis"];
+                /** @description Borne supérieure exclue */
+                jusqua?: components["parameters"]["Jusqua"];
+                /** @description Utilisateur qui a fait l'opération */
+                auteurId?: string;
+                operation?: components["schemas"]["OperationAudit"];
+                page?: components["parameters"]["Page"];
+                taille?: components["parameters"]["Taille"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page d'entrées du journal */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EntreeAuditPage"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    lireConfigurationCanaux: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Configuration effective */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationCanaux"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    modifierConfigurationCanaux: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigurationCanaux"];
+            };
+        };
+        responses: {
+            /** @description Configuration effective après enregistrement */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationCanaux"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description Fournisseur non configuré sur ce serveur (`type` …/fournisseur-non-configure), ou JOURNAL
+             *     choisi alors qu'un vrai fournisseur du canal est configuré (`type` …/journal-interdit)
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     lirePhoto: {

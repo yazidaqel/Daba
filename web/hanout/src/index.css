@@ -161,3 +161,8 @@ body {
   @apply bg-background text-foreground antialiased;
   font-size: 1.0625rem;
 }
+
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--primary);
+}

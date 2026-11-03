@@ -143,5 +143,6 @@
 
 @layer base {
   * { @apply border-border outline-ring/50; }
+  input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
   body { @apply bg-background text-foreground; }
 }
