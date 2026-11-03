@@ -75,6 +75,15 @@ class Synchronisation {
 	record Resultat(UUID operationId, String statut, List<AnomalieVue> anomalies, Conflit conflit, Map<String, Object> erreur) {
 	}
 
+	/**
+	 * Opérations acceptées sans consentement CNDP actif : les pièces de vente et encaissements déjà
+	 * faits (conservation légale, RG-C4), le stock qu'ils mouvementent (RG-S1, RG-S2) et le hanout
+	 * terrain qu'ils référencent. Le reste (profil, paramètres, tarifs, crédit, contestations) est
+	 * REJETEE (consentement-requis) et peut être renvoyé après le consentement.
+	 */
+	static final Set<String> SANS_CONSENTEMENT = Set.of("EMISSION_DOCUMENT", "AVOIR", "VERSEMENT", "CHARGEMENT", "RETOUR",
+			"INVENTAIRE", "HANOUT");
+
 	private final JdbcClient jdbc;
 	private final Json json;
 	private final Journal journal;
@@ -127,6 +136,10 @@ class Synchronisation {
 		}
 		if (type == null || creeLe == null) {
 			return rejet(appelant, id, type, creeLe, operation, Probleme.requete("type et creeLe requis"));
+		}
+		if (!SANS_CONSENTEMENT.contains(type) && !comptes.traitementConsenti(appelant.utilisateurId())) {
+			return rejet(appelant, id, type, creeLe, operation,
+					Probleme.interdit("consentement-requis", "Consentement CNDP requis (PUT /v1/moi/consentement)"));
 		}
 		var geste = new Geste(appelant.utilisateurId(), appelant.organisationId(), appelant.appareilId(), id, creeLe);
 		try {

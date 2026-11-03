@@ -206,9 +206,9 @@ public class Ventes implements ProduitsHabituels {
 		jdbc.sql("""
 				INSERT INTO document (id, type, numero, serie, sequence, appareil_id, ambulant_id, organisation_id, hanout_id,
 				  emis_le, lignes, total, montant_regle, montant_credit, reglements, demande_depannage_id, mentions_legales,
-				  confirmation_hanout, operation_id)
+				  confirmation_hanout, operation_id, ambulant_nom)
 				VALUES (:id, :type, :numero, :serie, :seq, :appareil, :a, :org, :h, :emis, :lignes::jsonb, :total, :regle, :credit,
-				  :reglements::jsonb, :demande, :mentions::jsonb, :confirmation::jsonb, :op)
+				  :reglements::jsonb, :demande, :mentions::jsonb, :confirmation::jsonb, :op, :nomAmbulant)
 				""")
 			.param("id", e.documentId()).param("type", e.type()).param("numero", e.numero())
 			.param("serie", serie(e.numero())).param("seq", e.sequence()).param("appareil", geste.appareilId())
@@ -217,7 +217,7 @@ public class Ventes implements ProduitsHabituels {
 			.param("total", total).param("regle", Math.min(regle, total)).param("credit", credit)
 			.param("reglements", json.ecrire(e.reglements())).param("demande", e.demandeDepannageId())
 			.param("mentions", json.ecrire(e.mentionsLegales())).param("confirmation", json.ecrire(e.confirmationHanout()))
-			.param("op", geste.operationId())
+			.param("op", geste.operationId()).param("nomAmbulant", comptes.nomPourDocument(geste.ambulantId()))
 			.update();
 
 		for (var ligne : lignes) {
@@ -263,15 +263,17 @@ public class Ventes implements ProduitsHabituels {
 		var compte = compteId(geste.ambulantId(), geste.organisationId(), hanoutId);
 		jdbc.sql("""
 				INSERT INTO document (id, type, numero, serie, sequence, appareil_id, ambulant_id, organisation_id, hanout_id,
-				  emis_le, lignes, total, montant_regle, montant_credit, document_origine_id, motif_avoir, commentaire, operation_id)
+				  emis_le, lignes, total, montant_regle, montant_credit, document_origine_id, motif_avoir, commentaire, operation_id,
+				  ambulant_nom)
 				VALUES (:id, 'AVOIR', :numero, :serie, :seq, :appareil, :a, :org, :h, :emis, :lignes::jsonb, :total, 0, 0,
-				  :origine, :motif, :commentaire, :op)
+				  :origine, :motif, :commentaire, :op, :nomAmbulant)
 				""")
 			.param("id", a.documentId()).param("numero", a.numero()).param("serie", serie(a.numero()))
 			.param("seq", a.sequence()).param("appareil", geste.appareilId()).param("a", geste.ambulantId())
 			.param("org", geste.organisationId()).param("h", hanoutId).param("emis", Timestamp.from(geste.horodatage()))
 			.param("lignes", json.ecrire(lignes)).param("total", total).param("origine", a.documentOrigineId())
 			.param("motif", a.motif()).param("commentaire", a.commentaire()).param("op", geste.operationId())
+			.param("nomAmbulant", comptes.nomPourDocument(geste.ambulantId()))
 			.update();
 		publier(a.documentId());
 		publier(a.documentOrigineId());
@@ -615,7 +617,9 @@ public class Ventes implements ProduitsHabituels {
 					r.getTimestamp(4).toInstant()))
 			.optional().orElse(null);
 		return new Document(id, type, rs.getString("numero"), rs.getLong("sequence"), rs.getObject("appareil_id", UUID.class),
-				new Reference(a, comptes.nom(a)), new Reference(h, referentiel.hanout(h).map(Referentiel.Hanout::nom).orElse("—")),
+				// Nom figé à l'émission (RG-C4), même si l'ambulant retire ensuite son consentement.
+				new Reference(a, rs.getString("ambulant_nom") != null ? rs.getString("ambulant_nom") : comptes.nom(a)),
+				new Reference(h, referentiel.hanout(h).map(Referentiel.Hanout::nom).orElse("—")),
 				rs.getTimestamp("emis_le").toInstant(), lignes, total,
 				facturee ? tva(lignes) : null,
 				rs.getLong("montant_regle"), rs.getLong("montant_credit"), statut, rs.getObject("document_origine_id", UUID.class),

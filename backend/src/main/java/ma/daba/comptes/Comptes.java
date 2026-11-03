@@ -119,11 +119,36 @@ public class Comptes implements Acces.VerificationCompte {
 			.orElse(new Destinataire(null, telephone, List.of(), langue == null ? "fr" : langue));
 	}
 
-	/** Nom affichable : le nom saisi, sinon le téléphone masqué. */
+	/**
+	 * Nom affichable dans les listes (grossiste, hanout) : le nom saisi tant que le consentement CNDP
+	 * est actif, sinon le téléphone masqué.
+	 */
 	public String nom(UUID utilisateurId) {
-		return jdbc.sql("SELECT nom, telephone FROM utilisateur WHERE id = :u").param("u", utilisateurId)
-			.query((rs, i) -> rs.getString("nom") != null ? rs.getString("nom") : masquer(rs.getString("telephone")))
+		return nom(utilisateurId, true);
+	}
+
+	/** Nom imprimé sur une pièce de vente à son émission (RG-C4) : le nom saisi, consentement ou non. */
+	public String nomPourDocument(UUID utilisateurId) {
+		return nom(utilisateurId, false);
+	}
+
+	private String nom(UUID utilisateurId, boolean selonConsentement) {
+		return jdbc.sql("""
+				SELECT u.nom, u.telephone, (SELECT c.traitement_donnees FROM consentement c
+				  WHERE c.utilisateur_id = u.id ORDER BY c.id DESC LIMIT 1) AS consenti
+				FROM utilisateur u WHERE u.id = :u
+				""").param("u", utilisateurId)
+			.query((rs, i) -> rs.getString("nom") != null && (!selonConsentement || rs.getBoolean("consenti"))
+					? rs.getString("nom") : masquer(rs.getString("telephone")))
 			.optional().orElse("—");
+	}
+
+	/** Vrai si le dernier consentement autorise le traitement des données (CNDP). */
+	public boolean traitementConsenti(UUID utilisateurId) {
+		return jdbc.sql("""
+				SELECT coalesce((SELECT traitement_donnees FROM consentement
+				                 WHERE utilisateur_id = :u ORDER BY id DESC LIMIT 1), false)
+				""").param("u", utilisateurId).query(Boolean.class).single();
 	}
 
 	/**

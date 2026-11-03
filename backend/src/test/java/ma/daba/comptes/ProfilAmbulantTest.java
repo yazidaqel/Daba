@@ -127,6 +127,71 @@ class ProfilAmbulantTest extends TestIntegration {
 			.get("id").asString();
 		assertThat(post(ambulant, "/v1/demandes-depannage/" + demande + "/acceptation", null)).hasStatusOk();
 		assertThat(lire(get(hanout, "/v1/demandes-depannage/" + demande)).get("ambulant").get("nom").asString()).isEqualTo(nom);
+
+		// Retrait du consentement : les listes repassent au téléphone masqué, la pièce émise garde le nom (RG-C4).
+		retirerConsentement(ambulant);
+		assertThat(lire(get(grossiste, "/v1/bons-sortie/" + bon.get("id").asString())).get("ambulant").get("nom").asString())
+			.isEqualTo(masque);
+		assertThat(lire(get(grossiste, "/v1/bons-sortie")).get("contenu").get(0).get("ambulant").get("nom").asString())
+			.isEqualTo(masque);
+		assertThat(lire(get(grossiste, "/v1/ambulants")).get("contenu").get(0).get("nom").asString()).isEqualTo(masque);
+		assertThat(lire(get(hanout, "/v1/karni/comptes")).get("contenu").get(0).get("ambulant").get("nom").asString())
+			.isEqualTo(masque);
+		assertThat(lire(get(hanout, "/v1/demandes-depannage/" + demande)).get("ambulant").get("nom").asString()).isEqualTo(masque);
+		assertThat(lire(get(hanout, "/v1/documents")).get("contenu").get(0).get("ambulant").get("nom").asString()).isEqualTo(nom);
+	}
+
+	void retirerConsentement(Compte ambulant) {
+		assertThat(put(ambulant, "/v1/moi/consentement", m("versionTexte", "v1", "traitementDonnees", false))).hasStatusOk();
+	}
+
+	@Test
+	void cndp_sansConsentementSeulesLesPiecesDeVenteEtLeStockRemontent() {
+		var produit = produit();
+		var ambulant = ambulant();
+		var nomAvant = jdbc.sql("SELECT nom FROM utilisateur WHERE id = :u").param("u", ambulant.id()).query(String.class).single();
+		var hanoutId = hanout(33.57, -7.59);
+		retirerConsentement(ambulant);
+
+		var profil = m("id", UUID.randomUUID(), "type", "PROFIL_AMBULANT", "creeLe", Instant.now().toString(),
+				"donnees", m("nom", "Nom Sans Consentement", "cin", "AB123456"));
+		var refusees = List.of(profil,
+				op("PARAMETRES_AMBULANT", m("politiqueDepassementCredit", "BLOQUER")),
+				op("TARIF", m("produitId", produit, "prixUnitaire", 900)),
+				op("CREDIT_HANOUT", m("hanoutId", hanoutId, "plafond", 10000)),
+				op("RESOLUTION_CONTESTATION", m("contestationId", UUID.randomUUID())));
+		for (var r : lot(ambulant, refusees)) {
+			assertThat(r.get("statut").asString()).as(r.toString()).isEqualTo("REJETEE");
+			assertThat(r.get("erreur").get("type").asString()).endsWith("/consentement-requis");
+		}
+		assertThat(jdbc.sql("SELECT nom FROM utilisateur WHERE id = :u").param("u", ambulant.id()).query(String.class).single())
+			.isEqualTo(nomAvant);
+		assertThat(jdbc.sql("SELECT count(*) FROM profil_ambulant WHERE utilisateur_id = :u").param("u", ambulant.id())
+			.query(Long.class).single()).isZero();
+
+		var acceptees = List.of(op("CHARGEMENT", m("lignes", List.of(m("produitId", produit, "quantite", 5)))),
+				op("EMISSION_DOCUMENT", m("documentId", UUID.randomUUID(), "type", "BON_LIVRAISON",
+						"numero", "%s-BL-%06d".formatted(ambulant.prefixe(), 1), "sequence", 1, "hanoutId", hanoutId,
+						"lignes", List.of(m("nature", "ARTICLE", "produitId", produit, "quantite", 2, "prixUnitaire", 700)))),
+				op("VERSEMENT", m("versementId", UUID.randomUUID(), "hanoutId", hanoutId, "mode", "ESPECES", "montant", 500)));
+		for (var r : lot(ambulant, acceptees)) {
+			assertThat(r.get("statut").asString()).as(r.toString()).isEqualTo("APPLIQUEE");
+		}
+
+		// Consentement redonné : l'opération rejetée se renvoie telle quelle.
+		assertThat(put(ambulant, "/v1/moi/consentement", m("versionTexte", "v1", "traitementDonnees", true))).hasStatusOk();
+		assertThat(lot(ambulant, List.of(profil)).get(0).get("statut").asString()).isEqualTo("APPLIQUEE");
+		assertThat(changement(ambulant, "PROFIL").get("donnees").get("nom").asString()).isEqualTo("Nom Sans Consentement");
+	}
+
+	static java.util.Map<String, Object> op(String type, Object donnees) {
+		return m("id", UUID.randomUUID(), "type", type, "creeLe", Instant.now().toString(), "donnees", donnees);
+	}
+
+	JsonNode lot(Compte ambulant, List<?> operations) {
+		var r = post(ambulant, "/v1/sync/operations", m("appareilId", ambulant.appareilId(), "operations", operations));
+		assertThat(r).hasStatusOk();
+		return lire(r).get("resultats");
 	}
 
 }

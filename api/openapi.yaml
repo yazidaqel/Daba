@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Daba API
-  version: 0.5.0
+  version: 0.5.1
   description: |
     Contrat unique entre le back-end, les apps mobiles (ambulant, hanout) et les portails web.
     Changement incompatible = nouvelle version de l'endpoint (/v2/...), jamais de rupture silencieuse.
@@ -26,7 +26,10 @@ info:
     **Nom de l'ambulant (CNDP, §5.4).** Partout où un ambulant est désigné (`Reference.nom` d'un
     bon de sortie, d'une réservation, d'un document, d'un compte de crédit ; `AmbulantRattache.nom` ;
     `DemandeDepannage.ambulant.nom`), c'est `ProfilAmbulant.nom`, ou son téléphone masqué
-    (`+2126•••••004`) tant qu'il n'a pas de profil. Ce nom n'est montré qu'aux grossistes et aux
+    (`+2126•••••004`) tant qu'il n'a pas de profil ou que son dernier consentement n'a pas
+    `traitementDonnees = true` (retrait du consentement : les listes repassent au téléphone masqué).
+    Seules les pièces de vente déjà émises (`Document.ambulant.nom`, PDF) gardent le nom figé à leur
+    émission (pièce légale, RG-C4). Ce nom n'est montré qu'aux grossistes et aux
     hanouts avec qui l'ambulant travaille ; le texte de consentement de l'ambulant le dit. Aucune
     réponse à un GRAND_CLIENT ne contient de donnée nominative d'un ambulant ou d'un hanout (nom,
     téléphone, gérant, CIN, position) : seulement des agrégats et ses propres grossistes dépositaires.
@@ -265,7 +268,11 @@ paths:
         opération authentifiée répond 403 (Problem `type` …/consentement-requis, quelle que soit
         la connexion), sauf `GET`/`PUT /v1/moi/consentement`, `GET /v1/moi/donnees` (droit d'accès)
         et `POST /v1/sync/operations` : les pièces de vente déjà émises doivent pouvoir remonter
-        (obligation légale de conservation, RG-C4).
+        (obligation légale de conservation, RG-C4). Sans ce consentement, seules y sont appliquées
+        EMISSION_DOCUMENT, AVOIR, VERSEMENT, le stock qu'elles mouvementent (CHARGEMENT, RETOUR,
+        INVENTAIRE) et HANOUT (hanout terrain qu'elles référencent) ; les autres (PROFIL_AMBULANT,
+        PARAMETRES_AMBULANT, TARIF, CREDIT_HANOUT, RESOLUTION_CONTESTATION) sont REJETEE avec
+        `erreur.type` …/consentement-requis, à renvoyer une fois le consentement donné.
         Retirer `geolocalisation` coupe la disponibilité de l'ambulant et efface sa dernière position.
       x-roles: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT]
       requestBody:
@@ -653,6 +660,9 @@ paths:
         l'appareil : la rejouer renvoie `DEJA_APPLIQUEE` sans nouvel effet (idempotence).
         Une opération qui reflète un fait terrain (vente, versement, chargement) n'est jamais refusée
         pour une règle de gestion : elle est appliquée et signalée en anomalie (RG-S1, RG-C3, RG-F1…).
+        Sans consentement CNDP actif, une opération qui n'est ni une pièce de vente, ni un versement,
+        ni un mouvement de stock, ni un hanout terrain est REJETEE (…/consentement-requis, voir
+        `PUT /v1/moi/consentement`).
         Seule une opération mal formée (dont une FACTURE sans `mentionsLegales`, RG-F2, un numéro
         dont le préfixe n'est pas celui de l'appareil, RG-F1, ou un AVOIR supérieur au restant à
         annuler du document d'origine, RG-C4) ou qui référence un objet inconnu est `REJETEE` ;
@@ -3484,7 +3494,8 @@ components:
         Profil de l'ambulant (§3.1), saisi hors ligne. L'opération remplace tout le profil : un champ
         facultatif absent est effacé. Le nom est montré aux grossistes et aux hanouts avec qui
         l'ambulant travaille (jamais aux grands clients, §5.4). Un code de ville ou de catégorie
-        inconnu rend l'opération REJETEE. Un profil modifié plus récemment sur un autre appareil
+        inconnu rend l'opération REJETEE, de même que l'absence de consentement CNDP actif
+        (…/consentement-requis). Un profil modifié plus récemment sur un autre appareil
         est conservé (EN_CONFLIT, VERSION_SERVEUR_CONSERVEE). Les mentions légales (ICE, IF, RC, TVA)
         sont dans `ParametresAmbulantSaisie.mentionsLegales`.
       required: [nom]
