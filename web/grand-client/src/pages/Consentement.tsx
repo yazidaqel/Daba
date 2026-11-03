@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 // Version du texte d'information affiché (journalisée avec le consentement, loi 09-08).
-export const VERSION_TEXTE = 'gc-2026-11'
+export const VERSION_TEXTE = 'gc-2026-11-v2'
 
 export function Consentement({ onAccepte }: { onAccepte: () => void }) {
   const { t, langue } = useI18n()

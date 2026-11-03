@@ -130,7 +130,7 @@ function DroitsCndp() {
 }
 
 // CNDP (loi 09-08) : tant que le consentement n'est pas donné, l'API répond 403 consentement-requis.
-const VERSION_TEXTE = 'grossiste-2026-11'
+const VERSION_TEXTE = 'grossiste-2026-11-v2'
 
 function Consentement({ children }: { children: ReactNode }) {
   const { t, langue } = useI18n()

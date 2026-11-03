@@ -35,7 +35,7 @@ const fr = {
 
   'consentement.titre': 'Protection des données personnelles',
   'consentement.texte':
-    'Conformément à la loi 09-08, Daba traite votre numéro de téléphone et les données de votre organisation pour gérer vos campagnes. Vous ne recevez que des données agrégées et anonymisées sur les ruptures et l’écoulement : jamais le nom d’un hanout ni d’un vendeur ambulant. Vous pouvez exercer votre droit d’accès à tout moment.',
+    'Conformément à la loi 09-08, Daba traite votre numéro de téléphone et les données de votre organisation pour gérer vos campagnes. Vous ne recevez que des données agrégées et anonymisées sur les ruptures et l’écoulement : jamais le nom d’un hanout ni d’un vendeur ambulant. Vous pouvez exercer votre droit d’accès à tout moment. Les codes de connexion et les SMS sont envoyés par notre prestataire Infobip, hors du Maroc : il reçoit votre numéro et le texte du message.',
   'consentement.accord': 'J’accepte le traitement de mes données personnelles.',
   'consentement.continuer': 'Continuer',
 
@@ -229,7 +229,7 @@ const ar: Record<Cle, string> = {
 
   'consentement.titre': 'حماية المعطيات الشخصية',
   'consentement.texte':
-    'طبقًا للقانون رقم 09.08، تعالج دابا رقم هاتفك ومعطيات مؤسستك لتدبير حملاتك. لا تتلقّى سوى معطيات مجمّعة ومجهولة الهوية حول نفاد المخزون والمبيعات، ولا يظهر أبدًا اسم أي بقال أو بائع متجوّل. يمكنك ممارسة حقك في الولوج إلى معطياتك في أي وقت.',
+    'طبقًا للقانون رقم 09.08، تعالج دابا رقم هاتفك ومعطيات مؤسستك لتدبير حملاتك. لا تتلقّى سوى معطيات مجمّعة ومجهولة الهوية حول نفاد المخزون والمبيعات، ولا يظهر أبدًا اسم أي بقال أو بائع متجوّل. يمكنك ممارسة حقك في الولوج إلى معطياتك في أي وقت. تُرسَل رموز الدخول والرسائل القصيرة عبر مزوّدنا Infobip خارج المغرب، الذي يتلقى رقمك ونص الرسالة.',
   'consentement.accord': 'أوافق على معالجة معطياتي الشخصية.',
   'consentement.continuer': 'متابعة',
 
@@ -455,7 +455,7 @@ const aryArab: Record<Cle, string> = {
   'connexion.roleRefuse': 'هاد الكونط ما عندوش الحق يدخل لبوابة الكليان الكبار.',
   'consentement.titre': 'حماية المعطيات الشخصية',
   'consentement.texte':
-    'على حساب القانون رقم 09.08، دابا كتخدم بالنمرة ديالك والمعطيات ديال الشركة ديالك باش تسيّر الحملات ديالك. كتوصلك غير أرقام مجموعة وبلا سميات على القطعة والبيع: عمرك ما غتشوف سمية شي مول الحانوت ولا شي بياع متجول. تقدر تطلب تشوف المعطيات ديالك فأي وقت.',
+    'على حساب القانون رقم 09.08، دابا كتخدم بالنمرة ديالك والمعطيات ديال الشركة ديالك باش تسيّر الحملات ديالك. كتوصلك غير أرقام مجموعة وبلا سميات على القطعة والبيع: عمرك ما غتشوف سمية شي مول الحانوت ولا شي بياع متجول. تقدر تطلب تشوف المعطيات ديالك فأي وقت. الكودات ديال الدخول والميساجات كيتصيفطو عن طريق الشركة Infobip برّا المغرب، اللي كتوصلها النمرة ديالك والنص ديال الميساج.',
   'consentement.accord': 'موافق باش يتخدمو المعطيات الشخصية ديالي.',
   'consentement.continuer': 'كمّل',
   'campagnes.nouvelle': 'حملة جديدة',
@@ -593,7 +593,7 @@ const aryLatn: Record<Cle, string> = {
 
   'consentement.titre': '7imayat lma3loumat chakhsiya',
   'consentement.texte':
-    '3la 7sab l9anoun 09-08, Daba katkhdem b nemra dyalek o lma3loumat dyal charika dyalek bach tsayyer les campagnes dyalek. Katwselek ghir ar9am majmou3a o bla smiyat 3la l9at3a o lbi3: 3emrek ma ghatchouf smiya dyal chi moul l7anout wla chi biya3 mtjawwel. T9der ttleb tchouf lma3loumat dyalek f ay we9t.',
+    '3la 7sab l9anoun 09-08, Daba katkhdem b nemra dyalek o lma3loumat dyal charika dyalek bach tsayyer les campagnes dyalek. Katwselek ghir ar9am majmou3a o bla smiyat 3la l9at3a o lbi3: 3emrek ma ghatchouf smiya dyal chi moul l7anout wla chi biya3 mtjawwel. T9der ttleb tchouf lma3loumat dyalek f ay we9t. Les codes dyal dokhoul w lmessajat kaytsiftou 3la tri9 charika Infobip berra lmaghrib, li katwselha nmra dyalek w nass dyal lmessaj.',
   'consentement.accord': 'Mouwafe9 bach ytkhdmo lma3loumat chakhsiya dyali.',
   'consentement.continuer': 'Kemmel',
 

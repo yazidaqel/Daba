@@ -35,7 +35,7 @@ export const fr = {
 
   'consentement.titre': 'Protection de vos données (loi 09-08)',
   'consentement.texte':
-    'Daba traite votre numéro de téléphone, votre nom et l’activité de votre dépôt (stock promo, retraits, bons de sortie) pour faire fonctionner le service. Ces données ne sont jamais vendues. Les marques voient l’état des dépôts de leurs campagnes chez vous (quantités, réception, photo du bon de livraison), jamais les ambulants. Depuis le portail, vous pouvez à tout moment télécharger vos données ou retirer votre consentement (loi 09-08, déclaration CNDP).',
+    'Daba traite votre numéro de téléphone, votre nom et l’activité de votre dépôt (stock promo, retraits, bons de sortie) pour faire fonctionner le service. Ces données ne sont jamais vendues. Les marques voient l’état des dépôts de leurs campagnes chez vous (quantités, réception, photo du bon de livraison), jamais les ambulants. Depuis le portail, vous pouvez à tout moment télécharger vos données ou retirer votre consentement (loi 09-08, déclaration CNDP). Les codes de connexion et les SMS sont envoyés par notre prestataire Infobip, hors du Maroc : il reçoit votre numéro et le texte du message.',
   'consentement.accepter': 'J’accepte le traitement de mes données',
   'consentement.continuer': 'Continuer',
 

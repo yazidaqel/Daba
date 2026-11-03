@@ -18,7 +18,7 @@ export function Consentement({ suite }: { suite: string }) {
     setErreur(undefined)
     try {
       const { data } = await api.PUT('/v1/moi/consentement', {
-        body: { versionTexte: `hanout-1-${langue}`, traitementDonnees: accord, langue },
+        body: { versionTexte: `hanout-2-${langue}`, traitementDonnees: accord, langue },
       })
       if (!accord) {
         deconnecter()

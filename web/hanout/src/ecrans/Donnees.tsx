@@ -35,7 +35,7 @@ export function Donnees() {
   const retirer = () =>
     essayer(async () => {
       const { data } = await api.PUT('/v1/moi/consentement', {
-        body: { versionTexte: `hanout-1-${langue}`, traitementDonnees: false, langue },
+        body: { versionTexte: `hanout-2-${langue}`, traitementDonnees: false, langue },
       })
       if (!data) return false
       deconnecter()

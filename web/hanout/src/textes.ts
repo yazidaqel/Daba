@@ -40,7 +40,7 @@ const fr = {
 
   'consentement.titre': 'Vos données',
   'consentement.texte':
-    "Daba utilise votre numéro, votre boutique et vos achats pour prévenir les vendeurs quand un produit vous manque, et pour afficher vos bons et votre solde. Les marques ne reçoivent que des chiffres anonymes. Vous pouvez demander vos données ou retirer votre accord à tout moment (loi 09-08).",
+    "Daba utilise votre numéro, votre boutique et vos achats pour prévenir les vendeurs quand un produit vous manque, et pour afficher vos bons et votre solde. Les marques ne reçoivent que des chiffres anonymes. Vous pouvez demander vos données ou retirer votre accord à tout moment (loi 09-08). Les codes de connexion et les SMS sont envoyés par notre prestataire Infobip, hors du Maroc : il reçoit votre numéro et le texte du message.",
   'consentement.accepter': "J'accepte",
   'consentement.refuser': 'Je refuse',
 
@@ -148,7 +148,7 @@ const ar: Record<Cle, string> = {
 
   'consentement.titre': 'بياناتك',
   'consentement.texte':
-    'يستعمل Daba رقمك ومتجرك ومشترياتك لإخبار البائعين عندما ينقصك منتج، ولعرض وثائقك ورصيدك. لا تتلقى العلامات التجارية إلا أرقاما مجهولة الهوية. يمكنك طلب بياناتك أو سحب موافقتك في أي وقت (القانون 09-08).',
+    'يستعمل Daba رقمك ومتجرك ومشترياتك لإخبار البائعين عندما ينقصك منتج، ولعرض وثائقك ورصيدك. لا تتلقى العلامات التجارية إلا أرقاما مجهولة الهوية. يمكنك طلب بياناتك أو سحب موافقتك في أي وقت (القانون 09-08). تُرسَل رموز الدخول والرسائل القصيرة عبر مزوّدنا Infobip خارج المغرب، الذي يتلقى رقمك ونص الرسالة.',
   'consentement.accepter': 'أوافق',
   'consentement.refuser': 'أرفض',
 
@@ -254,7 +254,7 @@ const aryArab: Record<Cle, string> = {
 
   'consentement.titre': 'المعلومات ديالك',
   'consentement.texte':
-    'Daba كيستعمل النمرة ديالك، الحانوت ديالك والشرية ديالك باش يعلّم الموزّعين ملي تخصّك شي سلعة، ويوريك البونات والكريدي ديالك. الماركات ماكيوصلهم غير أرقام بلا سميات. تقدر تطلب المعلومات ديالك ولا تحيّد الموافقة ديالك فأي وقت (القانون 09-08).',
+    'Daba كيستعمل النمرة ديالك، الحانوت ديالك والشرية ديالك باش يعلّم الموزّعين ملي تخصّك شي سلعة، ويوريك البونات والكريدي ديالك. الماركات ماكيوصلهم غير أرقام بلا سميات. تقدر تطلب المعلومات ديالك ولا تحيّد الموافقة ديالك فأي وقت (القانون 09-08). الكودات ديال الدخول والميساجات كيتصيفطو عن طريق الشركة Infobip برّا المغرب، اللي كتوصلها النمرة ديالك والنص ديال الميساج.',
   'consentement.accepter': 'موافق',
   'consentement.refuser': 'ماموافقش',
 
@@ -360,7 +360,7 @@ const aryLatn: Record<Cle, string> = {
 
   'consentement.titre': 'Lma3loumat dyalek',
   'consentement.texte':
-    "Daba kaysta3mel nmra dyalek, l7anout dyalek w chriya dyalek bach i3llem lmowazi3in mlli tkhossek chi sel3a, w iwerrik lbonat w lkridi dyalek. Lmarkat makaywsslhom ghir ar9am bla smiyat. T9der tetlob lma3loumat dyalek wla t7iyed lmowaf9a dyalek f ay wa9t (l9anoun 09-08).",
+    "Daba kaysta3mel nmra dyalek, l7anout dyalek w chriya dyalek bach i3llem lmowazi3in mlli tkhossek chi sel3a, w iwerrik lbonat w lkridi dyalek. Lmarkat makaywsslhom ghir ar9am bla smiyat. T9der tetlob lma3loumat dyalek wla t7iyed lmowaf9a dyalek f ay wa9t (l9anoun 09-08). Les codes dyal dokhoul w lmessajat kaytsiftou 3la tri9 charika Infobip berra lmaghrib, li katwselha nmra dyalek w nass dyal lmessaj.",
   'consentement.accepter': 'Mwafe9',
   'consentement.refuser': 'Mamwaf9ch',
 
