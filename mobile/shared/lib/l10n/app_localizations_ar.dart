@@ -716,4 +716,92 @@ class TAr extends T {
 
   @override
   String get tvaNonAssujetti => 'غير خاضع للضريبة على القيمة المضافة';
+
+  @override
+  String get erreurFactureTvaInconnue =>
+      'لا يمكن إصدار الفاتورة: منتج في السلة بدون نسبة ضريبة معروفة. أصدر وصل تسليم.';
+
+  @override
+  String get tvaComprise => 'منها الضريبة على القيمة المضافة';
+
+  @override
+  String get envoyerLienSms => 'إرسال الرابط عبر رسالة قصيرة';
+
+  @override
+  String get erreurDocNonSynchronise => 'زامن البيع أولاً للحصول على رابطه.';
+
+  @override
+  String get erreurHanoutSansTelephone => 'هذه البقالة ليس لديها رقم هاتف.';
+
+  @override
+  String get erreurAppareilRevoque => 'تم فصل هذا الهاتف عن بعد. أعد الاتصال.';
+
+  @override
+  String receptionConforme(String date) {
+    return 'أكدت البقالة الاستلام في $date';
+  }
+
+  @override
+  String get receptionEcart => 'أبلغت البقالة عن فرق عند الاستلام';
+
+  @override
+  String receptionEcartLigne(String produit, String recu, String livre) {
+    return '$produit: استلم $recu من $livre';
+  }
+
+  @override
+  String get contestations => 'الاعتراضات';
+
+  @override
+  String contestationsOuvertes(String n) {
+    return '$n اعتراضات مفتوحة';
+  }
+
+  @override
+  String get aucuneContestation => 'لا توجد اعتراضات مفتوحة';
+
+  @override
+  String get clore => 'إغلاق';
+
+  @override
+  String get commentaire => 'تعليق';
+
+  @override
+  String get document => 'وثيقة';
+
+  @override
+  String get compteCredit => 'رصيد الحساب';
+
+  @override
+  String get motifMONTANT => 'المبلغ';
+
+  @override
+  String get motifQUANTITE => 'الكمية';
+
+  @override
+  String get motifNON_RECU => 'لم يُستلم';
+
+  @override
+  String get motifDEJA_PAYE => 'مدفوع مسبقاً';
+
+  @override
+  String get motifAUTRE => 'أخرى';
+
+  @override
+  String get opRESOLUTION_CONTESTATION => 'اعتراض مغلق';
+
+  @override
+  String get anoTVA_INCONNUE => 'نسبة الضريبة غير معروفة';
+
+  @override
+  String get erreurRoleNonAmbulant => 'هذا الرقم ليس حساب بائع متجول.';
+
+  @override
+  String get rupture => 'نفاد';
+
+  @override
+  String get plafondDepasse => 'تجاوز السقف';
+
+  @override
+  String get delaiDepasse => 'تجاوز المهلة';
 }

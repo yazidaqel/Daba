@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:flutter/services.dart';
 
 import '../ui.dart';
@@ -59,11 +60,12 @@ class _EcranAccueilState extends State<EcranAccueil> {
             icon: Badge(
               isLabelVisible: daba.enAttente > 0,
               label: Text('${daba.enAttente}'),
-              child: Icon(daba.horsLigne ? Icons.cloud_off : Icons.cloud_done_outlined),
+              child: Ico(daba.horsLigne ? PhosphorIconsRegular.cloudSlash : PhosphorIconsRegular.cloudCheck),
             ),
           ),
           const MenuLangue(),
           PopupMenuButton<int>(
+            icon: const Ico(PhosphorIconsRegular.dotsThreeVertical),
             onSelected: (v) => v == 0 ? context.ouvrir(const EcranParametres()) : _deconnecter(),
             itemBuilder: (_) => [
               PopupMenuItem(value: 0, child: Text(t.parametres)),
@@ -94,14 +96,14 @@ class _EcranAccueilState extends State<EcranAccueil> {
         selectedIndex: _onglet,
         onDestinationSelected: (i) => setState(() => _onglet = i),
         destinations: [
-          NavigationDestination(icon: const Icon(Icons.storefront_outlined), label: onglets[0]),
-          NavigationDestination(icon: const Icon(Icons.inventory_2_outlined), label: onglets[1]),
-          NavigationDestination(icon: const Icon(Icons.menu_book_outlined), label: onglets[2]),
-          NavigationDestination(icon: const Icon(Icons.local_offer_outlined), label: onglets[3]),
+          NavigationDestination(icon: const Ico(PhosphorIconsRegular.storefront), label: onglets[0]),
+          NavigationDestination(icon: const Ico(PhosphorIconsRegular.package), label: onglets[1]),
+          NavigationDestination(icon: const Ico(PhosphorIconsRegular.notebook), label: onglets[2]),
+          NavigationDestination(icon: const Ico(PhosphorIconsRegular.tag), label: onglets[3]),
           NavigationDestination(
             icon: Badge(
               isLabelVisible: daba.demandes.any((d) => d['statut'] == 'EN_ATTENTE'),
-              child: Icon(daba.disponible ? Icons.delivery_dining : Icons.delivery_dining_outlined),
+              child: const Ico(PhosphorIconsRegular.moped),
             ),
             label: onglets[4],
           ),

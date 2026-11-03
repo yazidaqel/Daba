@@ -1,5 +1,6 @@
 import 'package:daba_shared/daba_shared.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 
 import '../etat.dart';
 import '../ui.dart';
@@ -27,11 +28,11 @@ class _EcranSynchroState extends State<EcranSynchro> {
       appBar: AppBar(title: Text(t.synchronisation)),
       body: ListView(children: [
         ListTile(
-          leading: Icon(daba.horsLigne ? Icons.cloud_off : Icons.cloud_done_outlined),
+          leading: Ico(daba.horsLigne ? PhosphorIconsRegular.cloudSlash : PhosphorIconsRegular.cloudCheck),
           title: Text(daba.horsLigne ? t.horsLigne : t.enLigne),
           subtitle: Text(daba.derniereSync == null ? t.jamaisSynchronise : t.derniereSync(date(daba.derniereSync!.toUtc().toIso8601String()))),
         ),
-        ListTile(leading: const Icon(Icons.pending_actions), title: Text(t.operationsEnAttente('${daba.enAttente}'))),
+        ListTile(leading: const Ico(PhosphorIconsRegular.hourglass), title: Text(t.operationsEnAttente('${daba.enAttente}'))),
         Padding(
           padding: const EdgeInsets.all(16),
           child: FilledButton.icon(
@@ -42,21 +43,21 @@ class _EcranSynchroState extends State<EcranSynchro> {
                     await daba.synchroniser();
                     if (mounted) setState(() => _occupe = false);
                   },
-            icon: const Icon(Icons.sync),
+            icon: const Ico(PhosphorIconsRegular.arrowsClockwise),
             label: Text(t.synchroniserMaintenant),
           ),
         ),
         if (signalees.isNotEmpty) ListTile(title: Text(t.operationsRefusees, style: Theme.of(context).textTheme.titleMedium)),
         for (final o in signalees)
           ListTile(
-            leading: Icon(o['statut'] == 'REJETEE' ? Icons.block : Icons.call_split, color: Colors.red.shade700),
+            leading: Ico(o['statut'] == 'REJETEE' ? PhosphorIconsRegular.prohibit : PhosphorIconsRegular.arrowsSplit, color: Zellige.of(context).danger),
             title: Text('${nomOperation(t, o['type'] as String)} · ${date(o['creeLe'] as String)}'),
             subtitle: Text((o['resultat']['erreur']?['detail'] ?? o['resultat']['conflit']?['detail'] ?? o['statut']) as String),
           ),
         if (anomalies.isNotEmpty) ListTile(title: Text(t.anomalies, style: Theme.of(context).textTheme.titleMedium)),
         for (final a in anomalies)
           ListTile(
-            leading: const Icon(Icons.report_problem_outlined, color: Colors.orange),
+            leading: Ico(PhosphorIconsRegular.warning, color: Zellige.of(context).warning),
             title: Text('${a['regle']} · ${nomAnomalie(t, a['type'] as String)}'),
             subtitle: Text('${a['detail'] ?? ''} ${date(a['detecteeLe'] as String)}'),
           ),
@@ -75,6 +76,7 @@ String nomOperation(T t, String type) => switch (type) {
       'TARIF' => t.opTARIF,
       'HANOUT' => t.opHANOUT,
       'CREDIT_HANOUT' => t.opCREDIT_HANOUT,
+      'RESOLUTION_CONTESTATION' => t.opRESOLUTION_CONTESTATION,
       _ => t.opPARAMETRES_AMBULANT,
     };
 
@@ -88,6 +90,7 @@ String nomAnomalie(T t, String type) => switch (type) {
       'CHARGEMENT_EN_DOUBLE' => t.anoCHARGEMENT_EN_DOUBLE,
       'PROMO_SANS_RETRAIT' => t.anoPROMO_SANS_RETRAIT,
       'DEMANDE_NON_ATTRIBUEE' => t.anoDEMANDE_NON_ATTRIBUEE,
+      'TVA_INCONNUE' => t.anoTVA_INCONNUE,
       _ => t.anoREMISE_PLAFOND_DEPASSE,
     };
 

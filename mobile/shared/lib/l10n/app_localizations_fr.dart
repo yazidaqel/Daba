@@ -729,4 +729,96 @@ class TFr extends T {
 
   @override
   String get tvaNonAssujetti => 'Non assujetti à la TVA';
+
+  @override
+  String get erreurFactureTvaInconnue =>
+      'Facture impossible : un produit du panier n\'a pas de taux de TVA connu. Émettez un bon de livraison.';
+
+  @override
+  String get tvaComprise => 'Dont TVA';
+
+  @override
+  String get envoyerLienSms => 'Envoyer le lien par SMS';
+
+  @override
+  String get erreurDocNonSynchronise =>
+      'Synchronisez d\'abord la vente pour obtenir son lien.';
+
+  @override
+  String get erreurHanoutSansTelephone =>
+      'Ce hanout n\'a pas de numéro de téléphone.';
+
+  @override
+  String get erreurAppareilRevoque =>
+      'Ce téléphone a été déconnecté à distance. Reconnectez-vous.';
+
+  @override
+  String receptionConforme(String date) {
+    return 'Réception confirmée par le hanout le $date';
+  }
+
+  @override
+  String get receptionEcart => 'Le hanout a signalé un écart à la réception';
+
+  @override
+  String receptionEcartLigne(String produit, String recu, String livre) {
+    return '$produit : $recu reçus sur $livre';
+  }
+
+  @override
+  String get contestations => 'Contestations';
+
+  @override
+  String contestationsOuvertes(String n) {
+    return '$n contestations ouvertes';
+  }
+
+  @override
+  String get aucuneContestation => 'Aucune contestation ouverte';
+
+  @override
+  String get clore => 'Clore';
+
+  @override
+  String get commentaire => 'Commentaire';
+
+  @override
+  String get document => 'Document';
+
+  @override
+  String get compteCredit => 'Solde du compte';
+
+  @override
+  String get motifMONTANT => 'Montant';
+
+  @override
+  String get motifQUANTITE => 'Quantité';
+
+  @override
+  String get motifNON_RECU => 'Non reçu';
+
+  @override
+  String get motifDEJA_PAYE => 'Déjà payé';
+
+  @override
+  String get motifAUTRE => 'Autre';
+
+  @override
+  String get opRESOLUTION_CONTESTATION => 'Contestation close';
+
+  @override
+  String get anoTVA_INCONNUE => 'Taux de TVA inconnu';
+
+  @override
+  String get erreurRoleNonAmbulant =>
+      'Ce numéro n\'est pas un compte de vendeur ambulant.';
+
+  @override
+  String get rupture => 'Rupture';
+
+  @override
+  String get plafondDepasse => 'Plafond dépassé';
+
+  @override
+  String get delaiDepasse => 'Délai dépassé';
 }

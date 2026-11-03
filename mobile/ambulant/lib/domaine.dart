@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:daba_shared/daba_shared.dart';
 
 /// Refus locaux d'une vente ; l'interface les traduit.
-enum RefusVente { factureSansMentions, creditBloque, creditAvertissement, remiseHorsPlafond, qrAutreAmbulant, qrIllisible, bonDejaCharge }
+enum RefusVente { factureSansMentions, factureTvaInconnue, creditBloque, creditAvertissement, remiseHorsPlafond, qrAutreAmbulant, qrIllisible, bonDejaCharge }
 
 class VenteRefusee implements Exception {
   const VenteRefusee(this.motif);
@@ -75,6 +75,22 @@ class Ambulant {
 
   /// Facture possible seulement si le profil porte les mentions légales (RG-F2).
   bool get peutFacturer => parametres['mentionsLegales'] != null;
+
+  /// Taux de TVA du produit tel que l'appareil le connaît (`Produit.tauxTva`), null si inconnu.
+  num? tauxTva(String produitId) => produit(produitId)?['tauxTva'] as num?;
+
+  /// Facture d'un ambulant assujetti : chaque produit doit avoir un taux connu, sinon la TVA
+  /// ne peut pas figurer sur la pièce (anomalie TVA_INCONNUE, RG-F2). L'app ne la propose pas.
+  bool tvaInconnue(List<LigneVente> lignes) =>
+      parametres['mentionsLegales']?['assujettiTva'] == true && lignes.any((l) => tauxTva(l.produitId) == null);
+
+  /// TVA comprise dans un montant TTC : M × t / (100 + t), arrondie au centime, demi au-dessus en
+  /// valeur absolue (formule du contrat, `TauxTva`).
+  static int tvaComprise(int montant, num taux) {
+    final t = (taux * 100).round(); // taux en centièmes de point, pour rester en entiers
+    final valeurAbsolue = (2 * montant.abs() * t + (10000 + t)) ~/ (2 * (10000 + t));
+    return montant < 0 ? -valeurAbsolue : valeurAbsolue;
+  }
 
   // ------------------------------------------------------------------ stock
   Map<String, dynamic>? _ligneStock(String produitId) =>
@@ -208,6 +224,7 @@ class Ambulant {
     final param = parametres;
     final mentions = param['mentionsLegales'];
     if (type == 'FACTURE' && mentions == null) throw const VenteRefusee(RefusVente.factureSansMentions);
+    if (type == 'FACTURE' && tvaInconnue(lignes)) throw const VenteRefusee(RefusVente.factureTvaInconnue);
     final plafondRemise = (param['plafondRemisePonctuellePourcent'] as num?) ?? 100;
     if (lignes.any((l) => l.remise > l.brut * plafondRemise / 100)) {
       throw const VenteRefusee(RefusVente.remiseHorsPlafond);
@@ -232,6 +249,8 @@ class Ambulant {
 
       for (final l in lignes) {
         final libelle = produit(l.produitId)?['libelle'] ?? {'fr': l.produitId};
+        // Taux figé dans la pièce tel que l'appareil le connaît, comme les mentions légales.
+        final taux = tauxTva(l.produitId);
         var reste = l.quantite;
         // Le stock promo part en premier, pour tracer la promo jusqu'au hanout (RG-S3).
         for (final p in stockPromo(l.produitId)) {
@@ -242,7 +261,7 @@ class Ambulant {
           deltas.update(('STOCK_PROMO', p.reservationId), (v) => v - q, ifAbsent: () => -q);
           saisies.add({
             'nature': 'ARTICLE', 'produitId': l.produitId, 'quantite': q, 'prixUnitaire': l.prixUnitaire,
-            'tarif': l.tarif, 'campagneId': p.campagneId, 'reservationId': p.reservationId,
+            'tarif': l.tarif, 'campagneId': p.campagneId, 'reservationId': p.reservationId, 'tauxTva': ?taux,
           });
         }
         if (reste > 0) {
@@ -250,10 +269,12 @@ class Ambulant {
           deltas.update(('STOCK', l.produitId), (v) => v - reste, ifAbsent: () => -reste);
           saisies.add({
             'nature': 'ARTICLE', 'produitId': l.produitId, 'quantite': reste, 'prixUnitaire': l.prixUnitaire,
-            'tarif': l.tarif,
+            'tarif': l.tarif, 'tauxTva': ?taux,
           });
         }
-        if (l.remise > 0) saisies.add({'nature': 'REMISE_PONCTUELLE', 'produitId': l.produitId, 'montant': -l.remise});
+        if (l.remise > 0) {
+          saisies.add({'nature': 'REMISE_PONCTUELLE', 'produitId': l.produitId, 'montant': -l.remise, 'tauxTva': ?taux});
+        }
         for (final sa in saisies.skip(affichees.length)) {
           affichees.add({
             ...sa,
@@ -265,6 +286,10 @@ class Ambulant {
         }
       }
       if (credit != 0) deltas[('SOLDE', hanoutId)] = credit;
+      // TVA d'une facture d'assujetti : somme des TVA de ligne (RG-F2) ; prix TTC.
+      final tva = type == 'FACTURE' && (mentions as Map)['assujettiTva'] == true
+          ? affichees.fold<int>(0, (a, l) => a + tvaComprise(l['montant'] as int, l['tauxTva'] as num))
+          : null;
 
       final maintenant = Stockage.maintenant();
       final confirmation = confirmeParHanout ? {'mode': 'CONFIRMATION_ECRAN', 'le': maintenant} : null;
@@ -294,6 +319,7 @@ class Ambulant {
         'emisLe': maintenant,
         'lignes': affichees,
         'total': total,
+        'tva': ?tva,
         'montantRegle': regle,
         'montantCredit': credit,
         'statut': 'EMIS',
@@ -332,6 +358,26 @@ class Ambulant {
       final c = compte(hanoutId) ??
           {'id': Stockage.nouvelId(), 'ambulant': {'id': utilisateurId, 'nom': nom}, 'hanout': {'id': hanoutId, 'nom': hanout(hanoutId)?['nom'] ?? ''}, 'solde': 0};
       s.enregistrer('COMPTE_CREDIT', c['id'] as String, {...c, 'plafond': plafond, 'delaiMaxJours': delaiMaxJours}, local: true);
+    });
+  }
+
+  // ------------------------------------------------------------------ contestations (§6)
+  /// Contestations ouvertes par les hanouts, reçues par la synchronisation.
+  List<Map<String, dynamic>> contestations({String? hanoutId}) => s.objets('CONTESTATION',
+      where: "${_j}statut') = 'OUVERTE'${hanoutId == null ? '' : " AND ${_j}hanout.id') = ?"}",
+      args: [?hanoutId],
+      orderBy: "${_j}creeLe') DESC");
+
+  /// L'ambulant clôt une contestation, hors ligne (opération RESOLUTION_CONTESTATION).
+  void resoudreContestation(String contestationId, {String? commentaire}) {
+    s.transaction(() {
+      s.enfiler('RESOLUTION_CONTESTATION', {'contestationId': contestationId, 'commentaire': ?commentaire});
+      final c = s.objet('CONTESTATION', contestationId);
+      if (c != null) {
+        s.enregistrer('CONTESTATION', contestationId,
+            {...c, 'statut': 'RESOLUE', 'resolueLe': Stockage.maintenant(), 'commentaireResolution': ?commentaire},
+            local: true);
+      }
     });
   }
 

@@ -1389,6 +1389,168 @@ abstract class T {
   /// In fr, this message translates to:
   /// **'Non assujetti à la TVA'**
   String get tvaNonAssujetti;
+
+  /// No description provided for @erreurFactureTvaInconnue.
+  ///
+  /// In fr, this message translates to:
+  /// **'Facture impossible : un produit du panier n\'a pas de taux de TVA connu. Émettez un bon de livraison.'**
+  String get erreurFactureTvaInconnue;
+
+  /// No description provided for @tvaComprise.
+  ///
+  /// In fr, this message translates to:
+  /// **'Dont TVA'**
+  String get tvaComprise;
+
+  /// No description provided for @envoyerLienSms.
+  ///
+  /// In fr, this message translates to:
+  /// **'Envoyer le lien par SMS'**
+  String get envoyerLienSms;
+
+  /// No description provided for @erreurDocNonSynchronise.
+  ///
+  /// In fr, this message translates to:
+  /// **'Synchronisez d\'abord la vente pour obtenir son lien.'**
+  String get erreurDocNonSynchronise;
+
+  /// No description provided for @erreurHanoutSansTelephone.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce hanout n\'a pas de numéro de téléphone.'**
+  String get erreurHanoutSansTelephone;
+
+  /// No description provided for @erreurAppareilRevoque.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce téléphone a été déconnecté à distance. Reconnectez-vous.'**
+  String get erreurAppareilRevoque;
+
+  /// No description provided for @receptionConforme.
+  ///
+  /// In fr, this message translates to:
+  /// **'Réception confirmée par le hanout le {date}'**
+  String receptionConforme(String date);
+
+  /// No description provided for @receptionEcart.
+  ///
+  /// In fr, this message translates to:
+  /// **'Le hanout a signalé un écart à la réception'**
+  String get receptionEcart;
+
+  /// No description provided for @receptionEcartLigne.
+  ///
+  /// In fr, this message translates to:
+  /// **'{produit} : {recu} reçus sur {livre}'**
+  String receptionEcartLigne(String produit, String recu, String livre);
+
+  /// No description provided for @contestations.
+  ///
+  /// In fr, this message translates to:
+  /// **'Contestations'**
+  String get contestations;
+
+  /// No description provided for @contestationsOuvertes.
+  ///
+  /// In fr, this message translates to:
+  /// **'{n} contestations ouvertes'**
+  String contestationsOuvertes(String n);
+
+  /// No description provided for @aucuneContestation.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucune contestation ouverte'**
+  String get aucuneContestation;
+
+  /// No description provided for @clore.
+  ///
+  /// In fr, this message translates to:
+  /// **'Clore'**
+  String get clore;
+
+  /// No description provided for @commentaire.
+  ///
+  /// In fr, this message translates to:
+  /// **'Commentaire'**
+  String get commentaire;
+
+  /// No description provided for @document.
+  ///
+  /// In fr, this message translates to:
+  /// **'Document'**
+  String get document;
+
+  /// No description provided for @compteCredit.
+  ///
+  /// In fr, this message translates to:
+  /// **'Solde du compte'**
+  String get compteCredit;
+
+  /// No description provided for @motifMONTANT.
+  ///
+  /// In fr, this message translates to:
+  /// **'Montant'**
+  String get motifMONTANT;
+
+  /// No description provided for @motifQUANTITE.
+  ///
+  /// In fr, this message translates to:
+  /// **'Quantité'**
+  String get motifQUANTITE;
+
+  /// No description provided for @motifNON_RECU.
+  ///
+  /// In fr, this message translates to:
+  /// **'Non reçu'**
+  String get motifNON_RECU;
+
+  /// No description provided for @motifDEJA_PAYE.
+  ///
+  /// In fr, this message translates to:
+  /// **'Déjà payé'**
+  String get motifDEJA_PAYE;
+
+  /// No description provided for @motifAUTRE.
+  ///
+  /// In fr, this message translates to:
+  /// **'Autre'**
+  String get motifAUTRE;
+
+  /// No description provided for @opRESOLUTION_CONTESTATION.
+  ///
+  /// In fr, this message translates to:
+  /// **'Contestation close'**
+  String get opRESOLUTION_CONTESTATION;
+
+  /// No description provided for @anoTVA_INCONNUE.
+  ///
+  /// In fr, this message translates to:
+  /// **'Taux de TVA inconnu'**
+  String get anoTVA_INCONNUE;
+
+  /// No description provided for @erreurRoleNonAmbulant.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce numéro n\'est pas un compte de vendeur ambulant.'**
+  String get erreurRoleNonAmbulant;
+
+  /// No description provided for @rupture.
+  ///
+  /// In fr, this message translates to:
+  /// **'Rupture'**
+  String get rupture;
+
+  /// No description provided for @plafondDepasse.
+  ///
+  /// In fr, this message translates to:
+  /// **'Plafond dépassé'**
+  String get plafondDepasse;
+
+  /// No description provided for @delaiDepasse.
+  ///
+  /// In fr, this message translates to:
+  /// **'Délai dépassé'**
+  String get delaiDepasse;
 }
 
 class _TDelegate extends LocalizationsDelegate<T> {

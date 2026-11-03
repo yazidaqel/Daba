@@ -41,7 +41,7 @@ class FauxServeur {
     curseurDemande = req.url.queryParameters['curseur'];
     if (lots.isEmpty) return http.Response(jsonEncode({'curseur': 'fin', 'plusDeChangements': false, 'changements': []}), 200);
     final lot = lots.removeAt(0);
-    return http.Response(jsonEncode(lot['_statut'] == null ? lot : {'status': lot['_statut']}), (lot['_statut'] ?? 200) as int);
+    return http.Response(jsonEncode(lot['_statut'] == null ? lot : {'status': lot['_statut'], if (lot['_statut'] == 410) 'type': 'https://daba.ma/problemes/curseur-expire'}), (lot['_statut'] ?? 200) as int);
   });
 }
 
@@ -54,7 +54,7 @@ void main() {
   setUp(() {
     s = Stockage.memoire();
     serveur = FauxServeur();
-    sync = Synchronisation(s, Api('http://serveur', client: serveur.client), appareilId: appareil);
+    sync = Synchronisation(s, Api('http://serveur', client: serveur.client), appareilId: appareil, prefixe: 'K7Q2');
   });
 
   group('file d\'opérations', () {
@@ -106,7 +106,7 @@ void main() {
               : {'curseur': 'c', 'plusDeChangements': false, 'changements': []}),
           200));
       s.enfiler('EMISSION_DOCUMENT', {});
-      await Synchronisation(s, Api('http://serveur', client: client), appareilId: appareil).synchroniser();
+      await Synchronisation(s, Api('http://serveur', client: client), appareilId: appareil, prefixe: 'K7Q2').synchroniser();
       expect(s.operationsSignalees().single['statut'], 'REJETEE');
     });
 
@@ -120,18 +120,46 @@ void main() {
         return http.Response(jsonEncode({'resultats': [{'operationId': 'inconnue', 'statut': 'APPLIQUEE'}]}), 200);
       });
       s.enfiler('VERSEMENT', {});
-      await Synchronisation(s, Api('http://serveur', client: client), appareilId: appareil).synchroniser();
+      await Synchronisation(s, Api('http://serveur', client: client), appareilId: appareil, prefixe: 'K7Q2').synchroniser();
       expect(appels, 1);
       expect(s.nombreEnAttente, 1);
     });
 
-    test('seul un 403 « appareil-revoque » révoque l\'appareil ; un autre 403 ne touche à rien', () async {
+    test('seul « appareil-revoque » signale la révocation ; un autre 403 ne touche à rien', () async {
+      var revocations = 0;
+      sync.api.surRevocation = () => revocations++;
       s.enfiler('VERSEMENT', {});
       serveur.statutForce = 403;
+      serveur.typeForce = 'https://daba.ma/problemes/role-non-autorise';
       await expectLater(sync.synchroniser(), throwsA(isA<ProblemeApi>()));
-      expect(s.nombreEnAttente, 1);
+      expect((revocations, s.nombreEnAttente), (0, 1));
       serveur.typeForce = 'https://daba.ma/problemes/appareil-revoque';
-      await expectLater(sync.synchroniser(), throwsA(isA<AppareilRevoque>()));
+      await expectLater(sync.synchroniser(), throwsA(isA<ProblemeApi>()));
+      expect(revocations, 1);
+    });
+
+    test('401 : un seul renouvellement de session pour les appels en cours, puis rejeu', () async {
+      var renouvellements = 0;
+      final client = MockClient((req) async => req.headers['Authorization'] == 'Bearer neuf'
+          ? http.Response(jsonEncode({'ok': req.url.path}), 200)
+          : http.Response(jsonEncode({'type': 'https://daba.ma/problemes/non-authentifie', 'status': 401}), 401));
+      final api = Api('http://serveur', client: client)..jeton = 'perime';
+      api.rafraichir = () async {
+        renouvellements++;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        api.jeton = 'neuf';
+        return true;
+      };
+      final r = await Future.wait([api.get('/v1/stock'), api.get('/v1/promos')]);
+      expect(r, [{'ok': '/v1/stock'}, {'ok': '/v1/promos'}]);
+      expect(renouvellements, 1);
+    });
+
+    test('401 après un renouvellement refusé : l\'erreur remonte', () async {
+      final api = Api('http://serveur', client: MockClient((_) async => http.Response(jsonEncode({'status': 401}), 401)))
+        ..jeton = 'perime'
+        ..rafraichir = () async => false;
+      await expectLater(api.get('/v1/stock'), throwsA(isA<ProblemeApi>().having((e) => e.status, 'status', 401)));
     });
 
     test('un document rejeté reste visible, marqué refusé', () async {
@@ -146,7 +174,7 @@ void main() {
           200));
       s.enregistrer('DOCUMENT', 'd1', {'id': 'd1', 'statut': 'EMIS'}, local: true);
       s.enfiler('EMISSION_DOCUMENT', {'documentId': 'd1'});
-      await Synchronisation(s, Api('http://serveur', client: client), appareilId: appareil).synchroniser();
+      await Synchronisation(s, Api('http://serveur', client: client), appareilId: appareil, prefixe: 'K7Q2').synchroniser();
       expect(s.objet('DOCUMENT', 'd1')!['rejete'], isTrue);
     });
   });
@@ -177,7 +205,7 @@ void main() {
               : lot('c', true, [])),
           200));
       s.enfiler('VERSEMENT', {}, deltas: {('SOLDE', 'h1'): -500});
-      await Synchronisation(s, Api('http://serveur', client: client), appareilId: appareil).synchroniser();
+      await Synchronisation(s, Api('http://serveur', client: client), appareilId: appareil, prefixe: 'K7Q2').synchroniser();
       expect(s.delta('SOLDE', 'h1'), -500);
     });
 
@@ -221,8 +249,8 @@ void main() {
 
     test('rattrape la numérotation sur les documents de l\'appareil', () async {
       serveur.lots.add(lot('c', false, [
-        {'entite': 'DOCUMENT', 'id': 'd1', 'action': 'UPSERT', 'donnees': {'type': 'BON_LIVRAISON', 'sequence': 41, 'appareilId': appareil}},
-        {'entite': 'DOCUMENT', 'id': 'd2', 'action': 'UPSERT', 'donnees': {'type': 'BON_LIVRAISON', 'sequence': 99, 'appareilId': 'autre'}},
+        {'entite': 'DOCUMENT', 'id': 'd1', 'action': 'UPSERT', 'donnees': {'type': 'BON_LIVRAISON', 'numero': 'K7Q2-BL-000041', 'sequence': 41, 'appareilId': appareil}},
+        {'entite': 'DOCUMENT', 'id': 'd2', 'action': 'UPSERT', 'donnees': {'type': 'BON_LIVRAISON', 'numero': 'B9X1-BL-000099', 'sequence': 99, 'appareilId': appareil}},
       ]));
       await sync.synchroniser();
       expect(s.sequenceSuivante('BL'), 42);

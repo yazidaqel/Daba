@@ -9,20 +9,22 @@ class HorsLigne implements Exception {
   const HorsLigne();
 }
 
-/// Erreur RFC 9457 renvoyée par le serveur.
+/// Erreur RFC 9457 renvoyée par le serveur. Les clients décident sur `code`, jamais sur `detail`.
 class ProblemeApi implements Exception {
   ProblemeApi(this.status, this.corps);
   final int status;
   final Map<String, dynamic> corps;
 
   String? get type => corps['type'] as String?;
+
+  /// Code fixe du contrat : fin de `https://daba.ma/problemes/<code>`.
+  String? get code => type?.split('/').last;
   String? get regle => corps['regle'] as String?;
   String? get detail => corps['detail'] as String?;
-  bool get consentementRequis => status == 403 && (type ?? '').endsWith('consentement-requis');
+  bool get consentementRequis => code == 'consentement-requis';
 
-  /// Appareil déconnecté à distance (§10). Le contrat ne fixe pas encore ce `type` :
-  /// demandé au back-end, d'ici là aucun 403 n'efface l'appareil.
-  bool get appareilRevoque => status == 403 && (type ?? '').endsWith('appareil-revoque');
+  /// Appareil déconnecté à distance (§10) : seul ce code autorise l'effacement des données locales.
+  bool get appareilRevoque => code == 'appareil-revoque';
 
   @override
   String toString() => 'ProblemeApi($status, $corps)';
@@ -40,19 +42,30 @@ class Api {
   String langue;
   String? jeton;
 
+  /// Renouvelle la session (`POST /v1/auth/refresh`) ; vrai si un nouveau jeton est en place.
+  Future<bool> Function()? rafraichir;
+
+  /// Appelé quand un appel, quel qu'il soit, répond `appareil-revoque`.
+  void Function()? surRevocation;
+
+  Future<bool>? _rafraichissement;
+
   static const delai = Duration(seconds: 20);
 
   Future<dynamic> get(String chemin, {Map<String, String>? query}) => _envoyer('GET', chemin, query: query);
-  Future<dynamic> post(String chemin, [Object? corps]) => _envoyer('POST', chemin, corps: corps);
+  Future<dynamic> post(String chemin, [Object? corps, Map<String, String> entetes = const {}]) =>
+      _envoyer('POST', chemin, corps: corps, entetes: entetes);
   Future<dynamic> put(String chemin, Object corps) => _envoyer('PUT', chemin, corps: corps);
 
-  Future<dynamic> _envoyer(String methode, String chemin, {Object? corps, Map<String, String>? query}) async {
+  Future<dynamic> _envoyer(String methode, String chemin,
+      {Object? corps, Map<String, String>? query, Map<String, String> entetes = const {}, bool reessai = true}) async {
     final req = http.Request(methode, Uri.parse('$baseUrl$chemin').replace(queryParameters: query))
       ..headers.addAll({
         'Accept': 'application/json, application/problem+json',
         'Accept-Language': langue,
         if (jeton != null) 'Authorization': 'Bearer $jeton',
         if (corps != null) 'Content-Type': 'application/json',
+        ...entetes,
       });
     if (corps != null) req.body = jsonEncode(corps);
     final http.Response rep;
@@ -66,9 +79,17 @@ class Api {
       throw const HorsLigne();
     }
     final contenu = rep.body.isEmpty ? null : jsonDecode(utf8.decode(rep.bodyBytes));
-    if (rep.statusCode >= 400) {
-      throw ProblemeApi(rep.statusCode, contenu is Map<String, dynamic> ? contenu : {'status': rep.statusCode});
+    if (rep.statusCode < 400) return contenu;
+
+    final probleme = ProblemeApi(rep.statusCode, contenu is Map<String, dynamic> ? contenu : {'status': rep.statusCode});
+    if (probleme.appareilRevoque) {
+      surRevocation?.call();
+    } else if (rep.statusCode == 401 && reessai && jeton != null && rafraichir != null && !chemin.startsWith('/v1/auth/')) {
+      // Jeton expiré : un seul renouvellement pour tous les appels en cours, puis on rejoue l'appel.
+      if (await (_rafraichissement ??= rafraichir!().whenComplete(() => _rafraichissement = null))) {
+        return _envoyer(methode, chemin, corps: corps, query: query, entetes: entetes, reessai: false);
+      }
     }
-    return contenu;
+    throw probleme;
   }
 }

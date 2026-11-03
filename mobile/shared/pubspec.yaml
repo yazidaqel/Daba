@@ -14,6 +14,7 @@ dependencies:
     sdk: flutter
   http: ^1.6.0
   intl: ^0.20.3
+  phosphoricons_flutter: ^1.1.1
   sqlite3: ^3.8.0
   uuid: ^4.6.0
 
@@ -24,3 +25,20 @@ dev_dependencies:
 
 flutter:
   generate: true
+  # IBM Plex 1.1.0 (SIL OFL 1.1, assets/polices/OFL.txt), embarquées : l'app fonctionne hors ligne.
+  # Seulement les graisses utilisées : 400, 500, 600.
+  fonts:
+    - family: IBMPlexSans
+      fonts:
+        - asset: assets/polices/IBMPlexSans-Regular.ttf
+        - asset: assets/polices/IBMPlexSans-Medium.ttf
+          weight: 500
+        - asset: assets/polices/IBMPlexSans-SemiBold.ttf
+          weight: 600
+    - family: IBMPlexSansArabic
+      fonts:
+        - asset: assets/polices/IBMPlexSansArabic-Regular.ttf
+        - asset: assets/polices/IBMPlexSansArabic-Medium.ttf
+          weight: 500
+        - asset: assets/polices/IBMPlexSansArabic-SemiBold.ttf
+          weight: 600

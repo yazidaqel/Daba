@@ -1,5 +1,6 @@
 import 'package:daba_shared/daba_shared.dart';
 import 'package:flutter/material.dart';
+import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../domaine.dart';
@@ -28,6 +29,10 @@ class _EcranVenteState extends State<EcranVente> {
   bool _especesSaisies = false, _confirme = false;
 
   int get _total => _lignes.fold(0, (a, l) => a + l.brut - l.remise);
+
+  /// Facture seulement avec les mentions légales, et pour un assujetti si chaque taux de TVA est connu (RG-F2).
+  bool get _factureOk => context.daba.m.peutFacturer && !context.daba.m.tvaInconnue(_lignes);
+  String get _typeEffectif => _factureOk ? _type : 'BON_LIVRAISON';
   int get _montantCheque => centimes(_cheque.text) ?? 0;
   int get _montantEspeces => _especesSaisies ? (centimes(_especes.text) ?? 0) : _total - _montantCheque;
   int get _credit => _total - _montantEspeces - _montantCheque;
@@ -88,7 +93,7 @@ class _EcranVenteState extends State<EcranVente> {
       final doc = daba.m.emettre(
         hanoutId: widget.hanoutId,
         lignes: _lignes,
-        type: _type,
+        type: _typeEffectif,
         reglements: [
           if (_montantEspeces > 0) Reglement('ESPECES', _montantEspeces),
           if (_montantCheque > 0)
@@ -116,10 +121,10 @@ class _EcranVenteState extends State<EcranVente> {
     final style = Theme.of(context).textTheme;
     return Scaffold(
       appBar: AppBar(title: Text(t.venteA(h?['nom'] as String? ?? ''))),
-      floatingActionButton: FloatingActionButton(heroTag: 'ajout', onPressed: _ajouterProduit, child: const Icon(Icons.add_shopping_cart)),
+      floatingActionButton: FloatingActionButton(heroTag: 'ajout', onPressed: _ajouterProduit, child: const Ico(PhosphorIconsRegular.shoppingCart)),
       body: ListView(padding: const EdgeInsets.only(bottom: 120), children: [
         ListTile(dense: true, title: Text(t.solde), trailing: Text(dh(m.solde(widget.hanoutId)))),
-        if (_lignes.isEmpty) Vide(t.panierVide, icone: Icons.add_shopping_cart),
+        if (_lignes.isEmpty) Vide(t.panierVide, icone: PhosphorIconsRegular.shoppingCart),
         for (final l in _lignes) _ligne(l),
         const Divider(),
         ListTile(title: Text(t.total, style: style.titleMedium), trailing: Text(dh(_total), style: style.titleLarge)),
@@ -128,13 +133,17 @@ class _EcranVenteState extends State<EcranVente> {
           child: SegmentedButton<String>(
             segments: [
               ButtonSegment(value: 'BON_LIVRAISON', label: Text(t.bonLivraison)),
-              ButtonSegment(value: 'FACTURE', label: Text(t.facture), enabled: m.peutFacturer),
+              ButtonSegment(value: 'FACTURE', label: Text(t.facture), enabled: _factureOk),
             ],
-            selected: {_type},
+            selected: {_typeEffectif},
             onSelectionChanged: (s) => setState(() => _type = s.first),
           ),
         ),
-        if (!m.peutFacturer) Padding(padding: const EdgeInsets.all(8), child: Text(t.factureIndisponible, style: style.bodySmall)),
+        if (!_factureOk)
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Text(m.peutFacturer ? t.erreurFactureTvaInconnue : t.factureIndisponible, style: style.bodySmall),
+          ),
         Padding(
           padding: const EdgeInsets.all(16),
           child: Column(children: [
@@ -152,7 +161,7 @@ class _EcranVenteState extends State<EcranVente> {
             const SizedBox(height: 8),
             Row(children: [
               Expanded(child: Text(t.resteACredit, style: style.titleMedium)),
-              Text(dh(_credit), style: style.titleMedium?.copyWith(color: _credit > 0 ? Colors.orange.shade800 : null)),
+              Text(dh(_credit), style: style.titleMedium),
             ]),
             Wrap(spacing: 8, children: [
               ActionChip(label: Text(t.toutEspeces), onPressed: () => setState(() {
@@ -173,8 +182,8 @@ class _EcranVenteState extends State<EcranVente> {
           padding: const EdgeInsets.all(16),
           child: FilledButton.icon(
             onPressed: _lignes.isEmpty ? null : _emettre,
-            icon: const Icon(Icons.receipt_long),
-            label: Text(_type == 'FACTURE' ? t.emettreFacture : t.emettreBon),
+            icon: const Ico(PhosphorIconsRegular.receipt),
+            label: Text(_typeEffectif == 'FACTURE' ? t.emettreFacture : t.emettreBon),
           ),
         ),
       ]),
@@ -197,11 +206,11 @@ class _EcranVenteState extends State<EcranVente> {
       onTap: () => _modifier(l),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         IconButton(
-          icon: const Icon(Icons.remove_circle_outline),
+          icon: const Ico(PhosphorIconsRegular.minusCircle),
           onPressed: () => setState(() => l.quantite > 1 ? l.quantite-- : _lignes.remove(l)),
         ),
         Text('${l.quantite}', style: Theme.of(context).textTheme.titleMedium),
-        IconButton(icon: const Icon(Icons.add_circle_outline), onPressed: () => setState(() => l.quantite++)),
+        IconButton(icon: const Ico(PhosphorIconsRegular.plusCircle), onPressed: () => setState(() => l.quantite++)),
       ]),
     );
   }
@@ -230,7 +239,7 @@ class ChoixProduitState extends State<ChoixProduit> {
           padding: const EdgeInsets.all(12),
           child: TextField(
             autofocus: true,
-            decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: context.t.rechercherProduit),
+            decoration: InputDecoration(prefixIcon: const Ico(PhosphorIconsRegular.magnifyingGlass), hintText: context.t.rechercherProduit),
             onChanged: (v) => setState(() => _q = v),
           ),
         ),
@@ -269,21 +278,24 @@ class EcranDocument extends StatelessWidget {
         Text(nomType(t, doc['type'] as String), style: style.titleLarge),
         Text('${doc['hanout']['nom']} · ${date(doc['emisLe'] as String)}'),
         if (doc['statut'] != 'EMIS')
-          Text(doc['statut'] == 'ANNULE' ? t.docAnnule : t.docPartiellementAnnule, style: TextStyle(color: Colors.red.shade700)),
-        if (doc['rejete'] == true) Text(t.docRejete, style: TextStyle(color: Colors.red.shade700)),
+          Statut(Ton.danger, doc['statut'] == 'ANNULE' ? t.docAnnule : t.docPartiellementAnnule),
+        if (doc['rejete'] == true) Statut(Ton.danger, t.docRejete),
+        ..._reception(context, doc),
         const Divider(),
         for (final l in (doc['lignes'] as List).cast<Map>())
           ListTile(
             dense: true,
             title: Text(context.lib(l['libelle'])),
-            subtitle: Text([
-              if (l['nature'] == 'ARTICLE') '${l['quantite']} × ${dh(l['prixUnitaire'] as int)}' else nomNature(t, l['nature'] as String),
-              if (l['campagneNom'] != null) '${t.promo} ${context.lib(l['campagneNom'])}',
-            ].join(' · ')),
+            subtitle: Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              Text(l['nature'] == 'ARTICLE' ? '${l['quantite']} × ${dh(l['prixUnitaire'] as int)}' : nomNature(t, l['nature'] as String)),
+              // Ligne promo d'un BL : badge safran avec la référence de la campagne (RG-F3).
+              if (l['campagneNom'] != null) BadgePromo('${t.promo} ${context.lib(l['campagneNom'])}'),
+            ]),
             trailing: Text(dh(l['montant'] as int)),
           ),
         const Divider(),
         ListTile(title: Text(t.total), trailing: Text(dh(doc['total'] as int), style: style.titleLarge)),
+        if (doc['tva'] != null) ListTile(dense: true, title: Text(t.tvaComprise), trailing: Text(dh(doc['tva'] as int))),
         ListTile(dense: true, title: Text(t.regle), trailing: Text(dh(doc['montantRegle'] as int))),
         ListTile(dense: true, title: Text(t.resteACredit), trailing: Text(dh(doc['montantCredit'] as int))),
         const SizedBox(height: 16),
@@ -292,13 +304,50 @@ class EcranDocument extends StatelessWidget {
             final fichier = await documentPdf(doc, t, context.langue);
             await SharePlus.instance.share(ShareParams(files: [XFile(fichier.path, mimeType: 'application/pdf')], text: doc['numero'] as String));
           },
-          icon: const Icon(Icons.share),
+          icon: const Ico(PhosphorIconsRegular.shareNetwork),
           label: Text(t.partagerPdf),
         ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(onPressed: () => _envoyerLien(context), icon: const Ico(PhosphorIconsRegular.chatText), label: Text(t.envoyerLienSms)),
         const SizedBox(height: 8),
         Text(t.smsApresSync, style: style.bodySmall, textAlign: TextAlign.center),
       ]),
     );
+  }
+
+  /// Lien signé du document (en ligne), partagé à la main vers l'app SMS.
+  Future<void> _envoyerLien(BuildContext context) async {
+    final t = context.t;
+    try {
+      final lien = await context.daba.api.get('/v1/documents/$id/lien') as Map<String, dynamic>;
+      await SharePlus.instance.share(ShareParams(text: lien['url'] as String));
+    } on ProblemeApi catch (e) {
+      if (!context.mounted) return;
+      context.message(switch (e.code) {
+        'introuvable' => t.erreurDocNonSynchronise,
+        'regle-de-gestion' => t.erreurHanoutSansTelephone,
+        _ => messageErreur(t, e),
+      });
+    } catch (e) {
+      if (context.mounted) context.erreur(e);
+    }
+  }
+
+  /// Réception confirmée par le hanout dans sa PWA, ou écart signalé ligne par ligne (§6).
+  List<Widget> _reception(BuildContext context, Map<String, dynamic> doc) {
+    final r = doc['receptionHanout'] as Map?;
+    if (r == null) return const [];
+    final t = context.t;
+    if (r['conforme'] == true) return [Statut(Ton.succes, t.receptionConforme(date(r['le'] as String)))];
+    final lignes = (doc['lignes'] as List).cast<Map>();
+    return [
+      Statut(Ton.avertissement, t.receptionEcart),
+      for (final e in ((r['ecarts'] as List?) ?? const []).cast<Map>())
+        if ((e['ligne'] as int) < lignes.length)
+          Text(t.receptionEcartLigne(context.lib(lignes[e['ligne'] as int]['libelle']), '${e['quantiteRecue']}',
+              '${lignes[e['ligne'] as int]['quantite']}')),
+      if (r['commentaire'] case final String c) Text(c),
+    ];
   }
 }
 

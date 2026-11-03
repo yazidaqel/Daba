@@ -26,7 +26,8 @@ class AppAmbulant extends StatelessWidget {
             locale: daba.locale,
             supportedLocales: languesDaba,
             localizationsDelegates: delegationsDaba,
-            theme: ThemeData(colorSchemeSeed: const Color(0xFF0B7A55), useMaterial3: true),
+            theme: themeDaba(daba.locale, Brightness.light),
+            darkTheme: themeDaba(daba.locale, Brightness.dark), // suit le réglage système
             home: switch (daba.etape) {
               Etape.connexion => const EcranConnexion(),
               Etape.consentement => const EcranConsentement(),

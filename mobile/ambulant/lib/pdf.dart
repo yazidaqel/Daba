@@ -11,12 +11,17 @@ import 'ecrans/vente.dart' show nomNature, nomType;
 
 /// PDF du document, généré sur le téléphone (hors ligne) pour un partage manuel.
 Future<File> documentPdf(Map<String, dynamic> doc, T t, Locale locale) async {
-  final arabe = pw.Font.ttf(await rootBundle.load('assets/polices/NotoSansArabic-Regular.ttf'));
+  // Polices IBM Plex du package partagé, comme à l'écran.
+  Future<pw.Font> police(String fichier) async =>
+      pw.Font.ttf(await rootBundle.load('packages/daba_shared/assets/polices/$fichier.ttf'));
+  final latine = await police('IBMPlexSans-Regular');
+  final latineGras = await police('IBMPlexSans-SemiBold');
+  final arabe = await police('IBMPlexSansArabic-Regular');
   final rtl = locale.languageCode == 'ar' || (locale.languageCode == 'ary' && locale.scriptCode != 'Latn');
   final mentions = doc['mentionsLegales'] as Map?;
   String lib(Object? l) => libelle(l, locale);
 
-  final pdf = pw.Document(theme: pw.ThemeData.withFont(base: pw.Font.helvetica(), fontFallback: [arabe]));
+  final pdf = pw.Document(theme: pw.ThemeData.withFont(base: latine, bold: latineGras, fontFallback: [arabe]));
   pdf.addPage(pw.Page(
     pageFormat: PdfPageFormat.a5,
     textDirection: rtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
