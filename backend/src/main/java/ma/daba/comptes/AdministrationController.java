@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -59,6 +60,7 @@ class AdministrationController {
 
 	record UtilisateurAdmin(UUID id, String telephone, String nom, List<String> roles, OrganisationRef organisation,
 			UUID hanoutId, boolean actif, Instant desactiveLe, Instant creeLe, ComptesController.Consentement consentement,
+			boolean motDePasseDefini, Instant motDePasseModifieLe, MotsDePasse.Methode methodeConnexion,
 			List<AppareilAdmin> appareils) {
 	}
 
@@ -75,6 +77,7 @@ class AdministrationController {
 
 	private static final String SELECT_UTILISATEUR = """
 			SELECT u.id, u.telephone, u.nom, u.role, u.hanout_id, u.desactive_le, u.cree_le,
+			       u.mot_de_passe_hash IS NOT NULL AS mdp_defini, u.mot_de_passe_modifie_le,
 			       o.id AS org_id, o.type AS org_type, o.nom AS org_nom,
 			       c.version_texte, c.traitement_donnees, c.geolocalisation, c.langue, c.enregistre_le
 			""";
@@ -94,9 +97,13 @@ class AdministrationController {
 	private final Referentiel referentiel;
 	private final Audit audit;
 	private final ApplicationEventPublisher evenements;
+	private final MotsDePasse motsDePasse;
+	private final Authentification authentification;
 
 	AdministrationController(JdbcClient jdbc, Comptes comptes, Referentiel referentiel, Audit audit,
-			ApplicationEventPublisher evenements) {
+			ApplicationEventPublisher evenements, MotsDePasse motsDePasse, Authentification authentification) {
+		this.motsDePasse = motsDePasse;
+		this.authentification = authentification;
 		this.jdbc = jdbc;
 		this.comptes = comptes;
 		this.referentiel = referentiel;
@@ -206,6 +213,37 @@ class AdministrationController {
 		return utilisateur(utilisateurId);
 	}
 
+	/** Mot de passe effacé, sessions fermées : l'utilisateur en redéfinit un par code SMS (§10). */
+	@PostMapping("/v1/admin/utilisateurs/{utilisateurId}/reinitialisation-mot-de-passe")
+	@Roles(Role.ADMIN)
+	@Transactional
+	UtilisateurAdmin reinitialiserMotDePasse(Appelant admin, @PathVariable UUID utilisateurId) {
+		var role = role(utilisateurId);
+		if (!MotsDePasse.ROLES_PORTAIL.contains(role)) {
+			throw Probleme.conflit("Un " + role + " se connecte par code SMS, sans mot de passe");
+		}
+		motsDePasse.effacer(utilisateurId);
+		authentification.fermerSessions(utilisateurId, null);
+		audit.consigner(admin, "MOT_DE_PASSE_REINITIALISE", Map.of("utilisateurId", utilisateurId, "role", role));
+		return utilisateur(utilisateurId);
+	}
+
+	// ---------------------------------------------------------------- méthode de connexion des portails
+
+	@GetMapping("/v1/admin/authentification")
+	@Roles(Role.ADMIN)
+	MotsDePasse.Configuration lireConfigurationAuthentification() {
+		return motsDePasse.effective();
+	}
+
+	@PutMapping("/v1/admin/authentification")
+	@Roles(Role.ADMIN)
+	MotsDePasse.Configuration modifierConfigurationAuthentification(Appelant admin,
+			@Valid @RequestBody MotsDePasse.Configuration saisie) {
+		motsDePasse.enregistrer(admin, saisie);
+		return motsDePasse.effective();
+	}
+
 	/** §10 : déconnexion à distance d'un appareil perdu ; définitive pour cet appareilId. */
 	@PostMapping("/v1/admin/appareils/{appareilId}/revocation")
 	@Roles(Role.ADMIN)
@@ -273,7 +311,8 @@ class AdministrationController {
 
 	/** Utilisateurs de la requête, avec leurs appareils (une seule requête de plus pour toute la page). */
 	private List<UtilisateurAdmin> utilisateurs(JdbcClient.StatementSpec requete) {
-		var utilisateurs = requete.query((rs, i) -> utilisateurSansAppareils(rs)).list();
+		var configuration = motsDePasse.effective();
+		var utilisateurs = requete.query((rs, i) -> utilisateurSansAppareils(rs, configuration)).list();
 		if (utilisateurs.isEmpty()) {
 			return utilisateurs;
 		}
@@ -315,11 +354,13 @@ class AdministrationController {
 			});
 		return utilisateurs.stream()
 			.map(u -> new UtilisateurAdmin(u.id(), u.telephone(), u.nom(), u.roles(), u.organisation(), u.hanoutId(), u.actif(),
-					u.desactiveLe(), u.creeLe(), u.consentement(), appareils.getOrDefault(u.id(), List.of())))
+					u.desactiveLe(), u.creeLe(), u.consentement(), u.motDePasseDefini(), u.motDePasseModifieLe(),
+					u.methodeConnexion(), appareils.getOrDefault(u.id(), List.of())))
 			.toList();
 	}
 
-	private static UtilisateurAdmin utilisateurSansAppareils(ResultSet rs) throws SQLException {
+	private static UtilisateurAdmin utilisateurSansAppareils(ResultSet rs, MotsDePasse.Configuration configuration)
+			throws SQLException {
 		var consentement = rs.getTimestamp("enregistre_le") == null ? null
 				: new ComptesController.Consentement(rs.getString("version_texte"), rs.getBoolean("traitement_donnees"),
 						(Boolean) rs.getObject("geolocalisation"), rs.getString("langue"), instant(rs, "enregistre_le"));
@@ -327,7 +368,8 @@ class AdministrationController {
 				List.of(rs.getString("role")),
 				new OrganisationRef(rs.getObject("org_id", UUID.class), rs.getString("org_type"), rs.getString("org_nom")),
 				rs.getObject("hanout_id", UUID.class), rs.getTimestamp("desactive_le") == null, instant(rs, "desactive_le"),
-				instant(rs, "cree_le"), consentement, List.of());
+				instant(rs, "cree_le"), consentement, rs.getBoolean("mdp_defini"), instant(rs, "mot_de_passe_modifie_le"),
+				configuration.methode(rs.getString("role"), rs.getObject("org_id", UUID.class)), List.of());
 	}
 
 	private OrganisationAdmin ligneOrganisation(ResultSet rs, int i) throws SQLException {

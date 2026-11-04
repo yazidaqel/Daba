@@ -13,7 +13,7 @@
 	<version>0.0.1-SNAPSHOT</version>
 	<name>daba</name>
 
-	<!-- Versions vérifiées le 29 oct. 2026 (PDFBox, ICU4J, polices DejaVu : 2 nov. 2026 ; Google Auth Library : 3 nov. 2026). Flyway reste sur la version gérée par Spring Boot (12.x) :
+	<!-- Versions vérifiées le 29 oct. 2026 (PDFBox, ICU4J, polices DejaVu : 2 nov. 2026 ; Google Auth Library : 3 nov. 2026 ; Bouncy Castle : 4 nov. 2026). Flyway reste sur la version gérée par Spring Boot (12.x) :
 	     la 13.x existe mais n'est gérée ni par Boot 4.1 ni par Boot 4.2. -->
 	<properties>
 		<java.version>25</java.version>
@@ -23,6 +23,7 @@
 		<icu4j.version>79.1</icu4j.version>
 		<dejavu.version>7.1.1</dejavu.version>
 		<google-auth.version>1.55.0</google-auth.version>
+		<bouncycastle.version>1.86</bouncycastle.version>
 	</properties>
 
 	<dependencies>
@@ -77,6 +78,17 @@
 			<groupId>com.google.auth</groupId>
 			<artifactId>google-auth-library-oauth2-http</artifactId>
 			<version>${google-auth.version}</version>
+		</dependency>
+		<!-- Mots de passe des portails : Argon2id (Argon2PasswordEncoder, version gérée par Spring Boot) ;
+		     Spring Security Crypto calcule Argon2 avec Bouncy Castle, qu'il ne tire pas lui-même. -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-crypto</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcprov-jdk18on</artifactId>
+			<version>${bouncycastle.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.postgresql</groupId>

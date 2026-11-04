@@ -83,7 +83,10 @@ class AdministrationTest extends TestIntegration {
 				new Object[] { HttpMethod.POST, "/v1/admin/utilisateurs/" + cible.id() + "/desactivation", null },
 				new Object[] { HttpMethod.POST, "/v1/admin/utilisateurs/" + cible.id() + "/reactivation", null },
 				new Object[] { HttpMethod.POST, "/v1/admin/appareils/" + cible.appareilId() + "/revocation", null },
-				new Object[] { HttpMethod.GET, "/v1/admin/audit", null });
+				new Object[] { HttpMethod.GET, "/v1/admin/audit", null },
+				new Object[] { HttpMethod.GET, "/v1/admin/authentification", null },
+				new Object[] { HttpMethod.PUT, "/v1/admin/authentification", m("roles", List.of(), "organisations", List.of()) },
+				new Object[] { HttpMethod.POST, "/v1/admin/utilisateurs/" + cible.id() + "/reinitialisation-mot-de-passe", null });
 		for (var autre : List.of(ambulant(), compteHanout(hanout(33.5, -7.6)), grossiste(), grandClient())) {
 			for (var a : appels) {
 				assertThat(appel((HttpMethod) a[0], autre, (String) a[1], a[2])).as(a[1].toString()).hasStatus(403)

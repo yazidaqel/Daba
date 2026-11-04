@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Daba API
-  version: 0.8.0
+  version: 0.9.0
   description: |
     Contrat unique entre le back-end, les apps mobiles (ambulant, hanout) et les portails web.
     Changement incompatible = nouvelle version de l'endpoint (/v2/...), jamais de rupture silencieuse.
@@ -17,6 +17,32 @@ info:
     authentifié et à `POST /v1/auth/otp/verify`) : l'app n'efface rien, sa file attend la réactivation.
     Pour le mock Prism, `POST /v1/auth/otp/verify` a un exemple de Session par rôle, à choisir avec
     l'en-tête `Prefer: example=grossiste` (ou ambulant, grandClient, hanout, admin).
+
+    **Connexion aux portails web (v0.9.0, §10).** Les rôles GROSSISTE, GRAND_CLIENT et ADMIN se
+    connectent selon la méthode que l'administrateur choisit (`GET`/`PUT /v1/admin/authentification`) :
+    `OTP` (code SMS seul, par défaut : rien ne change pour les comptes existants), `MOT_DE_PASSE`
+    (téléphone + mot de passe) ou `MOT_DE_PASSE_ET_OTP` (mot de passe puis code SMS). Méthode
+    effective = exception de l'organisation, sinon défaut du rôle. AMBULANT et HANOUT (app Flutter,
+    PWA) restent sur le code SMS seul, sans mot de passe (§6) : leurs appels ne changent pas.
+    Séquences du portail (le portail ne connaît pas la méthode d'un numéro à l'avance : il propose
+    « mot de passe » et « recevoir un code », et peut retenir sur le navigateur le dernier choix) :
+    - `OTP` : `POST /v1/auth/otp`, puis `POST /v1/auth/otp/verify` → Session (inchangé).
+    - `MOT_DE_PASSE` : `POST /v1/auth/mot-de-passe` → `{session}`.
+    - `MOT_DE_PASSE_ET_OTP` : `POST /v1/auth/mot-de-passe` → `{defi}` (code envoyé par SMS), puis
+      `POST /v1/auth/otp/verify` avec `defi` → Session.
+    - Première connexion sans mot de passe, ou mot de passe oublié : `POST /v1/auth/otp`, puis
+      `POST /v1/auth/mot-de-passe/definition` (code + nouveau mot de passe) → Session ; toutes les
+      autres sessions du compte se ferment. Si le portail a d'abord appelé `POST /v1/auth/otp/verify`,
+      la réponse 403 `…/mot-de-passe-a-definir` (ou `…/mot-de-passe-requis`) laisse le code valable
+      pour cette définition.
+    Aucune réponse avant la preuve d'un secret ne dit si un numéro est inscrit, ni son rôle, ni sa
+    méthode : `POST /v1/auth/otp` répond 202 pour tout numéro ; `POST /v1/auth/mot-de-passe` répond le
+    même 401 `…/identifiants-invalides`, après le même calcul Argon2id, pour un numéro inconnu, un
+    ambulant, un hanout, un compte sans mot de passe ou un mauvais mot de passe, et le
+    ralentissement (après 5 échecs consécutifs, attente doublée à chaque échec, de 30 s à 15 min, 429
+    `…/trop-de-demandes` avec `Retry-After`) vaut pour tout numéro. Le compte désactivé, l'appareil révoqué ou
+    la méthode ne se révèlent qu'après un mot de passe juste ou un code SMS juste.
+    Un mot de passe n'est jamais renvoyé, ni journalisé ; il est conservé haché (Argon2id).
 
     **Cloisonnement multi-tenant.** Chaque appel authentifié est cloisonné par l'organisation
     portée par le jeton (`organisationId` de la Session) ; aucun chemin ne prend l'organisation
@@ -46,7 +72,8 @@ info:
     seulement, jamais aux marques ni aux grossistes. Aucune réponse ne contient de code OTP,
     d'accessToken, de refreshToken, de jeton push (seulement `pushActif`), de session ni de secret de
     fournisseur. Chaque écriture (organisation créée, utilisateur ajouté, désactivé ou réactivé,
-    appareil révoqué, import du référentiel, configuration des canaux) est inscrite au journal
+    appareil révoqué, import du référentiel, configuration des canaux ou de l'authentification,
+    mot de passe réinitialisé) est inscrite au journal
     d'audit (`GET /v1/admin/audit`), que la base refuse de modifier ou d'effacer. Les lectures ne
     sont pas journalisées.
     Les recherches (`GET /v1/admin/utilisateurs?q=`, `GET /v1/hanouts?q=`) portent des numéros de
@@ -97,7 +124,7 @@ security:
 
 tags:
   - name: comptes
-    description: Authentification OTP, appareils, liens signés
+    description: Authentification OTP et, pour les portails web, par mot de passe ; appareils, liens signés
   - name: referentiel
     description: Hanouts (base POS RED), produits, grossistes
   - name: sync
@@ -124,6 +151,9 @@ paths:
       tags: [comptes]
       operationId: demanderOtp
       summary: Envoie un code OTP par SMS au numéro donné, ou au numéro d'un lien signé
+      description: |
+        Chaque code remplace le précédent (5 essais, 5 min). Au-delà de 5 codes par heure et par numéro,
+        429 sans rien changer : le code en cours et ses essais déjà comptés restent tels quels.
       security: []
       requestBody:
         required: true
@@ -180,7 +210,13 @@ paths:
         '401':
           $ref: '#/components/responses/Problem'
         '403':
-          description: Compte désactivé par l'administrateur (`…/utilisateur-desactive`), code juste
+          description: |
+            Code juste, mais : compte désactivé par l'administrateur (`…/utilisateur-desactive`) ; ou
+            compte de portail dont la méthode exige un mot de passe (v0.9.0) : `…/mot-de-passe-a-definir`
+            (aucun mot de passe encore : `POST /v1/auth/mot-de-passe/definition` avec ce même code),
+            `…/mot-de-passe-requis` (méthode MOT_DE_PASSE, ou MOT_DE_PASSE_ET_OTP sans `defi` valable :
+            `POST /v1/auth/mot-de-passe`, ou nouveau mot de passe par définition avec ce code). Dans ces
+            deux cas le code n'est pas consommé. Jamais pour AMBULANT ni HANOUT.
           content:
             application/problem+json:
               schema:
@@ -244,6 +280,152 @@ paths:
           description: Session fermée
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  /v1/auth/mot-de-passe:
+    post:
+      tags: [comptes]
+      operationId: connecterParMotDePasse
+      summary: Connexion d'un portail web par téléphone et mot de passe (GROSSISTE, GRAND_CLIENT, ADMIN)
+      description: |
+        Méthode `MOT_DE_PASSE` : renvoie la Session. Méthode `MOT_DE_PASSE_ET_OTP` : envoie un code par
+        SMS (mêmes limites que `POST /v1/auth/otp`) et renvoie un `defi` à joindre au code dans
+        `POST /v1/auth/otp/verify`. Le défi vaut 5 min, pour cet `appareilId` et pour le seul code qu'il a
+        fait envoyer : il est consommé avec lui, et devient caduc dès qu'un autre code est demandé pour ce
+        numéro (nouveau défi ou `POST /v1/auth/otp`) ou que le mot de passe change. Au-delà de 5 codes
+        par heure, 429 sans rien changer : le code en cours garde ses essais déjà comptés.
+        401 `…/identifiants-invalides` identique pour un numéro inconnu, un ambulant, un hanout, un
+        compte sans mot de passe ou un mauvais mot de passe (même calcul Argon2id dans tous les cas).
+        Ralentissement, pour tout numéro : les 5 premiers échecs consécutifs sont libres, puis chaque
+        essai attend une durée qui double à chaque échec (30 s, 1 min, 2 min… jusqu'à 15 min) : avant,
+        429 `…/trop-de-demandes` avec `Retry-After` (secondes) ; après l'attente, un mot de passe juste
+        passe. Un navigateur (`appareilId`) où le compte s'est déjà connecté a son propre compteur :
+        quelqu'un qui multiplie les échecs sur un numéro ne ralentit pas le navigateur habituel de son
+        titulaire. Une connexion réussie remet le compteur de ce navigateur à zéro ; une définition par
+        code SMS ou une réinitialisation par l'administrateur remet tous ceux du numéro à zéro.
+        Serveur saturé de calculs de mot de passe : 429 `…/trop-de-demandes` avec `Retry-After: 1`, pour
+        tous, sans compter d'échec. Après un mot de passe juste seulement : 403 `…/connexion-par-code`
+        (méthode OTP : passer par `POST /v1/auth/otp`), 403 `…/utilisateur-desactive`, 401
+        `…/appareil-revoque`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnexionMotDePasseSaisie'
+      responses:
+        '200':
+          description: Session ouverte, ou défi en attente du code SMS
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnexionMotDePasse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          description: Identifiants invalides (`…/identifiants-invalides`), ou appareil révoqué (`…/appareil-revoque`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: Mot de passe juste, mais méthode OTP (`…/connexion-par-code`) ou compte désactivé (`…/utilisateur-desactive`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          $ref: '#/components/responses/TropDeDemandes'
+
+  /v1/auth/mot-de-passe/definition:
+    post:
+      tags: [comptes]
+      operationId: definirMotDePasse
+      summary: Définit le mot de passe après un code SMS (première connexion ou mot de passe oublié)
+      description: |
+        Le code vient de `POST /v1/auth/otp` (ou est celui qu'un 403 `…/mot-de-passe-a-definir` ou
+        `…/mot-de-passe-requis` de `POST /v1/auth/otp/verify` a laissé valable). Le mot de passe est
+        contrôlé avant le code (422 : le code n'est pas consommé). Code juste : le mot de passe remplace
+        l'ancien, toutes les sessions du compte se ferment (tous appareils), le ralentissement du numéro
+        est levé, et une Session s'ouvre sur cet appareil, quelle que soit la méthode du compte. Inscrit au
+        journal d'audit (MOT_DE_PASSE_DEFINI). Un numéro d'administrateur (`DABA_ADMIN_TELEPHONES`) qui
+        ne s'est jamais connecté est inscrit ici.
+        403 `…/mot-de-passe-non-applicable` si le numéro n'a pas de compte de portail (inconnu,
+        ambulant, hanout) : seul le détenteur du code l'apprend.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DefinitionMotDePasse'
+      responses:
+        '200':
+          description: Mot de passe enregistré, session ouverte
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          description: Code invalide ou expiré (`…/code-invalide`), ou appareil révoqué (`…/appareil-revoque`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: Pas de compte de portail à ce numéro (`…/mot-de-passe-non-applicable`), ou compte désactivé
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/MotDePasseRefuse'
+        '429':
+          $ref: '#/components/responses/TropDeDemandes'
+
+  /v1/moi/mot-de-passe:
+    put:
+      tags: [comptes]
+      operationId: changerMotDePasse
+      summary: Change le mot de passe de l'utilisateur connecté (mot de passe actuel exigé)
+      description: |
+        Les autres sessions du compte se ferment ; celle de l'appel reste ouverte. Un mot de passe
+        actuel faux répond 403 `…/identifiants-invalides` et compte dans le ralentissement du numéro
+        (`POST /v1/auth/mot-de-passe`). Sans mot de passe encore : 409 `…/mot-de-passe-absent` (passer par
+        `POST /v1/auth/mot-de-passe/definition`). Permis sans consentement CNDP. Inscrit au journal
+        d'audit (MOT_DE_PASSE_MODIFIE).
+      x-roles: [GROSSISTE, GRAND_CLIENT, ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangementMotDePasse'
+      responses:
+        '204':
+          description: Mot de passe changé
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Mot de passe actuel faux (`…/identifiants-invalides`), ou rôle non autorisé
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: Aucun mot de passe défini (`…/mot-de-passe-absent`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/MotDePasseRefuse'
+        '429':
+          $ref: '#/components/responses/TropDeDemandes'
 
   /v1/liens/{jeton}:
     get:
@@ -357,7 +539,9 @@ paths:
       x-roles: [AMBULANT, HANOUT, GROSSISTE, GRAND_CLIENT]
       responses:
         '200':
-          description: Export JSON (profil, consentements, appareils, positions conservées)
+          description: |
+            Export JSON (profil, consentements, appareils, positions conservées). `utilisateur` porte
+            `mot_de_passe_defini` et `mot_de_passe_modifie_le` (v0.9.0), jamais l'empreinte du mot de passe.
           content:
             application/json:
               schema:
@@ -592,6 +776,94 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /v1/admin/utilisateurs/{utilisateurId}/reinitialisation-mot-de-passe:
+    post:
+      tags: [administration]
+      operationId: reinitialiserMotDePasse
+      summary: Efface le mot de passe d'un utilisateur de portail et ferme toutes ses sessions
+      description: |
+        L'utilisateur redéfinit un mot de passe par code SMS à sa prochaine connexion
+        (`POST /v1/auth/mot-de-passe/definition`) si sa méthode en exige un. Le ralentissement de son
+        numéro est levé. 409 pour un AMBULANT ou un HANOUT (jamais de mot de passe). Inscrit au journal
+        d'audit (MOT_DE_PASSE_REINITIALISE).
+      x-roles: [ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/UtilisateurId'
+      responses:
+        '200':
+          description: Mot de passe effacé, sessions fermées
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UtilisateurAdmin'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /v1/admin/authentification:
+    get:
+      tags: [administration]
+      operationId: lireConfigurationAuthentification
+      summary: Méthode de connexion des portails web, par rôle et par organisation (§10)
+      description: |
+        Configuration en vigueur : les trois rôles de portail sont toujours listés (OTP pour un rôle
+        jamais enregistré), suivis des exceptions par organisation.
+      x-roles: [ADMIN]
+      responses:
+        '200':
+          description: Configuration effective
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigurationAuthentification'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [administration]
+      operationId: modifierConfigurationAuthentification
+      summary: Choisit la méthode de connexion par rôle de portail et par organisation
+      description: |
+        Remplace la configuration ; un rôle absent repasse à OTP. Les exceptions ne visent que des
+        organisations GROSSISTE ou GRAND_CLIENT existantes (400 sinon, comme pour un rôle ou une
+        organisation en double) ; AMBULANT et HANOUT ne sont pas configurables (400). Les sessions
+        ouvertes restent ouvertes, celle de l'administrateur qui enregistre comprise : la méthode
+        s'applique à la connexion suivante, et un compte sans mot de passe le définit alors par code
+        SMS. Avec `fermerSessions: true`, les sessions ouvertes de chaque compte dont la méthode effective
+        devient plus stricte (elle exige un facteur que l'ancienne n'exigeait pas : OTP → MOT_DE_PASSE,
+        OTP ou MOT_DE_PASSE → MOT_DE_PASSE_ET_OTP, MOT_DE_PASSE → OTP) se ferment, sauf la session de
+        l'administrateur qui enregistre ; ces comptes se reconnectent avec la nouvelle méthode.
+        Aucune configuration ne bloque les administrateurs : le SMS ne peut pas être coupé pour les
+        codes (`PUT /v1/admin/canaux`) et chaque méthode garde la définition par code SMS. Inscrit au
+        journal d'audit (CONFIGURATION_AUTHENTIFICATION, avec `fermerSessions` et `sessionsFermees` :
+        identifiants des comptes concernés).
+      x-roles: [ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigurationAuthentification'
+      responses:
+        '200':
+          description: Configuration effective après enregistrement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigurationAuthentification'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /v1/admin/appareils/{appareilId}/revocation:
     post:
@@ -2711,6 +2983,31 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+    TropDeDemandes:
+      description: |
+        Trop de demandes (`…/trop-de-demandes`) : attendre le nombre de secondes de `Retry-After` quand
+        l'en-tête est présent.
+      headers:
+        Retry-After:
+          description: Secondes avant le prochain essai utile
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    MotDePasseRefuse:
+      description: |
+        Mot de passe refusé (v0.9.0) : `…/mot-de-passe-trop-court` (moins de 15 caractères),
+        `…/mot-de-passe-trop-long` (plus de 128), `…/mot-de-passe-telephone` (c'est le numéro de
+        téléphone, sous l'une de ses formes), `…/mot-de-passe-courant` (dans la liste des mots de passe
+        les plus courants, ou trivial : un motif de 1 à 4 caractères répété, comme `aaaa…` ou `abab…`,
+        ou une suite de caractères consécutifs, comme `abcd…` ou `9876…`). Aucune règle de composition (majuscule, chiffre…) n'est imposée.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     LienExpire:
       description: Lien signé expiré
       content:
@@ -2909,8 +3206,15 @@ components:
             - `requete-invalide` (400, détail par champ dans `erreurs`)
             - `non-authentifie` (401 : jeton absent, invalide, expiré, ou session fermée)
             - `code-invalide` (401, OTP faux ou expiré)
+            - `identifiants-invalides` (401 à `POST /v1/auth/mot-de-passe`, 403 à `PUT /v1/moi/mot-de-passe`)
+            - `mot-de-passe-requis`, `mot-de-passe-a-definir` (403 à `POST /v1/auth/otp/verify`, portails)
+            - `connexion-par-code`, `mot-de-passe-non-applicable` (403)
+            - `mot-de-passe-absent` (409)
+            - `mot-de-passe-trop-court`, `mot-de-passe-trop-long`, `mot-de-passe-telephone`,
+              `mot-de-passe-courant` (422)
             - `appareil-revoque` (403 sur tout appel authentifié et à `POST /v1/auth/refresh`, 401 à
-              `POST /v1/auth/otp/verify` : appareil déconnecté à distance, l'app efface ses données locales)
+              `POST /v1/auth/otp/verify`, `POST /v1/auth/mot-de-passe` et `POST /v1/auth/mot-de-passe/definition` :
+              appareil déconnecté à distance, l'app efface ses données locales)
             - `utilisateur-desactive` (403 sur tout appel authentifié et à `POST /v1/auth/otp/verify` :
               compte désactivé par l'administrateur ; rien n'est effacé)
             - `consentement-requis` (403 : consentement CNDP à recueillir, `PUT /v1/moi/consentement`)
@@ -2989,6 +3293,131 @@ components:
           type: string
           format: uuid
           description: UUID généré par l'appareil ; identifie l'appareil dans les mouvements (RG-S2) et la synchronisation
+        defi:
+          type: string
+          description: |
+            Portails, méthode MOT_DE_PASSE_ET_OTP (v0.9.0) : `ConnexionMotDePasse.defi` reçu après le mot
+            de passe, avec le même `appareilId` et le code que ce défi a fait envoyer (un défi plus ancien
+            ou un autre code ne vaut pas). Consommé avec le code. Ignoré pour un compte en méthode OTP.
+
+    MethodeConnexion:
+      type: string
+      description: |
+        Connexion d'un portail web (v0.9.0) : OTP (code SMS seul), MOT_DE_PASSE (téléphone + mot de
+        passe), MOT_DE_PASSE_ET_OTP (mot de passe puis code SMS). Toujours OTP pour AMBULANT et HANOUT.
+      enum: [OTP, MOT_DE_PASSE, MOT_DE_PASSE_ET_OTP]
+
+    MotDePasse:
+      type: string
+      format: password
+      writeOnly: true
+      description: |
+        15 à 128 caractères pour toutes les méthodes (normalisés NFC, un point de code = un caractère,
+        niveau NIST SP 800-63B rév. 4 d'un mot de passe seul facteur), tout caractère permis,
+        espaces et arabe compris, sans règle de composition ; refusé s'il est le numéro de téléphone
+        ou l'un des mots de passe les plus courants (422). Jamais renvoyé ni journalisé.
+      minLength: 15
+      maxLength: 128
+
+    ConnexionMotDePasseSaisie:
+      type: object
+      required: [telephone, motDePasse, appareilId]
+      properties:
+        telephone:
+          $ref: '#/components/schemas/Telephone'
+        motDePasse:
+          type: string
+          format: password
+          writeOnly: true
+          maxLength: 1024
+          description: Seulement comparé (la politique ne s'applique qu'à la définition)
+        appareilId:
+          type: string
+          format: uuid
+          description: UUID de l'appareil (navigateur) qui ouvre la session
+        langue:
+          $ref: '#/components/schemas/Langue'
+
+    ConnexionMotDePasse:
+      type: object
+      description: Exactement l'un des deux, selon la méthode du compte
+      properties:
+        session:
+          $ref: '#/components/schemas/Session'
+          description: Méthode MOT_DE_PASSE
+        defi:
+          type: string
+          description: Méthode MOT_DE_PASSE_ET_OTP — un code est parti par SMS ; à joindre à `POST /v1/auth/otp/verify`
+        expireDans:
+          type: integer
+          description: Validité du défi et du code, en secondes (avec `defi`)
+          examples: [300]
+
+    DefinitionMotDePasse:
+      type: object
+      required: [telephone, code, motDePasse, appareilId]
+      properties:
+        telephone:
+          $ref: '#/components/schemas/Telephone'
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+        motDePasse:
+          $ref: '#/components/schemas/MotDePasse'
+        appareilId:
+          type: string
+          format: uuid
+
+    ChangementMotDePasse:
+      type: object
+      required: [motDePasseActuel, nouveauMotDePasse]
+      properties:
+        motDePasseActuel:
+          type: string
+          format: password
+          writeOnly: true
+          maxLength: 1024
+        nouveauMotDePasse:
+          $ref: '#/components/schemas/MotDePasse'
+
+    RolePortail:
+      type: string
+      enum: [GROSSISTE, GRAND_CLIENT, ADMIN]
+
+    ConfigurationAuthentification:
+      type: object
+      required: [roles, organisations]
+      properties:
+        roles:
+          type: array
+          description: Méthode par défaut de chaque rôle de portail (un élément par rôle au plus)
+          items:
+            type: object
+            required: [role, methode]
+            properties:
+              role:
+                $ref: '#/components/schemas/RolePortail'
+              methode:
+                $ref: '#/components/schemas/MethodeConnexion'
+        organisations:
+          type: array
+          description: Exceptions par organisation GROSSISTE ou GRAND_CLIENT, prioritaires sur le rôle
+          items:
+            type: object
+            required: [organisationId, methode]
+            properties:
+              organisationId:
+                type: string
+                format: uuid
+              methode:
+                $ref: '#/components/schemas/MethodeConnexion'
+        fermerSessions:
+          type: boolean
+          writeOnly: true
+          default: false
+          description: |
+            `PUT` seulement, jamais enregistré : ferme les sessions ouvertes des comptes dont la méthode
+            devient plus stricte (sauf celle de l'appelant)
 
     Session:
       type: object
@@ -3215,7 +3644,7 @@ components:
       description: |
         Fiche de support d'un utilisateur (ADMIN seulement, CNDP). Jamais de code OTP, de jeton
         (accès, refresh, push) ni de session.
-      required: [id, telephone, roles, organisation, actif, creeLe, appareils]
+      required: [id, telephone, roles, organisation, actif, creeLe, motDePasseDefini, methodeConnexion, appareils]
       properties:
         id:
           type: string
@@ -3257,6 +3686,16 @@ components:
         consentement:
           $ref: '#/components/schemas/Consentement'
           description: Dernier consentement CNDP enregistré ; absent s'il n'en a jamais donné
+        motDePasseDefini:
+          type: boolean
+          description: Un mot de passe de portail est enregistré (v0.9.0 ; jamais pour AMBULANT ni HANOUT ; l'empreinte n'est jamais renvoyée)
+        motDePasseModifieLe:
+          type: string
+          format: date-time
+          description: Dernière définition, modification ou réinitialisation du mot de passe
+        methodeConnexion:
+          $ref: '#/components/schemas/MethodeConnexion'
+          description: Méthode effective (exception de l'organisation, sinon défaut du rôle)
         appareils:
           type: array
           description: |
@@ -3348,7 +3787,9 @@ components:
       description: |
         Opération inscrite au journal d'audit : CONFIGURATION_CANAUX, ORGANISATION_CREEE,
         UTILISATEUR_AJOUTE, UTILISATEUR_DESACTIVE, UTILISATEUR_REACTIVE, APPAREIL_REVOQUE,
-        IMPORT_HANOUTS, IMPORT_PRODUITS. Liste ouverte : une valeur inconnue s'affiche telle quelle.
+        IMPORT_HANOUTS, IMPORT_PRODUITS ; v0.9.0 : CONFIGURATION_AUTHENTIFICATION,
+        MOT_DE_PASSE_REINITIALISE (par l'administrateur), MOT_DE_PASSE_DEFINI et MOT_DE_PASSE_MODIFIE
+        (par l'utilisateur lui-même). Liste ouverte : une valeur inconnue s'affiche telle quelle.
       pattern: '^[A-Z_]{1,64}$'
       examples: [APPAREIL_REVOQUE]
 

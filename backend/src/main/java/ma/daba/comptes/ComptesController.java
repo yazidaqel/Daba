@@ -23,6 +23,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import ma.daba.commun.Acces;
 import ma.daba.commun.Acces.Public;
 import ma.daba.commun.Acces.Roles;
@@ -49,7 +50,40 @@ class ComptesController {
 	}
 
 	record OtpVerify(@Pattern(regexp = TELEPHONE) String telephone, String lienJeton,
-			@NotNull @Pattern(regexp = "^[0-9]{6}$") String code, @NotNull UUID appareilId) {
+			@NotNull @Pattern(regexp = "^[0-9]{6}$") String code, @NotNull UUID appareilId, String defi) {
+	}
+
+	// Les requêtes qui portent un mot de passe ne l'écrivent jamais dans un journal (toString masqué).
+
+	record ConnexionMotDePasseSaisie(@NotNull @Pattern(regexp = TELEPHONE) String telephone,
+			@NotNull @Size(max = 1024) String motDePasse, @NotNull UUID appareilId, @Pattern(regexp = LANGUE) String langue) {
+
+		@Override
+		public String toString() {
+			return "ConnexionMotDePasseSaisie[appareilId=" + appareilId + "]";
+		}
+
+	}
+
+	record DefinitionMotDePasse(@NotNull @Pattern(regexp = TELEPHONE) String telephone,
+			@NotNull @Pattern(regexp = "^[0-9]{6}$") String code, @NotNull @Size(max = 1024) String motDePasse,
+			@NotNull UUID appareilId) {
+
+		@Override
+		public String toString() {
+			return "DefinitionMotDePasse[appareilId=" + appareilId + "]";
+		}
+
+	}
+
+	record ChangementMotDePasse(@NotNull @Size(max = 1024) String motDePasseActuel,
+			@NotNull @Size(max = 1024) String nouveauMotDePasse) {
+
+		@Override
+		public String toString() {
+			return "ChangementMotDePasse[]";
+		}
+
 	}
 
 	record Rafraichissement(@NotBlank String refreshToken) {
@@ -114,7 +148,31 @@ class ComptesController {
 	@Public
 	Authentification.Session verifierOtp(@Valid @RequestBody OtpVerify requete) {
 		return authentification.verifier(telephone(requete.telephone(), requete.lienJeton()), requete.code(),
+				requete.appareilId(), requete.defi());
+	}
+
+	/** Portails web (§10) : téléphone + mot de passe ; session, ou défi à compléter par le code SMS. */
+	@PostMapping("/v1/auth/mot-de-passe")
+	@Public
+	Authentification.ConnexionMotDePasse connecterParMotDePasse(@Valid @RequestBody ConnexionMotDePasseSaisie requete) {
+		return authentification.connecterParMotDePasse(requete.telephone(), requete.motDePasse(), requete.appareilId(),
+				requete.langue());
+	}
+
+	/** Première connexion ou mot de passe oublié, après un code SMS. */
+	@PostMapping("/v1/auth/mot-de-passe/definition")
+	@Public
+	Authentification.Session definirMotDePasse(@Valid @RequestBody DefinitionMotDePasse requete) {
+		return authentification.definirMotDePasse(requete.telephone(), requete.code(), requete.motDePasse(),
 				requete.appareilId());
+	}
+
+	@PutMapping("/v1/moi/mot-de-passe")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	@Roles({ Role.GROSSISTE, Role.GRAND_CLIENT, Role.ADMIN })
+	@SansConsentement
+	void changerMotDePasse(Appelant appelant, @Valid @RequestBody ChangementMotDePasse requete) {
+		authentification.changerMotDePasse(appelant, requete.motDePasseActuel(), requete.nouveauMotDePasse());
 	}
 
 	/** Renouvelle la session avec le refreshToken (ajouté au contrat en v0.3.0). */
@@ -205,7 +263,8 @@ class ComptesController {
 	Map<String, Object> exporterMesDonnees(Appelant appelant) {
 		var export = new LinkedHashMap<String, Object>();
 		export.put("utilisateur", jdbc.sql("""
-				SELECT u.id, u.telephone, u.nom, u.role, u.hanout_id, u.cree_le, o.id AS organisation_id,
+				SELECT u.id, u.telephone, u.nom, u.role, u.hanout_id, u.cree_le,
+				       u.mot_de_passe_hash IS NOT NULL AS mot_de_passe_defini, u.mot_de_passe_modifie_le, o.id AS organisation_id,
 				       o.type AS organisation_type, o.nom AS organisation_nom
 				FROM utilisateur u JOIN organisation o ON o.id = u.organisation_id WHERE u.id = :u
 				""").param("u", appelant.utilisateurId()).query().singleRow());

@@ -21,13 +21,17 @@ class GestionErreurs extends ResponseEntityExceptionHandler {
 	static final String BASE_TYPE = "https://daba.ma/problemes/";
 
 	@ExceptionHandler(Probleme.class)
-	ProblemDetail probleme(Probleme p) {
+	ResponseEntity<ProblemDetail> probleme(Probleme p) {
 		var detail = ProblemDetail.forStatusAndDetail(p.statut(), p.getMessage());
 		detail.setType(URI.create(BASE_TYPE + p.code()));
 		if (p.regle() != null) {
 			detail.setProperty("regle", p.regle());
 		}
-		return detail;
+		var reponse = ResponseEntity.status(p.statut());
+		if (p.reessayerDans() != null) {
+			reponse.header(HttpHeaders.RETRY_AFTER, Long.toString(Math.max(1, p.reessayerDans().toSeconds())));
+		}
+		return reponse.body(detail);
 	}
 
 	@Override

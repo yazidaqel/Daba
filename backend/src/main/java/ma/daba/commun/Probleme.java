@@ -1,5 +1,7 @@
 package ma.daba.commun;
 
+import java.time.Duration;
+
 import org.springframework.http.HttpStatus;
 
 /**
@@ -11,12 +13,23 @@ public class Probleme extends RuntimeException {
 	private final HttpStatus statut;
 	private final String code;
 	private final String regle;
+	private final Duration reessayerDans;
 
 	public Probleme(HttpStatus statut, String code, String regle, String detail) {
+		this(statut, code, regle, detail, null);
+	}
+
+	private Probleme(HttpStatus statut, String code, String regle, String detail, Duration reessayerDans) {
 		super(detail);
 		this.statut = statut;
 		this.code = code;
 		this.regle = regle;
+		this.reessayerDans = reessayerDans;
+	}
+
+	/** 429 avec l'en-tête Retry-After (secondes). */
+	public static Probleme tropDeDemandes(String detail, Duration reessayerDans) {
+		return new Probleme(HttpStatus.TOO_MANY_REQUESTS, "trop-de-demandes", null, detail, reessayerDans);
 	}
 
 	public static Probleme introuvable() {
@@ -58,6 +71,11 @@ public class Probleme extends RuntimeException {
 
 	public String regle() {
 		return regle;
+	}
+
+	/** Délai de l'en-tête Retry-After, ou null. */
+	public Duration reessayerDans() {
+		return reessayerDans;
 	}
 
 }

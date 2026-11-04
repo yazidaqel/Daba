@@ -36,6 +36,8 @@ services:
     # Pour FCM : décommenter et poser le fichier hors du dépôt, puis DABA_FCM_CREDENTIALS=/run/secrets/fcm.json
     # volumes:
     #   - ${DABA_FCM_CREDENTIALS_HOTE}:/run/secrets/fcm.json:ro
+    # Le tas JVM prend 75 % de cette limite (Dockerfile) : environ 1,1 Go.
+    mem_limit: ${DABA_BACKEND_MEMOIRE:-1536m}
     ports:
       - "8080:8080"
     depends_on:
