@@ -38,6 +38,11 @@ export function fermerSession() {
   void globalThis.caches?.delete('images')
 }
 
+/** Appareil révoqué (§10) : le serveur refuse cet id pour toujours, la prochaine connexion en prend un nouveau. */
+export function oublierAppareil() {
+  localStorage.removeItem('daba.appareil')
+}
+
 /** UUID de l'appareil, stable (OtpVerify.appareilId). */
 export function appareilId() {
   let id = localStorage.getItem('daba.appareil')

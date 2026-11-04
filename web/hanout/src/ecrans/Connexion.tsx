@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { telephoneE164 } from '@/outils'
 import { naviguer } from '@/router'
-import { appareilId, lireSession, ouvrirSession } from '@/session'
+import { appareilId, lireSession, oublierAppareil, ouvrirSession } from '@/session'
 import type { Cle } from '@/textes'
 
 const CIBLES = { DOCUMENT: '/documents/', RELEVE: '/comptes/', DEMANDE_DEPANNAGE: '/demandes/' } as const
@@ -54,7 +54,10 @@ export function Connexion({ jeton, suite = '/', revoque }: { jeton?: string; sui
       if (response.ok) await suiteOk()
       else {
         if (response.status === 410) setLien(undefined)
-        if ((await codeProbleme(response)) === 'appareil-revoque') return setErreur('erreur.appareilRevoque')
+        if ((await codeProbleme(response)) === 'appareil-revoque') {
+          oublierAppareil()
+          return setErreur('erreur.appareilRevoque')
+        }
         setErreur(ERREURS[response.status] ?? (response.status === 400 ? 'erreur.telephone' : 'erreur.generique'))
       }
     } catch {

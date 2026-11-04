@@ -1,7 +1,7 @@
 import createClient from 'openapi-fetch'
 import { langueActuelle } from '../i18n'
 import { naviguer } from '../router'
-import { fermerSession, lireSession, ouvrirSession } from '../session'
+import { fermerSession, lireSession, oublierAppareil, ouvrirSession } from '../session'
 import type { components, paths } from './schema'
 
 export type S = components['schemas']
@@ -73,6 +73,7 @@ export async function surReponse(response: Response) {
     if (code === 'appareil-revoque') {
       // §10, appareil perdu : on efface les données locales.
       fermerSession()
+      oublierAppareil()
       naviguer('/connexion?revoque=1', true)
     } else if (code === 'consentement-requis') naviguer(`/consentement?suite=${ici()}`, true)
   }

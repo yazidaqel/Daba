@@ -127,9 +127,12 @@ describe('session', () => {
     unmount()
 
     type = 'appareil-revoque'
+    localStorage.setItem('daba.appareil', 'id-revoque')
     render(<App />)
     expect(await screen.findByText(/déconnecté à distance/)).toBeTruthy()
     expect(localStorage.getItem('daba.session')).toBeNull()
+    // Le serveur refuse cet id pour toujours : la prochaine connexion en prend un nouveau.
+    expect(localStorage.getItem('daba.appareil')).toBeNull()
   })
 })
 
