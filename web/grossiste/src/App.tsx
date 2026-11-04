@@ -11,6 +11,7 @@ import BonsSortie from '@/pages/BonsSortie'
 import Depot from '@/pages/Depot'
 import Depots from '@/pages/Depots'
 import Login from '@/pages/Login'
+import MotDePasse from '@/pages/MotDePasse'
 import Retrait from '@/pages/Retrait'
 import StockPromo from '@/pages/StockPromo'
 
@@ -46,6 +47,7 @@ export default function App() {
             <Route path="/retrait" element={<Retrait />} />
             <Route path="/bons-sortie" element={<BonsSortie />} />
             <Route path="/ambulants" element={<Ambulants />} />
+            <Route path="/mot-de-passe" element={<MotDePasse />} />
             <Route path="*" element={<Navigate to="/depots" replace />} />
           </Routes>
         </Consentement>
@@ -84,6 +86,7 @@ function Cadre({ nav, children }: { nav?: boolean; children: ReactNode }) {
                 <option key={l} value={l}>{NOMS_LANGUES[l]}</option>
               ))}
             </select>
+            {jeton && nav && <NavLink to="/mot-de-passe" className={lien}>{t('mdp.menu')}</NavLink>}
             {jeton && (
               <Button variant="outline" size="sm" onClick={seDeconnecter}>
                 {t('app.deconnexion')}

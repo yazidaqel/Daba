@@ -1,4 +1,4 @@
-import { CircleAlert } from 'lucide-react'
+import { CircleAlert, CircleCheck, Info } from 'lucide-react'
 import { ApiError, codeProbleme } from '@/api/client'
 import { useI18n, type Cle } from '@/i18n'
 
@@ -39,6 +39,20 @@ export function Erreur({ erreur }: { erreur: unknown }) {
           </ul>
         )}
       </div>
+    </div>
+  )
+}
+
+/** Message d'information (bascule de méthode décidée par le serveur, par exemple) ou de réussite : icône + texte. */
+export function Message({ ton, children }: { ton: 'info' | 'succes'; children: React.ReactNode }) {
+  const Icone = ton === 'info' ? Info : CircleCheck
+  return (
+    <div
+      role="status"
+      className={`flex gap-2 rounded-md border p-3 text-sm ${ton === 'info' ? 'border-primary/30 bg-primary-soft' : 'border-success/40 bg-success-soft'}`}
+    >
+      <Icone className={`mt-0.5 size-4 shrink-0 ${ton === 'info' ? 'text-primary' : 'text-success'}`} aria-hidden />
+      <p>{children}</p>
     </div>
   )
 }

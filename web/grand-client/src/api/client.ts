@@ -74,7 +74,8 @@ api.use({
     let r = response
     const s = lireSession()
     // Jeton expiré ou session fermée : un renouvellement et un nouvel essai, sinon retour à la connexion.
-    if (r.status === 401 && s && !/^\/v1\/auth\/(otp|refresh)/.test(new URL(request.url).pathname)) {
+    // La connexion (OTP, mot de passe) et le renouvellement lui-même ne sont jamais renouvelés.
+    if (r.status === 401 && s && !/^\/v1\/auth\/(otp|refresh|mot-de-passe)/.test(new URL(request.url).pathname)) {
       const nouvelle = await renouveler(s.refreshToken)
       if (nouvelle) {
         ecrireSession(nouvelle)

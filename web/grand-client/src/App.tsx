@@ -8,6 +8,7 @@ import { Connexion } from '@/pages/Connexion'
 import { Consentement } from '@/pages/Consentement'
 import { Campagnes } from '@/pages/Campagnes'
 import { MesDonnees } from '@/pages/MesDonnees'
+import { MotDePasse } from '@/pages/MotDePasse'
 
 // Pages avec carte : MapLibre est chargé à la demande.
 const CampagneForm = lazy(() => import('@/pages/CampagneForm').then((m) => ({ default: m.CampagneForm })))
@@ -85,6 +86,7 @@ export function App() {
   let page
   if (section === 'ruptures') page = <Ruptures />
   else if (section === 'donnees') page = <MesDonnees onRetrait={sortir} />
+  else if (section === 'mot-de-passe') page = <MotDePasse />
   else if (section === 'campagnes' && id === 'nouvelle') page = <CampagneForm />
   else if (section === 'campagnes' && id && action === 'modifier') page = <CampagneForm id={id} />
   else if (section === 'campagnes' && id) page = <CampagneDetail id={id} />
@@ -100,9 +102,10 @@ export function App() {
     <div className="min-h-screen">
       <header className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
         <span className="me-4 text-lg font-semibold text-primary">{t('app.titre')}</span>
-        {lien('#/campagnes', section !== 'ruptures' && section !== 'donnees', t('nav.campagnes'))}
+        {lien('#/campagnes', !['ruptures', 'donnees', 'mot-de-passe'].includes(section), t('nav.campagnes'))}
         {lien('#/ruptures', section === 'ruptures', t('nav.ruptures'))}
         <span className="ms-auto" />
+        {lien('#/mot-de-passe', section === 'mot-de-passe', t('mdp.menu'))}
         {lien('#/donnees', section === 'donnees', t('nav.donnees'))}
         <SelecteurLangue />
         <Button variant="ghost" onClick={sortir}>

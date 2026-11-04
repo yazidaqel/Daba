@@ -46,3 +46,35 @@ it('appareil révoqué : efface la session et l’identifiant d’appareil', asy
   expect(appareilId()).not.toBe(ancien)
   vi.unstubAllGlobals()
 })
+
+it('connexion : un 401 de /v1/auth/mot-de-passe* ou otp/verify ne rafraîchit rien ; appareil-revoque y change l’identifiant d’appareil', async () => {
+  const appels: string[] = []
+  let revoque = false
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (entree: Request | string) => {
+      const req = typeof entree === 'string' ? new Request(new URL(entree, location.href)) : entree
+      appels.push(new URL(req.url).pathname)
+      return json(401, { type: `https://daba.ma/problemes/${revoque ? 'appareil-revoque' : 'identifiants-invalides'}` })
+    }),
+  )
+  const { api, appareilId, ecrireSession } = await import('./client')
+  ecrireSession({ accessToken: 'a', refreshToken: 'r', expireDans: 1, utilisateur: {} as never })
+  const telephone = '+212600000003'
+  const ancien = appareilId()
+  await api.POST('/v1/auth/mot-de-passe', { body: { telephone, motDePasse: 'x', appareilId: ancien } })
+  expect(appareilId()).toBe(ancien)
+
+  revoque = true
+  for (const appel of [
+    () => api.POST('/v1/auth/mot-de-passe', { body: { telephone, motDePasse: 'x', appareilId: appareilId() } }),
+    () => api.POST('/v1/auth/mot-de-passe/definition', { body: { telephone, code: '123456', motDePasse: 'une phrase assez longue', appareilId: appareilId() } }),
+    () => api.POST('/v1/auth/otp/verify', { body: { telephone, code: '123456', appareilId: appareilId() } }),
+  ]) {
+    const avant = appareilId()
+    await appel()
+    expect(appareilId()).not.toBe(avant)
+  }
+  expect(appels).not.toContain('/v1/auth/refresh')
+  vi.unstubAllGlobals()
+})

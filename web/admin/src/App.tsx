@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button'
 import { LANGUES, NOMS_LANGUES, useI18n, type Langue } from '@/i18n'
 import Audit from '@/pages/Audit'
 import Canaux from '@/pages/Canaux'
+import Connexion from '@/pages/Connexion'
 import Login from '@/pages/Login'
+import MonMotDePasse from '@/pages/MonMotDePasse'
 import Organisation from '@/pages/Organisation'
 import Organisations from '@/pages/Organisations'
 import Referentiel from '@/pages/Referentiel'
@@ -45,6 +47,8 @@ export default function App() {
           <Route path="/utilisateurs" element={<Utilisateurs />} />
           <Route path="/referentiel" element={<Referentiel />} />
           <Route path="/canaux" element={<Canaux />} />
+          <Route path="/connexion" element={<Connexion />} />
+          <Route path="/mon-mot-de-passe" element={<MonMotDePasse />} />
           <Route path="/audit" element={<Audit />} />
           <Route path="*" element={<Navigate to="/organisations" replace />} />
         </Routes>
@@ -69,6 +73,7 @@ function Cadre({ nav, children }: { nav?: boolean; children: ReactNode }) {
               <NavLink to="/utilisateurs" className={lien}>{t('nav.utilisateurs')}</NavLink>
               <NavLink to="/referentiel" className={lien}>{t('nav.referentiel')}</NavLink>
               <NavLink to="/canaux" className={lien}>{t('nav.canaux')}</NavLink>
+              <NavLink to="/connexion" className={lien}>{t('nav.connexion')}</NavLink>
               <NavLink to="/audit" className={lien}>{t('nav.audit')}</NavLink>
             </nav>
           )}
@@ -83,6 +88,7 @@ function Cadre({ nav, children }: { nav?: boolean; children: ReactNode }) {
                 <option key={l} value={l}>{NOMS_LANGUES[l]}</option>
               ))}
             </select>
+            {nav && <NavLink to="/mon-mot-de-passe" className={lien}>{t('nav.monMotDePasse')}</NavLink>}
             {jeton && (
               <Button variant="outline" size="sm" onClick={seDeconnecter}>
                 {t('app.deconnexion')}

@@ -39,5 +39,6 @@ export default defineConfig({
       },
     },
   },
-  test: { environment: 'jsdom', setupFiles: ['./src/test-setup.ts'] },
+  // userEvent tape caractère par caractère : les formulaires longs dépassent les 5 s par défaut sur une machine chargée.
+  test: { environment: 'jsdom', setupFiles: ['./src/test-setup.ts'], testTimeout: 20_000 },
 })

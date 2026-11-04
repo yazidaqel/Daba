@@ -23,9 +23,19 @@ TypeScript 7 est sorti mais openapi-typescript et le JS API en dépendent encore
 
 - `src/api/` : client typé (openapi-fetch + openapi-react-query), erreurs RFC 9457, libellés produits.
 - `src/i18n/` : `fr.ts` est la référence ; `ar`, `ary-Arab`, `ary-Latn` sont typés sur ses clés (une clé manquante ne compile pas).
-- `src/pages/` : Dépôts (réponse, réception, réservations, clôture), Stock promo, Retrait (QR), Bons de sortie, Ambulants rattachés.
-- Session : `POST /v1/auth/refresh` sur un 401 puis la requête est rejouée une fois ; `POST /v1/auth/deconnexion` à la déconnexion ;
-  un 403 `appareil-revoque` (et lui seul) efface la session. Les erreurs se décident sur `Problem.type`, jamais sur `detail`.
+- `src/pages/` : Dépôts (réponse, réception, réservations, clôture), Stock promo, Retrait (QR), Bons de sortie, Ambulants rattachés, Mon mot de passe.
+- Connexion (contrat v0.9.0, §10) : `src/connexion.ts` est la machine d'états (`pages/Login.tsx` l'affiche). Le portail ne connaît pas
+  la méthode d'un numéro : il propose « mot de passe » ou « code SMS » (dernier choix retenu dans `daba.connexion.methode`, jamais le
+  numéro) et suit le serveur : `{session}` ou `{defi}` → code SMS avec `defi` ; 403 `mot-de-passe-requis` → mot de passe (le code
+  reste gardé pour « oublié ») ; 403 `mot-de-passe-a-definir` → création avec le même code ; 403 `connexion-par-code` → code envoyé ;
+  401 `identifiants-invalides` → un seul message ; 429 → attente (durée de `Retry-After` si présent). « Mot de passe oublié » : code
+  puis `/definition`. Contrôle local : 15 à 128 points de code (NFC), confirmation identique ; le serveur reste juge (422).
+  Les mots de passe ne passent que dans le corps des requêtes (pas de `useMutation`, dont le cache garde les variables).
+  Même comportement que `web/grand-client/src/connexion.ts`, code volontairement séparé.
+- Session : `POST /v1/auth/refresh` sur un 401 puis la requête est rejouée une fois (jamais pour `/v1/auth/otp*`, `refresh`,
+  `mot-de-passe*`) ; `POST /v1/auth/deconnexion` à la déconnexion ; un 403 `appareil-revoque` (et lui seul) efface la session, et
+  `appareil-revoque` (403, ou 401 à la connexion) efface aussi `daba.appareilId` : la connexion suivante se fait comme un nouvel appareil.
+  Les erreurs se décident sur `Problem.type`, jamais sur `detail`.
 - Composants shadcn copiés dans `src/components/ui/` (le CLI `shadcn` échoue ici sur `npm install --allow-scripts` : les fichiers ont été tirés du registre).
 
 ## Limites du mock Prism

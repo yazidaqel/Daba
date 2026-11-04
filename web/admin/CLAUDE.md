@@ -25,10 +25,18 @@ TypeScript 7 est sorti mais openapi-typescript en dépend encore : rester en 6.0
 - `src/api/` : client typé, erreurs RFC 9457 (`erreurs.ts`), corps du PUT des canaux (`canaux.ts`).
 - `src/i18n/` : `fr.ts` est la référence ; `ar`, `ary-Arab`, `ary-Latn` sont typés sur ses clés.
 - `src/pages/` : Organisations (liste, création), Organisation (détail, ajout d'un membre), Utilisateurs (support),
-  Référentiel (imports CSV, produits, hanouts), Canaux, Audit.
+  Référentiel (imports CSV, produits, hanouts), Canaux, Connexion (méthode par rôle et par organisation), Audit,
+  Mon mot de passe, Login.
+- Connexion (contrat 0.9.0) : le portail ne connaît pas la méthode d'un numéro ; `Login.tsx` propose « Mot de passe » ou
+  « Code par SMS » (dernier choix retenu dans `daba.connexion`, jamais le numéro) puis suit les réponses : `session`,
+  `defi` → code, `mot-de-passe-a-definir` → création avec le même code, `mot-de-passe-requis` → mot de passe,
+  `connexion-par-code` → code, « Mot de passe oublié ? » → code + définition. Les mots de passe ne passent que par l'état
+  de l'écran et `fetchClient` (pas de `useMutation`, dont le cache garderait les variables). Politique : `src/motDePasse.ts`
+  (15 à 128 points de code, sans règle de composition). Un 429 avec `Retry-After` affiche l'attente.
 - `src/components/FicheUtilisateur.tsx` : rôles, organisation, consentement, appareils ; désactivation, réactivation et
   révocation d'un appareil, chacune derrière un dialogue de confirmation (`Confirmer`).
-- Session : comme le grossiste (refresh sur 401 puis rejeu unique ; 403 `appareil-revoque` et lui seul efface la session ;
+- Session : comme le grossiste (refresh sur 401 puis rejeu unique ; `appareil-revoque` et lui seul efface la session et tire
+  un nouvel `appareilId`, sinon ce navigateur ne pourrait plus se reconnecter ;
   403 `utilisateur-desactive` affiche un message sans rien effacer). Décisions sur `Problem.type`, jamais sur `detail`.
   Seul le rôle ADMIN entre ; aucun écran de consentement (`/v1/moi/consentement` n'est pas ouvert à ADMIN).
 - CNDP : ce portail montre des données personnelles aux administrateurs seulement (mention en pied de page et sur

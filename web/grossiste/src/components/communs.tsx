@@ -1,10 +1,12 @@
-import type { ReactNode } from 'react'
-import { Archive, ArrowLeftRight, CircleAlert, CircleCheck, CircleSlash, CircleX, Clock, HandCoins, Inbox, PackageCheck, Tag, Truck, type LucideIcon } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { Archive, ArrowLeftRight, CircleAlert, CircleCheck, CircleSlash, CircleX, Clock, Eye, EyeOff, HandCoins, Inbox, Info, PackageCheck, Tag, Truck, type LucideIcon } from 'lucide-react'
 import type { S } from '@/api/client'
 import { messageErreur } from '@/api/erreurs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useI18n } from '@/i18n'
 
 type Requete<T> = { data?: T; error: unknown; isPending: boolean; refetch: () => unknown }
@@ -106,5 +108,60 @@ export function Pagination({ meta, onPage }: { meta: S['PageMeta']; onPage: (p: 
         {t('app.suivant')}
       </Button>
     </div>
+  )
+}
+
+// Champ mot de passe avec bouton afficher/masquer (le libellé du bouton reste le même, son état passe par aria-pressed).
+export function ChampMotDePasse({ id, label, autoComplete, value, onChange, aide }: {
+  id: string
+  label: string
+  autoComplete: 'current-password' | 'new-password'
+  value: string
+  onChange: (v: string) => void
+  aide?: string
+}) {
+  const { t } = useI18n()
+  const [visible, setVisible] = useState(false)
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="relative">
+        <Input
+          id={id}
+          type={visible ? 'text' : 'password'}
+          autoComplete={autoComplete}
+          autoCapitalize="off"
+          spellCheck={false}
+          className="pe-9"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-describedby={aide ? `${id}-aide` : undefined}
+          required
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="absolute end-0.5 top-0.5"
+          aria-label={t('login.afficher')}
+          aria-pressed={visible}
+          aria-controls={id}
+          onClick={() => setVisible(!visible)}
+        >
+          {visible ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
+        </Button>
+      </div>
+      {aide && <p id={`${id}-aide`} className="text-muted-foreground text-sm">{aide}</p>}
+    </div>
+  )
+}
+
+// Message d'information (bascule de méthode décidée par le serveur, par exemple).
+export function Information({ children }: { children: ReactNode }) {
+  return (
+    <Alert className="bg-primary-soft border-primary/30 text-foreground">
+      <Info aria-hidden className="text-primary" />
+      <AlertDescription>{children}</AlertDescription>
+    </Alert>
   )
 }

@@ -71,8 +71,8 @@ fetchClient.use({
   },
   async onResponse({ request, response }) {
     if (response.ok) return response
-    // La déconnexion profite du rafraîchissement ; l'OTP et le rafraîchissement lui-même non.
-    const auth = /^\/v1\/auth\/(otp|refresh)/.test(new URL(request.url).pathname)
+    // La déconnexion profite du rafraîchissement ; la connexion (OTP, mot de passe) et le rafraîchissement lui-même non.
+    const auth = /^\/v1\/auth\/(otp|refresh|mot-de-passe)/.test(new URL(request.url).pathname)
     // Jeton expiré : on le renouvelle et on rejoue la requête une fois ; sinon nouvelle connexion OTP.
     // Partie avec un jeton déjà remplacé entre-temps : on rejoue sans rafraîchir de nouveau.
     if (response.status === 401 && !auth && lireSession()) {
@@ -87,12 +87,16 @@ fetchClient.use({
     }
     // openapi-react-query lève le corps d'erreur : on garantit un Problem portant le vrai statut HTTP.
     const corps: Problem = await response.json().catch(() => ({}))
-    // Appareil déconnecté à distance (§10) : seul ce type efface la session locale.
-    if (response.status === 403 && codeProbleme(corps) === 'appareil-revoque') ecrireSession(null, 'appareilRevoque')
-    return new Response(JSON.stringify({ ...corps, status: response.status }), {
-      status: response.status,
-      headers: { 'Content-Type': 'application/problem+json' },
-    })
+    // Appareil déconnecté à distance (§10 ; 401 à la connexion, 403 ailleurs) : seul ce type efface la session locale,
+    // identifiant d'appareil compris : la révocation vaut à jamais, la prochaine connexion se fait comme un nouvel appareil.
+    if (codeProbleme(corps) === 'appareil-revoque') {
+      localStorage.removeItem(APPAREIL)
+      if (response.status === 403) ecrireSession(null, 'appareilRevoque')
+    }
+    const entetes = new Headers({ 'Content-Type': 'application/problem+json' })
+    const attente = response.headers.get('Retry-After') // 429 : délai annoncé, affiché à l'écran de connexion
+    if (attente) entetes.set('Retry-After', attente)
+    return new Response(JSON.stringify({ ...corps, status: response.status }), { status: response.status, headers: entetes })
   },
 })
 

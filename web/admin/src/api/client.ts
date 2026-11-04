@@ -5,7 +5,8 @@ import { langueInitiale } from '@/i18n'
 import type { components, paths } from './schema'
 
 export type S = components['schemas']
-export type Problem = S['Problem']
+// `attente` (secondes) vient de l'en-tête Retry-After, ajouté par le client.
+export type Problem = S['Problem'] & { attente?: number }
 
 const SESSION = 'daba.session'
 const APPAREIL = 'daba.appareilId'
@@ -71,8 +72,8 @@ fetchClient.use({
   },
   async onResponse({ request, response }) {
     if (response.ok) return response
-    // La déconnexion profite du rafraîchissement ; l'OTP et le rafraîchissement lui-même non.
-    const auth = /^\/v1\/auth\/(otp|refresh)/.test(new URL(request.url).pathname)
+    // La déconnexion profite du rafraîchissement ; la connexion (code, mot de passe) et le rafraîchissement non.
+    const auth = /^\/v1\/auth\/(otp|refresh|mot-de-passe)/.test(new URL(request.url).pathname)
     // Jeton expiré : on le renouvelle et on rejoue la requête une fois ; sinon nouvelle connexion OTP.
     // Partie avec un jeton déjà remplacé entre-temps : on rejoue sans rafraîchir de nouveau.
     if (response.status === 401 && !auth && lireSession()) {
@@ -89,8 +90,17 @@ fetchClient.use({
     const corps: Problem = await response.json().catch(() => ({}))
     // Appareil déconnecté à distance (§10) : seul ce type efface la session locale. Un compte désactivé
     // (utilisateur-desactive) n'efface rien : le message s'affiche à la place du contenu (messageErreur).
-    if (response.status === 403 && codeProbleme(corps) === 'appareil-revoque') ecrireSession(null, 'appareilRevoque')
-    return new Response(JSON.stringify({ ...corps, status: response.status }), {
+    // La révocation vaut à jamais pour cet appareilId (403 sur un appel authentifié, 401 à la connexion) :
+    // on en tire un nouveau, sinon ce navigateur ne pourrait plus jamais se reconnecter.
+    if (codeProbleme(corps) === 'appareil-revoque') {
+      localStorage.removeItem(APPAREIL)
+      if (lireSession()) ecrireSession(null, 'appareilRevoque')
+    }
+    // Attente avant un nouvel essai (429, délai progressif) : Retry-After en secondes ou en date HTTP.
+    const apres = response.headers.get('Retry-After')
+    const secondes = apres === null ? NaN : /^\d+$/.test(apres) ? Number(apres) : Math.ceil((Date.parse(apres) - Date.now()) / 1000)
+    const attente = Number.isFinite(secondes) && secondes > 0 ? { attente: secondes } : {}
+    return new Response(JSON.stringify({ ...corps, status: response.status, ...attente }), {
       status: response.status,
       headers: { 'Content-Type': 'application/problem+json' },
     })

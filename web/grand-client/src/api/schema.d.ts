@@ -13,7 +13,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Envoie un code OTP par SMS au numéro donné, ou au numéro d'un lien signé */
+        /**
+         * Envoie un code OTP par SMS au numéro donné, ou au numéro d'un lien signé
+         * @description Chaque code remplace le précédent (5 essais, 5 min). Au-delà de 5 codes par heure et par numéro,
+         *     429 sans rien changer : le code en cours et ses essais déjà comptés restent tels quels.
+         */
         post: operations["demanderOtp"];
         delete?: never;
         options?: never;
@@ -81,6 +85,96 @@ export interface paths {
          *     précédente ne valent plus (seuls ceux de la dernière Session reçue servent).
          */
         post: operations["seDeconnecter"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/mot-de-passe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Connexion d'un portail web par téléphone et mot de passe (GROSSISTE, GRAND_CLIENT, ADMIN)
+         * @description Méthode `MOT_DE_PASSE` : renvoie la Session. Méthode `MOT_DE_PASSE_ET_OTP` : envoie un code par
+         *     SMS (mêmes limites que `POST /v1/auth/otp`) et renvoie un `defi` à joindre au code dans
+         *     `POST /v1/auth/otp/verify`. Le défi vaut 5 min, pour cet `appareilId` et pour le seul code qu'il a
+         *     fait envoyer : il est consommé avec lui, et devient caduc dès qu'un autre code est demandé pour ce
+         *     numéro (nouveau défi ou `POST /v1/auth/otp`) ou que le mot de passe change. Au-delà de 5 codes
+         *     par heure, 429 sans rien changer : le code en cours garde ses essais déjà comptés.
+         *     401 `…/identifiants-invalides` identique pour un numéro inconnu, un ambulant, un hanout, un
+         *     compte sans mot de passe ou un mauvais mot de passe (même calcul Argon2id dans tous les cas).
+         *     Ralentissement, pour tout numéro : les 5 premiers échecs consécutifs sont libres, puis chaque
+         *     essai attend une durée qui double à chaque échec (30 s, 1 min, 2 min… jusqu'à 15 min) : avant,
+         *     429 `…/trop-de-demandes` avec `Retry-After` (secondes) ; après l'attente, un mot de passe juste
+         *     passe. Un navigateur (`appareilId`) où le compte s'est déjà connecté a son propre compteur :
+         *     quelqu'un qui multiplie les échecs sur un numéro ne ralentit pas le navigateur habituel de son
+         *     titulaire. Une connexion réussie remet le compteur de ce navigateur à zéro ; une définition par
+         *     code SMS ou une réinitialisation par l'administrateur remet tous ceux du numéro à zéro.
+         *     Serveur saturé de calculs de mot de passe : 429 `…/trop-de-demandes` avec `Retry-After: 1`, pour
+         *     tous, sans compter d'échec. Après un mot de passe juste seulement : 403 `…/connexion-par-code`
+         *     (méthode OTP : passer par `POST /v1/auth/otp`), 403 `…/utilisateur-desactive`, 401
+         *     `…/appareil-revoque`.
+         */
+        post: operations["connecterParMotDePasse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/mot-de-passe/definition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Définit le mot de passe après un code SMS (première connexion ou mot de passe oublié)
+         * @description Le code vient de `POST /v1/auth/otp` (ou est celui qu'un 403 `…/mot-de-passe-a-definir` ou
+         *     `…/mot-de-passe-requis` de `POST /v1/auth/otp/verify` a laissé valable). Le mot de passe est
+         *     contrôlé avant le code (422 : le code n'est pas consommé). Code juste : le mot de passe remplace
+         *     l'ancien, toutes les sessions du compte se ferment (tous appareils), le ralentissement du numéro
+         *     est levé, et une Session s'ouvre sur cet appareil, quelle que soit la méthode du compte. Inscrit au
+         *     journal d'audit (MOT_DE_PASSE_DEFINI). Un numéro d'administrateur (`DABA_ADMIN_TELEPHONES`) qui
+         *     ne s'est jamais connecté est inscrit ici.
+         *     403 `…/mot-de-passe-non-applicable` si le numéro n'a pas de compte de portail (inconnu,
+         *     ambulant, hanout) : seul le détenteur du code l'apprend.
+         */
+        post: operations["definirMotDePasse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/moi/mot-de-passe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change le mot de passe de l'utilisateur connecté (mot de passe actuel exigé)
+         * @description Les autres sessions du compte se ferment ; celle de l'appel reste ouverte. Un mot de passe
+         *     actuel faux répond 403 `…/identifiants-invalides` et compte dans le ralentissement du numéro
+         *     (`POST /v1/auth/mot-de-passe`). Sans mot de passe encore : 409 `…/mot-de-passe-absent` (passer par
+         *     `POST /v1/auth/mot-de-passe/definition`). Permis sans consentement CNDP. Inscrit au journal
+         *     d'audit (MOT_DE_PASSE_MODIFIE).
+         */
+        put: operations["changerMotDePasse"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -312,6 +406,66 @@ export interface paths {
          *     d'audit (UTILISATEUR_REACTIVE).
          */
         post: operations["reactiverUtilisateur"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/utilisateurs/{utilisateurId}/reinitialisation-mot-de-passe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Efface le mot de passe d'un utilisateur de portail et ferme toutes ses sessions
+         * @description L'utilisateur redéfinit un mot de passe par code SMS à sa prochaine connexion
+         *     (`POST /v1/auth/mot-de-passe/definition`) si sa méthode en exige un. Le ralentissement de son
+         *     numéro est levé. 409 pour un AMBULANT ou un HANOUT (jamais de mot de passe). Inscrit au journal
+         *     d'audit (MOT_DE_PASSE_REINITIALISE).
+         */
+        post: operations["reinitialiserMotDePasse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/authentification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Méthode de connexion des portails web, par rôle et par organisation (§10)
+         * @description Configuration en vigueur : les trois rôles de portail sont toujours listés (OTP pour un rôle
+         *     jamais enregistré), suivis des exceptions par organisation.
+         */
+        get: operations["lireConfigurationAuthentification"];
+        /**
+         * Choisit la méthode de connexion par rôle de portail et par organisation
+         * @description Remplace la configuration ; un rôle absent repasse à OTP. Les exceptions ne visent que des
+         *     organisations GROSSISTE ou GRAND_CLIENT existantes (400 sinon, comme pour un rôle ou une
+         *     organisation en double) ; AMBULANT et HANOUT ne sont pas configurables (400). Les sessions
+         *     ouvertes restent ouvertes, celle de l'administrateur qui enregistre comprise : la méthode
+         *     s'applique à la connexion suivante, et un compte sans mot de passe le définit alors par code
+         *     SMS. Avec `fermerSessions: true`, les sessions ouvertes de chaque compte dont la méthode effective
+         *     devient plus stricte (elle exige un facteur que l'ancienne n'exigeait pas : OTP → MOT_DE_PASSE,
+         *     OTP ou MOT_DE_PASSE → MOT_DE_PASSE_ET_OTP, MOT_DE_PASSE → OTP) se ferment, sauf la session de
+         *     l'administrateur qui enregistre ; ces comptes se reconnectent avec la nouvelle méthode.
+         *     Aucune configuration ne bloque les administrateurs : le SMS ne peut pas être coupé pour les
+         *     codes (`PUT /v1/admin/canaux`) et chaque méthode garde la définition par code SMS. Inscrit au
+         *     journal d'audit (CONFIGURATION_AUTHENTIFICATION, avec `fermerSessions` et `sessionsFermees` :
+         *     identifiants des comptes concernés).
+         */
+        put: operations["modifierConfigurationAuthentification"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1483,8 +1637,15 @@ export interface components {
              *     - `requete-invalide` (400, détail par champ dans `erreurs`)
              *     - `non-authentifie` (401 : jeton absent, invalide, expiré, ou session fermée)
              *     - `code-invalide` (401, OTP faux ou expiré)
+             *     - `identifiants-invalides` (401 à `POST /v1/auth/mot-de-passe`, 403 à `PUT /v1/moi/mot-de-passe`)
+             *     - `mot-de-passe-requis`, `mot-de-passe-a-definir` (403 à `POST /v1/auth/otp/verify`, portails)
+             *     - `connexion-par-code`, `mot-de-passe-non-applicable` (403)
+             *     - `mot-de-passe-absent` (409)
+             *     - `mot-de-passe-trop-court`, `mot-de-passe-trop-long`, `mot-de-passe-telephone`,
+             *       `mot-de-passe-courant` (422)
              *     - `appareil-revoque` (403 sur tout appel authentifié et à `POST /v1/auth/refresh`, 401 à
-             *       `POST /v1/auth/otp/verify` : appareil déconnecté à distance, l'app efface ses données locales)
+             *       `POST /v1/auth/otp/verify`, `POST /v1/auth/mot-de-passe` et `POST /v1/auth/mot-de-passe/definition` :
+             *       appareil déconnecté à distance, l'app efface ses données locales)
              *     - `utilisateur-desactive` (403 sur tout appel authentifié et à `POST /v1/auth/otp/verify` :
              *       compte désactivé par l'administrateur ; rien n'est effacé)
              *     - `consentement-requis` (403 : consentement CNDP à recueillir, `PUT /v1/moi/consentement`)
@@ -1536,7 +1697,86 @@ export interface components {
              * @description UUID généré par l'appareil ; identifie l'appareil dans les mouvements (RG-S2) et la synchronisation
              */
             appareilId: string;
+            /**
+             * @description Portails, méthode MOT_DE_PASSE_ET_OTP (v0.9.0) : `ConnexionMotDePasse.defi` reçu après le mot
+             *     de passe, avec le même `appareilId` et le code que ce défi a fait envoyer (un défi plus ancien
+             *     ou un autre code ne vaut pas). Consommé avec le code. Ignoré pour un compte en méthode OTP.
+             */
+            defi?: string;
         } | unknown | unknown;
+        /**
+         * @description Connexion d'un portail web (v0.9.0) : OTP (code SMS seul), MOT_DE_PASSE (téléphone + mot de
+         *     passe), MOT_DE_PASSE_ET_OTP (mot de passe puis code SMS). Toujours OTP pour AMBULANT et HANOUT.
+         * @enum {string}
+         */
+        MethodeConnexion: "OTP" | "MOT_DE_PASSE" | "MOT_DE_PASSE_ET_OTP";
+        /**
+         * Format: password
+         * @description 15 à 128 caractères pour toutes les méthodes (normalisés NFC, un point de code = un caractère,
+         *     niveau NIST SP 800-63B rév. 4 d'un mot de passe seul facteur), tout caractère permis,
+         *     espaces et arabe compris, sans règle de composition ; refusé s'il est le numéro de téléphone
+         *     ou l'un des mots de passe les plus courants (422). Jamais renvoyé ni journalisé.
+         */
+        MotDePasse: string;
+        ConnexionMotDePasseSaisie: {
+            telephone: components["schemas"]["Telephone"];
+            /**
+             * Format: password
+             * @description Seulement comparé (la politique ne s'applique qu'à la définition)
+             */
+            motDePasse: string;
+            /**
+             * Format: uuid
+             * @description UUID de l'appareil (navigateur) qui ouvre la session
+             */
+            appareilId: string;
+            langue?: components["schemas"]["Langue"];
+        };
+        /** @description Exactement l'un des deux, selon la méthode du compte */
+        ConnexionMotDePasse: {
+            /** @description Méthode MOT_DE_PASSE */
+            session?: components["schemas"]["Session"];
+            /** @description Méthode MOT_DE_PASSE_ET_OTP — un code est parti par SMS ; à joindre à `POST /v1/auth/otp/verify` */
+            defi?: string;
+            /**
+             * @description Validité du défi et du code, en secondes (avec `defi`)
+             * @example 300
+             */
+            expireDans?: number;
+        };
+        DefinitionMotDePasse: {
+            telephone: components["schemas"]["Telephone"];
+            code: string;
+            motDePasse: components["schemas"]["MotDePasse"];
+            /** Format: uuid */
+            appareilId: string;
+        };
+        ChangementMotDePasse: {
+            /** Format: password */
+            motDePasseActuel: string;
+            nouveauMotDePasse: components["schemas"]["MotDePasse"];
+        };
+        /** @enum {string} */
+        RolePortail: "GROSSISTE" | "GRAND_CLIENT" | "ADMIN";
+        ConfigurationAuthentification: {
+            /** @description Méthode par défaut de chaque rôle de portail (un élément par rôle au plus) */
+            roles: {
+                role: components["schemas"]["RolePortail"];
+                methode: components["schemas"]["MethodeConnexion"];
+            }[];
+            /** @description Exceptions par organisation GROSSISTE ou GRAND_CLIENT, prioritaires sur le rôle */
+            organisations: {
+                /** Format: uuid */
+                organisationId: string;
+                methode: components["schemas"]["MethodeConnexion"];
+            }[];
+            /**
+             * @description `PUT` seulement, jamais enregistré : ferme les sessions ouvertes des comptes dont la méthode
+             *     devient plus stricte (sauf celle de l'appelant)
+             * @default false
+             */
+            fermerSessions?: boolean;
+        };
         Session: {
             accessToken: string;
             refreshToken: string;
@@ -1688,6 +1928,15 @@ export interface components {
             creeLe: string;
             /** @description Dernier consentement CNDP enregistré ; absent s'il n'en a jamais donné */
             consentement?: components["schemas"]["Consentement"];
+            /** @description Un mot de passe de portail est enregistré (v0.9.0 ; jamais pour AMBULANT ni HANOUT ; l'empreinte n'est jamais renvoyée) */
+            motDePasseDefini: boolean;
+            /**
+             * Format: date-time
+             * @description Dernière définition, modification ou réinitialisation du mot de passe
+             */
+            motDePasseModifieLe?: string;
+            /** @description Méthode effective (exception de l'organisation, sinon défaut du rôle) */
+            methodeConnexion: components["schemas"]["MethodeConnexion"];
             /**
              * @description Appareils sur lesquels ce compte s'est connecté (v0.8.0 : y compris un téléphone partagé
              *     dont un autre compte est depuis le compte courant), du plus récemment vu au plus ancien.
@@ -1752,7 +2001,9 @@ export interface components {
         /**
          * @description Opération inscrite au journal d'audit : CONFIGURATION_CANAUX, ORGANISATION_CREEE,
          *     UTILISATEUR_AJOUTE, UTILISATEUR_DESACTIVE, UTILISATEUR_REACTIVE, APPAREIL_REVOQUE,
-         *     IMPORT_HANOUTS, IMPORT_PRODUITS. Liste ouverte : une valeur inconnue s'affiche telle quelle.
+         *     IMPORT_HANOUTS, IMPORT_PRODUITS ; v0.9.0 : CONFIGURATION_AUTHENTIFICATION,
+         *     MOT_DE_PASSE_REINITIALISE (par l'administrateur), MOT_DE_PASSE_DEFINI et MOT_DE_PASSE_MODIFIE
+         *     (par l'utilisateur lui-même). Liste ouverte : une valeur inconnue s'affiche telle quelle.
          * @example APPAREIL_REVOQUE
          */
         OperationAudit: string;
@@ -3338,6 +3589,35 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /**
+         * @description Trop de demandes (`…/trop-de-demandes`) : attendre le nombre de secondes de `Retry-After` quand
+         *     l'en-tête est présent.
+         */
+        TropDeDemandes: {
+            headers: {
+                /** @description Secondes avant le prochain essai utile */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description Mot de passe refusé (v0.9.0) : `…/mot-de-passe-trop-court` (moins de 15 caractères),
+         *     `…/mot-de-passe-trop-long` (plus de 128), `…/mot-de-passe-telephone` (c'est le numéro de
+         *     téléphone, sous l'une de ses formes), `…/mot-de-passe-courant` (dans la liste des mots de passe
+         *     les plus courants, ou trivial : un motif de 1 à 4 caractères répété, comme `aaaa…` ou `abab…`,
+         *     ou une suite de caractères consécutifs, comme `abcd…` ou `9876…`). Aucune règle de composition (majuscule, chiffre…) n'est imposée.
+         */
+        MotDePasseRefuse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Lien signé expiré */
         LienExpire: {
             headers: {
@@ -3424,7 +3704,14 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
-            /** @description Compte désactivé par l'administrateur (`…/utilisateur-desactive`), code juste */
+            /**
+             * @description Code juste, mais : compte désactivé par l'administrateur (`…/utilisateur-desactive`) ; ou
+             *     compte de portail dont la méthode exige un mot de passe (v0.9.0) : `…/mot-de-passe-a-definir`
+             *     (aucun mot de passe encore : `POST /v1/auth/mot-de-passe/definition` avec ce même code),
+             *     `…/mot-de-passe-requis` (méthode MOT_DE_PASSE, ou MOT_DE_PASSE_ET_OTP sans `defi` valable :
+             *     `POST /v1/auth/mot-de-passe`, ou nouveau mot de passe par définition avec ce code). Dans ces
+             *     deux cas le code n'est pas consommé. Jamais pour AMBULANT ni HANOUT.
+             */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3483,6 +3770,139 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    connecterParMotDePasse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnexionMotDePasseSaisie"];
+            };
+        };
+        responses: {
+            /** @description Session ouverte, ou défi en attente du code SMS */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnexionMotDePasse"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            /** @description Identifiants invalides (`…/identifiants-invalides`), ou appareil révoqué (`…/appareil-revoque`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Mot de passe juste, mais méthode OTP (`…/connexion-par-code`) ou compte désactivé (`…/utilisateur-desactive`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TropDeDemandes"];
+        };
+    };
+    definirMotDePasse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefinitionMotDePasse"];
+            };
+        };
+        responses: {
+            /** @description Mot de passe enregistré, session ouverte */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            /** @description Code invalide ou expiré (`…/code-invalide`), ou appareil révoqué (`…/appareil-revoque`) */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Pas de compte de portail à ce numéro (`…/mot-de-passe-non-applicable`), ou compte désactivé */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["MotDePasseRefuse"];
+            429: components["responses"]["TropDeDemandes"];
+        };
+    };
+    changerMotDePasse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangementMotDePasse"];
+            };
+        };
+        responses: {
+            /** @description Mot de passe changé */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Mot de passe actuel faux (`…/identifiants-invalides`), ou rôle non autorisé */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Aucun mot de passe défini (`…/mot-de-passe-absent`) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            422: components["responses"]["MotDePasseRefuse"];
+            429: components["responses"]["TropDeDemandes"];
         };
     };
     ouvrirLien: {
@@ -3593,7 +4013,10 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Export JSON (profil, consentements, appareils, positions conservées) */
+            /**
+             * @description Export JSON (profil, consentements, appareils, positions conservées). `utilisateur` porte
+             *     `mot_de_passe_defini` et `mot_de_passe_modifie_le` (v0.9.0), jamais l'empreinte du mot de passe.
+             */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3795,6 +4218,81 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    reinitialiserMotDePasse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                utilisateurId: components["parameters"]["UtilisateurId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Mot de passe effacé, sessions fermées */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UtilisateurAdmin"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    lireConfigurationAuthentification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Configuration effective */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationAuthentification"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    modifierConfigurationAuthentification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigurationAuthentification"];
+            };
+        };
+        responses: {
+            /** @description Configuration effective après enregistrement */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigurationAuthentification"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     revoquerAppareil: {

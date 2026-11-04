@@ -1,4 +1,4 @@
-import { Ban, BellOff, BellRing, CircleCheck, CircleSlash, History, LockOpen, MapPin, MapPinOff, ShieldCheck, ShieldOff, Smartphone, UserCheck, UserRound, UserX } from 'lucide-react'
+import { Ban, BellOff, BellRing, CircleCheck, CircleSlash, History, KeyRound, LockOpen, MapPin, MapPinOff, ShieldCheck, ShieldOff, Smartphone, UserCheck, UserRound, UserX } from 'lucide-react'
 import { Link } from 'react-router'
 import { $api, lireSession, queryClient, type S } from '@/api/client'
 import { Confirmer, Erreur, Etiquette } from '@/components/communs'
@@ -16,8 +16,11 @@ export default function FicheUtilisateur({ utilisateur: u, lienOrganisation = tr
   const desactiver = $api.useMutation('post', '/v1/admin/utilisateurs/{utilisateurId}/desactivation', options)
   const reactiver = $api.useMutation('post', '/v1/admin/utilisateurs/{utilisateurId}/reactivation', options)
   const revoquer = $api.useMutation('post', '/v1/admin/appareils/{appareilId}/revocation', options)
+  const reinitialiser = $api.useMutation('post', '/v1/admin/utilisateurs/{utilisateurId}/reinitialisation-mot-de-passe', options)
   const chemin = { params: { path: { utilisateurId: u.id } } }
   const moi = lireSession()?.utilisateur.id === u.id
+  // Seuls les comptes de portail ont un mot de passe (jamais AMBULANT ni HANOUT).
+  const portail = u.roles.some((r) => r === 'GROSSISTE' || r === 'GRAND_CLIENT' || r === 'ADMIN')
   const c = u.consentement
   const designation = u.nom ?? u.telephone
 
@@ -46,6 +49,16 @@ export default function FicheUtilisateur({ utilisateur: u, lienOrganisation = tr
           </dd>
           <dt className="text-muted-foreground">{t('utilisateur.inscrit')}</dt>
           <dd>{date(u.creeLe)}{u.desactiveLe && ` · ${t('utilisateur.desactiveLe', { date: date(u.desactiveLe) })}`}</dd>
+          <dt className="text-muted-foreground">{t('auth.methode')}</dt>
+          <dd className="flex flex-wrap items-center gap-2">
+            {t(`methode.${u.methodeConnexion}`)}
+            {portail && (u.motDePasseDefini ? (
+              <Etiquette icone={KeyRound} variante="success">{t('mdp.defini')}</Etiquette>
+            ) : (
+              <Etiquette icone={CircleSlash} variante="outline">{t('mdp.nonDefini')}</Etiquette>
+            ))}
+            {portail && u.motDePasseModifieLe && <span className="text-muted-foreground">{t('mdp.modifieLe', { date: date(u.motDePasseModifieLe) })}</span>}
+          </dd>
           <dt className="text-muted-foreground">{t('consentement.titre')}</dt>
           <dd className="flex flex-wrap items-center gap-2">
             {!c ? (
@@ -159,6 +172,15 @@ export default function FicheUtilisateur({ utilisateur: u, lienOrganisation = tr
         )}
 
         <div className="flex flex-wrap items-center gap-2">
+          {portail && u.motDePasseDefini && (
+            <Confirmer
+              declencheur={<Button size="sm" variant="outline"><KeyRound aria-hidden />{t('mdp.reinitialiser')}</Button>}
+              titre={t('mdp.reinitialiserTitre', { nom: designation })}
+              texte={<p>{t(moi ? 'mdp.reinitialiserTexteMoi' : 'mdp.reinitialiserTexte')}</p>}
+              confirmer={t('mdp.reinitialiser')}
+              onConfirmer={() => reinitialiser.mutate(chemin)}
+            />
+          )}
           {u.actif && !moi && (
             <Confirmer
               declencheur={<Button size="sm" variant="destructive">{t('utilisateur.desactiver')}</Button>}
@@ -179,7 +201,7 @@ export default function FicheUtilisateur({ utilisateur: u, lienOrganisation = tr
             />
           )}
         </div>
-        {[desactiver, reactiver, revoquer].map((m, i) => m.error && <Erreur key={i} erreur={m.error} />)}
+        {[desactiver, reactiver, revoquer, reinitialiser].map((m, i) => m.error && <Erreur key={i} erreur={m.error} />)}
       </CardContent>
     </Card>
   )
