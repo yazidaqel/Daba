@@ -431,6 +431,8 @@ Le mode hors ligne est l'exigence la plus structurante : l'ambulant doit pouvoir
 
 - Authentification OTP, code PIN local sur l'app, déconnexion à distance d'un appareil perdu.
 
+- Portails web (grossiste, grand client, back-office administrateur) : l'administrateur choisit le mode de connexion par rôle, avec une exception possible par organisation (tranché le 3 novembre 2026). Trois modes : code SMS seul (par défaut), téléphone et mot de passe, ou mot de passe puis code SMS. Un mot de passe oublié se réinitialise par code SMS. L'application ambulant et l'application hanout restent sur le code SMS, sans mot de passe (§6).
+
 - Cloisonnement strict des données par organisation (multi-tenant).
 
 - Liens hanout signés et à durée limitée.
@@ -584,6 +586,8 @@ Les points marqués « tranché » ont été réglés le 25 octobre, ou à la da
 - [ ] Charte graphique, typographie et icônes communes (tranché le 2 novembre 2026, §10).
 
 - [ ] Fournisseurs : SMS par Infobip, push par Firebase Cloud Messaging, choisis et activés par l'administrateur (tranché le 3 novembre 2026, §9).
+
+- [ ] Connexion aux portails web par mot de passe, en plus du code SMS, au choix de l'administrateur par rôle et par organisation ; ambulants et hanouts restent sur le code SMS (tranché le 3 novembre 2026, §10).
 
 - [ ] CNDP : déclarer Infobip et Google comme sous-traitants hors du Maroc, et choisir un compte Infobip hébergé dans l'Union européenne ?
 

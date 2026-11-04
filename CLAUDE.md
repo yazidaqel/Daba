@@ -20,6 +20,7 @@ Acteurs :
 - Bon de livraison par défaut (facture en option si l'ambulant a un ICE). L'ambulant garde la marge sur les promos.
 - Canaux de notification paramétrables (push, SMS, WhatsApp Business API) : canal principal + canal de repli par type de message.
 - Fournisseurs (3 novembre 2026) : SMS par Infobip, push par Firebase Cloud Messaging, choisis et activés par l'administrateur (`/v1/admin/canaux`) ; secrets seulement dans l'environnement. Infobip et Google sont des sous-traitants hors du Maroc : à porter dans la déclaration CNDP.
+- Connexion (3 novembre 2026) : portails web grossiste, grand client et admin en code SMS, téléphone + mot de passe, ou mot de passe + code SMS, au choix de l'administrateur par rôle et par organisation ; app ambulant et PWA hanout en code SMS seulement.
 - Hébergement : Azure pendant le pilote, puis VPS au Maroc. Tout est conteneurisé (Docker), aucun service propre à Azure n'est indispensable.
 
 ## Stack (versions vérifiées en octobre 2026)
