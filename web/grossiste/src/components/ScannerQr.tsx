@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { CircleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useI18n } from '@/i18n'
 
-type Detecteur = { detect: (source: HTMLVideoElement) => Promise<{ rawValue: string }[]> }
+type Detecteur = { detect: (source: ImageBitmapSource) => Promise<{ rawValue: string }[]> }
 
 // API native BarcodeDetector quand le navigateur l'a (Chrome Android), sinon la même API en WebAssembly,
 // servie par l'application elle-même (pas de CDN).
@@ -18,11 +20,34 @@ async function creerDetecteur(): Promise<Detecteur> {
   return new BarcodeDetector({ formats: ['qr_code'] })
 }
 
+// Repli sans caméra (webcam absente ou refusée) : le QR est lu dans une photo, toujours dans le navigateur.
+// Jamais de code à taper : le QR reste la seule preuve du retrait (RG-P4).
+async function lireQrPhoto(fichier: Blob): Promise<string | undefined> {
+  const detecteur = await creerDetecteur()
+  const image = await createImageBitmap(fichier)
+  try {
+    const [code] = await detecteur.detect(image)
+    return code?.rawValue
+  } finally {
+    image.close()
+  }
+}
+
 export function ScannerQr({ onScan }: { onScan: (valeur: string) => void }) {
   const { t } = useI18n()
   const video = useRef<HTMLVideoElement>(null)
   const [actif, setActif] = useState(false)
   const [indisponible, setIndisponible] = useState(false)
+  const [photoIllisible, setPhotoIllisible] = useState(false)
+
+  async function lirePhoto(champ: HTMLInputElement) {
+    const fichier = champ.files?.[0]
+    champ.value = '' // pour pouvoir reprendre la même photo
+    if (!fichier) return
+    const valeur = await lireQrPhoto(fichier).catch(() => undefined)
+    setPhotoIllisible(!valeur)
+    if (valeur) onScan(valeur)
+  }
 
   useEffect(() => {
     if (!actif) return
@@ -68,6 +93,25 @@ export function ScannerQr({ onScan }: { onScan: (valeur: string) => void }) {
         </p>
       )}
       <video ref={video} muted playsInline className={actif ? 'w-full max-w-md rounded-lg border' : 'hidden'} />
+      <div className="space-y-1">
+        <Label htmlFor="qr-photo">{t('retrait.photo')}</Label>
+        <p id="qr-photo-aide" className="text-muted-foreground text-sm">{t('retrait.photoAide')}</p>
+        <Input
+          id="qr-photo"
+          type="file"
+          accept="image/*"
+          capture="environment"
+          aria-describedby="qr-photo-aide"
+          className="max-w-md"
+          onChange={(e) => lirePhoto(e.currentTarget)}
+        />
+        {photoIllisible && (
+          <p role="alert" className="text-destructive flex items-center gap-1.5 text-sm">
+            <CircleAlert aria-hidden className="size-4" />
+            {t('retrait.photoIllisible')}
+          </p>
+        )}
+      </div>
     </div>
   )
 }

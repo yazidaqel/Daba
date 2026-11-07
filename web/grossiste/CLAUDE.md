@@ -23,7 +23,7 @@ TypeScript 7 est sorti mais openapi-typescript et le JS API en dépendent encore
 
 - `src/api/` : client typé (openapi-fetch + openapi-react-query), erreurs RFC 9457, libellés produits.
 - `src/i18n/` : `fr.ts` est la référence ; `ar`, `ary-Arab`, `ary-Latn` sont typés sur ses clés (une clé manquante ne compile pas).
-- `src/pages/` : Dépôts (réponse, réception, réservations, clôture), Stock promo, Retrait (QR), Bons de sortie, Ambulants rattachés, Mon mot de passe.
+- `src/pages/` : Tableau de bord (accueil, §4.4 : volumes par campagne et par ambulant ; rotation, dormants et points attendent le stock complet du lot 3), Dépôts (réponse, réception, réservations, clôture), Stock promo, Retrait (QR : caméra, photo en repli, douchette ; jamais de code à taper, RG-P4), Bons de sortie, Ambulants rattachés, Mon mot de passe.
 - Connexion (contrat v0.9.0, §10) : `src/connexion.ts` est la machine d'états (`pages/Login.tsx` l'affiche). Le portail ne connaît pas
   la méthode d'un numéro : il propose « mot de passe » ou « code SMS » (dernier choix retenu dans `daba.connexion.methode`, jamais le
   numéro) et suit le serveur : `{session}` ou `{defi}` → code SMS avec `defi` ; 403 `mot-de-passe-requis` → mot de passe (le code

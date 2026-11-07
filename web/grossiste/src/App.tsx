@@ -14,6 +14,7 @@ import Login from '@/pages/Login'
 import MotDePasse from '@/pages/MotDePasse'
 import Retrait from '@/pages/Retrait'
 import StockPromo from '@/pages/StockPromo'
+import TableauDeBord from '@/pages/TableauDeBord'
 
 const abonner = (f: () => void) => (window.addEventListener('daba-session', f), () => window.removeEventListener('daba-session', f))
 const lireJeton = () => lireSession()?.accessToken ?? null
@@ -40,7 +41,7 @@ export default function App() {
       <Cadre nav>
         <Consentement>
           <Routes>
-            <Route path="/" element={<Navigate to="/depots" replace />} />
+            <Route path="/" element={<TableauDeBord />} />
             <Route path="/depots" element={<Depots />} />
             <Route path="/depots/:depotId" element={<Depot />} />
             <Route path="/stock-promo" element={<StockPromo />} />
@@ -48,7 +49,7 @@ export default function App() {
             <Route path="/bons-sortie" element={<BonsSortie />} />
             <Route path="/ambulants" element={<Ambulants />} />
             <Route path="/mot-de-passe" element={<MotDePasse />} />
-            <Route path="*" element={<Navigate to="/depots" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Consentement>
       </Cadre>
@@ -68,6 +69,7 @@ function Cadre({ nav, children }: { nav?: boolean; children: ReactNode }) {
           <span className="me-4 font-semibold">{t('app.titre')}</span>
           {nav && (
             <nav className="flex flex-wrap gap-1">
+              <NavLink to="/" end className={lien}>{t('nav.tableau')}</NavLink>
               <NavLink to="/depots" className={lien}>{t('nav.depots')}</NavLink>
               <NavLink to="/stock-promo" className={lien}>{t('nav.stockPromo')}</NavLink>
               <NavLink to="/retrait" className={lien}>{t('nav.retrait')}</NavLink>

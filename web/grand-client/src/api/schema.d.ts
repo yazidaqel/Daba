@@ -898,9 +898,11 @@ export interface paths {
         };
         /**
          * Ambulants rattachés au grossiste connecté, avec leur volume et leur régularité (§4.3)
-         * @description Rattaché = a reçu au moins un bon de sortie de ce grossiste (le rattachement déclaré au
-         *     profil de l'ambulant, §3.1, n'existe pas encore : dette du MVP). Le grossiste y retrouve le
-         *     téléphone, qu'il a lui-même saisi dans un bon de sortie.
+         * @description Rattaché = a déclaré ce grossiste dans son profil (`ProfilAmbulantSaisie.grossisteIds`,
+         *     §3.1, `declare`) ou a reçu au moins un bon de sortie de ce grossiste. Le grossiste y
+         *     retrouve le téléphone seulement s'il l'a lui-même saisi dans un bon de sortie. Le nom suit
+         *     la règle CNDP commune (consentement actif, sinon téléphone masqué). Ordre : du dernier servi
+         *     au plus ancien, puis les rattachés par déclaration seule.
          */
         get: operations["listerAmbulantsRattaches"];
         put?: never;
@@ -1303,7 +1305,9 @@ export interface paths {
          * Fil des promotions disponibles pour l'ambulant connecté (§3.6)
          * @description Une offre = un produit d'une campagne ACTIVE dans un dépôt RECU (RG-P1), dont le grossiste
          *     dépositaire est dans les villes et régions ciblées, et qui vise l'ambulant connecté selon
-         *     `Ciblage.categories` (§9). Aussi livrée hors ligne par `GET /v1/sync/changements` (entité
+         *     `Ciblage.categories`, `Ciblage.zones` et `Ciblage.rayonM` (§9). Les offres des grossistes
+         *     auxquels l'ambulant est rattaché (`rattache`) viennent d'abord, puis par date de fin.
+         *     Aussi livrée hors ligne par `GET /v1/sync/changements` (entité
          *     PROMO, envoyée seulement aux ambulants visés, et retirée par SUPPRESSION quand l'ambulant
          *     cesse d'être visé), pour consultation ; la réservation exige le réseau.
          *     CNDP : aucune position n'est envoyée ; l'app calcule la distance à partir de `grossiste.position`.
@@ -2177,7 +2181,7 @@ export interface components {
              */
             creeLe: string;
         };
-        Operation: components["schemas"]["OperationChargement"] | components["schemas"]["OperationRetour"] | components["schemas"]["OperationInventaire"] | components["schemas"]["OperationEmissionDocument"] | components["schemas"]["OperationAvoir"] | components["schemas"]["OperationVersement"] | components["schemas"]["OperationTarif"] | components["schemas"]["OperationHanout"] | components["schemas"]["OperationCreditHanout"] | components["schemas"]["OperationParametresAmbulant"] | components["schemas"]["OperationProfilAmbulant"] | components["schemas"]["OperationResolutionContestation"];
+        Operation: components["schemas"]["OperationChargement"] | components["schemas"]["OperationRetour"] | components["schemas"]["OperationInventaire"] | components["schemas"]["OperationEmissionDocument"] | components["schemas"]["OperationAvoir"] | components["schemas"]["OperationVersement"] | components["schemas"]["OperationTarif"] | components["schemas"]["OperationHanout"] | components["schemas"]["OperationCreditHanout"] | components["schemas"]["OperationParametresAmbulant"] | components["schemas"]["OperationProfilAmbulant"] | components["schemas"]["OperationResolutionContestation"] | components["schemas"]["OperationTournee"] | components["schemas"]["OperationVisite"];
         OperationChargement: components["schemas"]["OperationBase"] & {
             /** @constant */
             type: "CHARGEMENT";
@@ -2326,6 +2330,99 @@ export interface components {
              */
             type: "RESOLUTION_CONTESTATION";
         };
+        OperationTournee: components["schemas"]["OperationBase"] & {
+            /** @constant */
+            type: "TOURNEE";
+            donnees: components["schemas"]["TourneeSaisie"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "TOURNEE";
+        };
+        OperationVisite: components["schemas"]["OperationBase"] & {
+            /** @constant */
+            type: "VISITE";
+            donnees: components["schemas"]["VisiteSaisie"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "VISITE";
+        };
+        /** @description Jour ISO 8601 de la semaine, 1 = lundi … 7 = dimanche */
+        JourSemaine: number;
+        /**
+         * @description Tournée planifiée (§3.3), saisie hors ligne : l'opération remplace toute la tournée (un champ
+         *     facultatif absent est effacé). `supprimee: true` la retire des appareils (SUPPRESSION de
+         *     l'entité TOURNEE) ; `jours` et `hanoutIds` sont alors facultatifs. Une tournée modifiée ou
+         *     supprimée plus récemment sur un autre appareil est conservée (EN_CONFLIT,
+         *     VERSION_SERVEUR_CONSERVEE). Un hanout inconnu, un `id` de tournée d'un autre ambulant ou
+         *     l'absence de consentement CNDP actif rendent l'opération REJETEE. Les hanouts des tournées
+         *     forment la zone de tournée du ciblage des promos (`Ciblage.zones`, `Ciblage.rayonM`).
+         */
+        TourneeSaisie: {
+            /**
+             * Format: uuid
+             * @description Généré par l'appareil
+             */
+            id: string;
+            /** @example Tournée du lundi */
+            nom?: string;
+            /** @description Jours de passage ; au moins un sauf si `supprimee` */
+            jours?: components["schemas"]["JourSemaine"][];
+            /** @description Hanouts à visiter, dans l'ordre de passage (hanouts connus de l'ambulant, entité HANOUT) */
+            hanoutIds?: string[];
+            /** @default false */
+            supprimee?: boolean;
+        };
+        /** @description Tournée planifiée de l'ambulant connecté (entité tirée TOURNEE) */
+        Tournee: {
+            /** Format: uuid */
+            id: string;
+            nom?: string;
+            jours: components["schemas"]["JourSemaine"][];
+            hanoutIds: string[];
+            /** @description Présent et vrai seulement dans `Conflit.versionServeur`, pour une tournée supprimée ailleurs */
+            supprimee?: boolean;
+            /**
+             * Format: date-time
+             * @description Horodatage de l'appareil de la dernière modification retenue
+             */
+            modifieLe: string;
+        };
+        /**
+         * @description Raison d'une visite sans vente
+         * @enum {string}
+         */
+        MotifVisite: "FERME" | "PAS_BESOIN" | "GERANT_ABSENT" | "AUTRE";
+        /**
+         * @description Visite d'un hanout sans vente (§3.3), pour l'historique des visites ; une vente compte déjà
+         *     comme une visite (entité DOCUMENT), rien à envoyer pour elle. L'identifiant de la visite est
+         *     celui de l'opération. Hanout inconnu ou consentement CNDP absent : REJETEE.
+         */
+        VisiteSaisie: {
+            /** Format: uuid */
+            hanoutId: string;
+            /**
+             * Format: date-time
+             * @description Heure de la visite (appareil)
+             */
+            horodatage: string;
+            motif: components["schemas"]["MotifVisite"];
+        };
+        /** @description Visite sans vente (entité tirée VISITE, `id` = celui de l'opération VISITE) */
+        Visite: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            hanoutId: string;
+            /** Format: date-time */
+            horodatage: string;
+            motif: components["schemas"]["MotifVisite"];
+        };
         /**
          * @description L'ambulant clôt une contestation qui lui est adressée (après un avoir, une explication…).
          *     Rejouer sur une contestation déjà RESOLUE ne change rien.
@@ -2341,6 +2438,20 @@ export interface components {
             quantite: number;
         };
         /**
+         * @description Ligne d'un chargement manuel ou d'un bon de sortie (§3.2, §3.8) : `LigneQuantite` plus la date
+         *     de péremption et le prix d'achat payé par l'ambulant, facultatifs. Reprises dans le
+         *     `Mouvement` CHARGEMENT, pour que l'app calcule hors ligne la marge et la péremption.
+         */
+        LigneChargement: components["schemas"]["LigneQuantite"] & {
+            /**
+             * Format: date
+             * @example 2026-12-31
+             */
+            datePeremption?: string;
+            /** @description Prix d'achat unitaire TTC payé par l'ambulant (comme les autres prix) */
+            prixUnitaire?: components["schemas"]["Montant"];
+        };
+        /**
          * @description Chargement du stock embarqué : scan du QR d'un bon de sortie (`qrJeton`, les lignes sont
          *     lues dans le QR) ou saisie manuelle (`lignes`). Un bon déjà chargé est signalé en anomalie
          *     CHARGEMENT_EN_DOUBLE et n'ajoute rien ; un bon adressé à un autre ambulant est REJETE.
@@ -2353,7 +2464,7 @@ export interface components {
              * @description Saisie manuelle seulement, facultatif
              */
             grossisteId?: string;
-            lignes?: components["schemas"]["LigneQuantite"][];
+            lignes?: components["schemas"]["LigneChargement"][];
         } & (unknown | unknown);
         /**
          * @description RETOUR d'un hanout vers l'ambulant (entrée en stock) ou de l'ambulant vers le grossiste
@@ -2474,6 +2585,7 @@ export interface components {
         ConfirmationHanout: {
             /** @enum {string} */
             mode: "SIGNATURE" | "CONFIRMATION_ECRAN";
+            /** @description PNG en base64, 96 Ko au plus une fois décodé (l'app le réduit à 320 px de large) */
             signaturePng?: string;
             /** Format: date-time */
             le: string;
@@ -2510,6 +2622,10 @@ export interface components {
             montant: components["schemas"]["Montant"];
             chequeNumero?: string;
             chequeBanque?: string;
+            /**
+             * @description Répartition choisie (RG-C2) ; absente ou vide : FIFO. Chaque part est plafonnée au reste dû de la
+             *     pièce selon le serveur (l'appareil a pu calculer sur un état périmé) et le surplus suit en FIFO.
+             */
             imputations?: components["schemas"]["Imputation"][];
         };
         Imputation: {
@@ -2540,8 +2656,11 @@ export interface components {
              * @description ICE, IF, RC et assujettissement à la TVA de l'ambulant auto-entrepreneur ou société
              *     (§3.1, RG-F2) : c'est la partie fiscale du profil, gardée ici et non dans
              *     `ProfilAmbulantSaisie`. Présentes, elles permettent la FACTURE (v0.5.0).
+             *     `null` les efface (v0.10.0) ; absentes, elles sont gardées. Après l'effacement, une
+             *     FACTURE sans ses propres `mentionsLegales` est REJETEE (RG-F2) ; une FACTURE émise hors
+             *     ligne avant l'effacement porte sa copie des mentions et reste valable.
              */
-            mentionsLegales?: components["schemas"]["MentionsLegales"];
+            mentionsLegales?: components["schemas"]["MentionsLegales"] | null;
         };
         /**
          * @description Profil de l'ambulant (§3.1), saisi hors ligne. L'opération remplace tout le profil : un champ
@@ -2551,6 +2670,9 @@ export interface components {
          *     (…/consentement-requis). Un profil modifié plus récemment sur un autre appareil
          *     est conservé (EN_CONFLIT, VERSION_SERVEUR_CONSERVEE). Les mentions légales (ICE, IF, RC, TVA)
          *     sont dans `ParametresAmbulantSaisie.mentionsLegales`.
+         *     Les grossistes déclarés (`grossisteIds`, v0.10.0) rattachent l'ambulant comme un bon de
+         *     sortie reçu (`GET /v1/ambulants`, priorité des promos §9) ; un grossiste inconnu rend
+         *     l'opération REJETEE.
          */
         ProfilAmbulantSaisie: {
             /** @example Youssef El Amrani */
@@ -2566,6 +2688,8 @@ export interface components {
             villes?: string[];
             /** @description Catégories vendues (codes de `GET /v1/categories`), utilisées par `Ciblage.categories` */
             categories?: string[];
+            /** @description Grossistes fournisseurs déclarés (§3.1), identifiants de `GET /v1/grossistes` */
+            grossisteIds?: string[];
         };
         ProfilAmbulant: components["schemas"]["ProfilAmbulantSaisie"] & {
             /**
@@ -2648,7 +2772,7 @@ export interface components {
              */
             action: "UPSERT" | "SUPPRESSION";
         };
-        Changement: components["schemas"]["ChangementProduit"] | components["schemas"]["ChangementHanout"] | components["schemas"]["ChangementStock"] | components["schemas"]["ChangementMouvement"] | components["schemas"]["ChangementDocument"] | components["schemas"]["ChangementVersement"] | components["schemas"]["ChangementCompteCredit"] | components["schemas"]["ChangementTarif"] | components["schemas"]["ChangementPromo"] | components["schemas"]["ChangementReservation"] | components["schemas"]["ChangementAnomalie"] | components["schemas"]["ChangementParametres"] | components["schemas"]["ChangementProfil"] | components["schemas"]["ChangementBonSortie"] | components["schemas"]["ChangementContestation"];
+        Changement: components["schemas"]["ChangementProduit"] | components["schemas"]["ChangementHanout"] | components["schemas"]["ChangementStock"] | components["schemas"]["ChangementMouvement"] | components["schemas"]["ChangementDocument"] | components["schemas"]["ChangementVersement"] | components["schemas"]["ChangementCompteCredit"] | components["schemas"]["ChangementTarif"] | components["schemas"]["ChangementPromo"] | components["schemas"]["ChangementReservation"] | components["schemas"]["ChangementAnomalie"] | components["schemas"]["ChangementParametres"] | components["schemas"]["ChangementProfil"] | components["schemas"]["ChangementBonSortie"] | components["schemas"]["ChangementContestation"] | components["schemas"]["ChangementTournee"] | components["schemas"]["ChangementVisite"];
         ChangementProduit: components["schemas"]["ChangementBase"] & {
             /** @constant */
             entite?: "PRODUIT";
@@ -2814,6 +2938,28 @@ export interface components {
              */
             entite: "CONTESTATION";
         };
+        ChangementTournee: components["schemas"]["ChangementBase"] & {
+            /** @constant */
+            entite?: "TOURNEE";
+            donnees?: components["schemas"]["Tournee"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            entite: "TOURNEE";
+        };
+        ChangementVisite: components["schemas"]["ChangementBase"] & {
+            /** @constant */
+            entite?: "VISITE";
+            donnees?: components["schemas"]["Visite"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            entite: "VISITE";
+        };
         ParametresAmbulant: {
             politiqueDepassementCredit: components["schemas"]["PolitiqueDepassementCredit"];
             plafondRemisePonctuellePourcent?: number;
@@ -2869,6 +3015,13 @@ export interface components {
             /** Format: uuid */
             reservationId?: string;
             motif?: string;
+            /**
+             * Format: date
+             * @description CHARGEMENT seulement, si la ligne chargée la portait (`LigneChargement`)
+             */
+            datePeremption?: string;
+            /** @description CHARGEMENT seulement, prix d'achat TTC de la ligne chargée (marge, §3.8) */
+            prixUnitaire?: components["schemas"]["Montant"];
         };
         MouvementPage: components["schemas"]["PageMeta"] & {
             contenu: components["schemas"]["Mouvement"][];
@@ -2878,6 +3031,13 @@ export interface components {
             produitId: string;
             /** @description Stock normal ; peut être négatif seulement si une anomalie STOCK_NEGATIF est ouverte (RG-S1) */
             quantite: number;
+            /**
+             * Format: date
+             * @description Plus proche date de péremption des quantités chargées encore en stock normal (§3.2), en
+             *     supposant que les plus anciennes sont vendues d'abord (premier entré, premier sorti) ;
+             *     absente si aucune ligne chargée encore en stock n'a de date. Aucune alerte n'en part encore.
+             */
+            peremptionProche?: string;
             /** @description Stock promo isolé, par campagne (RG-S3) */
             promo?: {
                 /** Format: uuid */
@@ -2900,7 +3060,7 @@ export interface components {
             id: string;
             /** @description Ambulant destinataire (422 si ce numéro n'est pas un ambulant inscrit) */
             ambulantTelephone: components["schemas"]["Telephone"];
-            lignes: components["schemas"]["LigneQuantite"][];
+            lignes: components["schemas"]["LigneChargement"][];
         };
         BonSortie: {
             /** Format: uuid */
@@ -2909,7 +3069,7 @@ export interface components {
             /** Format: uuid */
             grossisteId: string;
             ambulant: components["schemas"]["Reference"];
-            lignes: components["schemas"]["LigneQuantite"][];
+            lignes: components["schemas"]["LigneChargement"][];
             /** Format: date-time */
             emisLe: string;
             /**
@@ -2934,7 +3094,7 @@ export interface components {
              * @description Seul cet ambulant peut charger le bon ; l'app refuse un QR adressé à un autre
              */
             ambulantId: string;
-            lignes: components["schemas"]["LigneQuantite"][];
+            lignes: components["schemas"]["LigneChargement"][];
             /** Format: date-time */
             emisLe: string;
         };
@@ -2945,6 +3105,9 @@ export interface components {
             /** Format: uuid */
             id: string;
             nom: string;
+            /** @description L'ambulant a déclaré ce grossiste dans son profil (`ProfilAmbulantSaisie.grossisteIds`) */
+            declare: boolean;
+            /** @description Seulement si le grossiste lui a émis au moins un bon de sortie (il y a saisi ce numéro) */
             telephone?: components["schemas"]["Telephone"];
             /** @description Bons de sortie reçus de ce grossiste */
             nombreBons: number;
@@ -2955,10 +3118,16 @@ export interface components {
             quantiteTotale: number;
             /** @description Régularité — bons des 30 derniers jours */
             bons30Jours: number;
-            /** Format: date-time */
-            premierBonLe: string;
-            /** Format: date-time */
-            dernierBonLe: string;
+            /**
+             * Format: date-time
+             * @description Absent si aucun bon de sortie reçu (rattachement déclaré seulement)
+             */
+            premierBonLe?: string;
+            /**
+             * Format: date-time
+             * @description Absent si aucun bon de sortie reçu (rattachement déclaré seulement)
+             */
+            dernierBonLe?: string;
         };
         AmbulantRattachePage: components["schemas"]["PageMeta"] & {
             contenu: components["schemas"]["AmbulantRattache"][];
@@ -3196,10 +3365,23 @@ export interface components {
             /** @description Indicatif seulement ; l'ambulant garde la marge */
             prixReventeConseille?: components["schemas"]["Montant"];
         };
-        /** @description Ciblage des ambulants (§5.1, §9) ; vide = toute la zone des dépositaires */
+        /**
+         * @description Ciblage des ambulants (§5.1, §9) ; vide = toute la zone des dépositaires. Les critères se
+         *     cumulent (chacun présent doit être satisfait), pour le fil (`GET /v1/promos`, entité PROMO)
+         *     comme pour la notification « promo confirmée ».
+         *     **Zone de tournée** d'un ambulant (`zones`, `rayonM`) : les positions des hanouts de ses
+         *     tournées (opération TOURNEE) ; sans tournée, celles des hanouts à qui il a vendu dans les
+         *     30 derniers jours ; sans l'une ni l'autre (compte neuf), aucun filtre géographique au-delà
+         *     des villes et régions du dépositaire : son fil n'est pas vide. Les positions restent sur le
+         *     serveur (CNDP) ; seul le résultat du ciblage est visible.
+         */
         Ciblage: {
             regions?: string[];
             villes?: string[];
+            /**
+             * @description Visé si au moins un hanout de sa zone de tournée est dans l'un de ces polygones (bord
+             *     compris). Un polygone illisible rend la campagne invalide (400).
+             */
             zones?: components["schemas"]["ZoneGeo"][];
             /**
              * @description Codes de `GET /v1/categories` (§9). Vide ou absent : tous les ambulants. Sinon, l'offre
@@ -3209,7 +3391,10 @@ export interface components {
              *     fil vide avant de remplir son profil). Même règle pour la notification « promo confirmée ».
              */
             categories?: string[];
-            /** @description Distance maximale entre le grossiste dépositaire et la zone de tournée de l'ambulant */
+            /**
+             * @description Distance maximale entre le grossiste dépositaire et la zone de tournée de l'ambulant :
+             *     visé si le hanout de sa zone le plus proche du dépositaire est à `rayonM` mètres au plus.
+             */
             rayonM?: number;
         };
         CampagneSaisie: {
@@ -3352,6 +3537,13 @@ export interface components {
             /** Format: date-time */
             fin: string;
             delaiRetraitHeures: number;
+            /**
+             * @description L'ambulant connecté est rattaché au grossiste dépositaire (déclaré au profil ou bon de
+             *     sortie reçu, §9 : priorité aux ambulants rattachés). Présent dans `GET /v1/promos` ;
+             *     absent de l'entité PROMO tirée hors ligne, où l'app le déduit de `ProfilAmbulant.grossisteIds`
+             *     et des `BonSortie.grossisteId` reçus.
+             */
+            rattache?: boolean;
         };
         OffrePromoPage: components["schemas"]["PageMeta"] & {
             contenu: components["schemas"]["OffrePromo"][];
@@ -5615,7 +5807,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Page d'offres, triées par date de fin */
+            /** @description Page d'offres, rattachées d'abord, puis triées par date de fin */
             200: {
                 headers: {
                     [name: string]: unknown;

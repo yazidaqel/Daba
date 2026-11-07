@@ -35,7 +35,7 @@ export default function Ambulants() {
                     <TableCell className="text-end">{nombre(a.nombreBons)}</TableCell>
                     <TableCell className="text-end">{nombre(a.quantiteTotale)}</TableCell>
                     <TableCell className="text-end">{nombre(a.bons30Jours)}</TableCell>
-                    <TableCell>{date(a.dernierBonLe)}</TableCell>
+                    <TableCell>{a.dernierBonLe ? date(a.dernierBonLe) : '—'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

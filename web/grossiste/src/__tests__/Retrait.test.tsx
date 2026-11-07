@@ -1,7 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { expect, test, vi } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 
 // openapi-fetch lit globalThis.fetch à la création du client : on le remplace avant les imports.
 const appels = vi.hoisted(() => {
@@ -58,4 +58,48 @@ test('retrait par douchette : aperçu, quantité bornée à la réservée et au 
   expect(validation.corps).toMatchObject({ qrJeton: 'jws.qr.jeton', quantiteRemise: 3 })
   expect(validation.corps.appareilId).toMatch(/^[0-9a-f-]{36}$/)
   expect(appels[0]).toEqual({ url: '/v1/retraits/apercu', corps: { qrJeton: 'jws.qr.jeton' } })
+})
+
+function afficher() {
+  render(
+    <QueryClientProvider client={queryClient}>
+      <I18nProvider>
+        <Retrait />
+      </I18nProvider>
+    </QueryClientProvider>,
+  )
+}
+
+// Décodeur simulé : l'API BarcodeDetector (native ou ponyfill) est remplacée, la photo n'est pas décodée pour de vrai.
+function decodeur(valeurs: string[]) {
+  const detect = vi.fn(async () => valeurs.map((rawValue) => ({ rawValue })))
+  vi.stubGlobal('BarcodeDetector', class { detect = detect })
+  vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ close: vi.fn() })))
+  return detect
+}
+
+afterEach(() => (cleanup(), vi.unstubAllGlobals()))
+
+test('repli sans caméra : le QR lu dans une photo part à l’aperçu, comme un scan', async () => {
+  const detect = decodeur(['jws.photo.jeton'])
+  const u = userEvent.setup()
+  afficher()
+  const champ = screen.getByLabelText('Lire le QR depuis une photo')
+  expect(champ).toHaveAttribute('capture', 'environment')
+  expect(champ).toHaveAttribute('accept', 'image/*')
+  await u.upload(champ, new File(['x'], 'qr.jpg', { type: 'image/jpeg' }))
+  await screen.findByLabelText('Quantité remise')
+  expect(detect).toHaveBeenCalledOnce()
+  expect(appels.at(-1)).toEqual({ url: '/v1/retraits/apercu', corps: { qrJeton: 'jws.photo.jeton' } })
+})
+
+test('photo sans QR lisible : message, aucun appel à l’API, aucune saisie manuelle proposée', async () => {
+  decodeur([])
+  const avant = appels.length
+  const u = userEvent.setup()
+  afficher()
+  await u.upload(screen.getByLabelText('Lire le QR depuis une photo'), new File(['x'], 'flou.jpg', { type: 'image/jpeg' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Aucun QR lisible sur cette photo')
+  expect(appels.length).toBe(avant)
+  expect(screen.queryByLabelText('Quantité remise')).toBeNull()
 })
