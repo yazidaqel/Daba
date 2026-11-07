@@ -23,6 +23,7 @@ import jakarta.validation.constraints.Pattern;
 import ma.daba.commun.Acces.Roles;
 import ma.daba.commun.Appelant;
 import ma.daba.commun.Appelant.Role;
+import ma.daba.commun.Json;
 import ma.daba.commun.Page;
 import ma.daba.commun.Probleme;
 import ma.daba.comptes.Comptes;
@@ -37,11 +38,13 @@ class StockController {
 	private final Stock stock;
 	private final JdbcClient jdbc;
 	private final Comptes comptes;
+	private final Json json;
 
-	StockController(Stock stock, JdbcClient jdbc, Comptes comptes) {
+	StockController(Stock stock, JdbcClient jdbc, Comptes comptes, Json json) {
 		this.stock = stock;
 		this.jdbc = jdbc;
 		this.comptes = comptes;
+		this.json = json;
 	}
 
 	@GetMapping("/v1/stock")
@@ -103,31 +106,47 @@ class StockController {
 		return Page.de(page, taille, compte.query(Long.class).single(), liste.query(stock::ligneBon).list());
 	}
 
-	record AmbulantRattache(UUID id, String nom, String telephone, int nombreBons, long quantiteTotale, int bons30Jours,
-			Instant premierBonLe, Instant dernierBonLe) {
+	record AmbulantRattache(UUID id, String nom, boolean declare, String telephone, int nombreBons, long quantiteTotale,
+			int bons30Jours, Instant premierBonLe, Instant dernierBonLe) {
 	}
 
-	/** §4.3 : ambulants rattachés (au moins un bon de sortie reçu), avec volume et régularité. */
+	/**
+	 * §4.3 : ambulants rattachés (grossiste déclaré au profil, §3.1, ou au moins un bon de sortie
+	 * reçu), avec volume et régularité. Le téléphone seulement si le grossiste l'a saisi dans un bon.
+	 */
 	@GetMapping("/v1/ambulants")
 	@Roles(Role.GROSSISTE)
 	Page<AmbulantRattache> ambulants(Appelant appelant, @RequestParam(defaultValue = "0") @Min(0) int page,
 			@RequestParam(defaultValue = "50") @Min(1) @Max(200) int taille) {
-		var total = jdbc.sql("SELECT count(DISTINCT ambulant_id) FROM bon_sortie WHERE grossiste_id = :g")
+		var rattaches = """
+				WITH declares AS (SELECT CAST(value AS uuid) AS ambulant_id FROM jsonb_array_elements_text(CAST(:d AS jsonb))),
+				bons AS (SELECT b.ambulant_id, count(*) AS bons, sum(x.q) AS quantite,
+				    count(*) FILTER (WHERE b.emis_le > now() - interval '30 days') AS bons30, min(b.emis_le) AS premier,
+				    max(b.emis_le) AS dernier
+				  FROM bon_sortie b, LATERAL (SELECT sum((l->>'quantite')::int) AS q FROM jsonb_array_elements(b.lignes) l) x
+				  WHERE b.grossiste_id = :g GROUP BY b.ambulant_id)
+				SELECT coalesce(b.ambulant_id, d.ambulant_id) AS ambulant_id, d.ambulant_id IS NOT NULL AS declare,
+				  coalesce(b.bons, 0) AS bons, coalesce(b.quantite, 0) AS quantite, coalesce(b.bons30, 0) AS bons30,
+				  b.premier, b.dernier
+				FROM bons b FULL JOIN declares d ON d.ambulant_id = b.ambulant_id
+				""";
+		var declares = json.ecrire(comptes.ambulantsDeclares(appelant.organisationId()));
+		var total = jdbc.sql("SELECT count(*) FROM (" + rattaches + ") r").param("d", declares)
 			.param("g", appelant.organisationId()).query(Long.class).single();
-		var contenu = jdbc.sql("""
-				SELECT b.ambulant_id, count(*) AS bons, sum(x.q) AS quantite,
-				  count(*) FILTER (WHERE b.emis_le > now() - interval '30 days') AS bons30, min(b.emis_le) AS premier, max(b.emis_le) AS dernier
-				FROM bon_sortie b, LATERAL (SELECT sum((l->>'quantite')::int) AS q FROM jsonb_array_elements(b.lignes) l) x
-				WHERE b.grossiste_id = :g
-				GROUP BY b.ambulant_id ORDER BY max(b.emis_le) DESC LIMIT :taille OFFSET :offset
-				""").param("g", appelant.organisationId()).param("taille", taille).param("offset", page * taille)
+		var contenu = jdbc.sql(rattaches + " ORDER BY b.dernier DESC NULLS LAST, 1 LIMIT :taille OFFSET :offset")
+			.param("d", declares).param("g", appelant.organisationId()).param("taille", taille).param("offset", page * taille)
 			.query((rs, i) -> {
 				var a = rs.getObject("ambulant_id", UUID.class);
-				return new AmbulantRattache(a, comptes.nom(a), comptes.telephone(a).orElse(null), rs.getInt("bons"),
-						rs.getLong("quantite"), rs.getInt("bons30"), rs.getTimestamp("premier").toInstant(),
-						rs.getTimestamp("dernier").toInstant());
+				var bons = rs.getInt("bons");
+				return new AmbulantRattache(a, comptes.nom(a), rs.getBoolean("declare"),
+						bons > 0 ? comptes.telephone(a).orElse(null) : null, bons, rs.getLong("quantite"), rs.getInt("bons30"),
+						instant(rs.getTimestamp("premier")), instant(rs.getTimestamp("dernier")));
 			}).list();
 		return Page.de(page, taille, total, contenu);
+	}
+
+	private static Instant instant(java.sql.Timestamp ts) {
+		return ts == null ? null : ts.toInstant();
 	}
 
 	@GetMapping("/v1/bons-sortie/{bonSortieId}")

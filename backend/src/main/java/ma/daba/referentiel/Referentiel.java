@@ -3,7 +3,9 @@ package ma.daba.referentiel;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -107,6 +109,57 @@ public class Referentiel {
 		}
 		var connus = jdbc.sql("SELECT code FROM " + table + " WHERE code IN (:c)").param("c", codes).query(String.class).list();
 		return codes.stream().filter(c -> !connus.contains(c)).toList();
+	}
+
+	/** Identifiants de {@code ids} absents des hanouts (base POS et terrain). */
+	public List<UUID> hanoutsInconnus(Collection<UUID> ids) {
+		return idsInconnus("hanout", ids);
+	}
+
+	/** Identifiants de {@code ids} absents des grossistes. */
+	public List<UUID> grossistesInconnus(Collection<UUID> ids) {
+		return idsInconnus("grossiste", ids);
+	}
+
+	private List<UUID> idsInconnus(String table, Collection<UUID> ids) {
+		if (ids.isEmpty()) {
+			return List.of();
+		}
+		var connus = Set.copyOf(jdbc.sql("SELECT id FROM " + table + " WHERE id IN (:ids)").param("ids", ids).query(UUID.class).list());
+		return ids.stream().filter(id -> !connus.contains(id)).toList();
+	}
+
+	/** Place d'un hanout positionné face au ciblage géographique d'une promo (§9). */
+	public record PositionCiblee(boolean dansZones, boolean dansRayon) {
+	}
+
+	/**
+	 * Hanouts positionnés parmi {@code hanouts} (PostGIS) : dans au moins un des polygones GeoJSON
+	 * {@code zones} (vrai si null), et à {@code rayonM} mètres au plus du grossiste (vrai si null).
+	 * Un hanout sans position est absent du résultat.
+	 */
+	public Map<UUID, PositionCiblee> positionsCiblees(Collection<UUID> hanouts, List<?> zones, UUID grossisteId,
+			Integer rayonM) {
+		var positions = new HashMap<UUID, PositionCiblee>();
+		if (hanouts.isEmpty()) {
+			return positions;
+		}
+		jdbc.sql("""
+				SELECT h.id,
+				  CAST(:zones AS jsonb) IS NULL OR EXISTS (SELECT 1 FROM jsonb_array_elements(CAST(:zones AS jsonb)) z
+				    WHERE ST_Covers(ST_SetSRID(ST_GeomFromGeoJSON(z::text), 4326), h.position::geometry)) AS dans_zones,
+				  CAST(:rayon AS int) IS NULL
+				    OR ST_DWithin(h.position, (SELECT g.position FROM grossiste g WHERE g.id = :g), CAST(:rayon AS int)) AS dans_rayon
+				FROM hanout h
+				WHERE h.position IS NOT NULL
+				  AND h.id IN (SELECT CAST(value AS uuid) FROM jsonb_array_elements_text(CAST(:h AS jsonb)))
+				""").param("zones", json.ecrire(zones)).param("rayon", rayonM).param("g", grossisteId)
+			.param("h", json.ecrire(hanouts))
+			.query(rs -> {
+				positions.put(rs.getObject("id", UUID.class),
+						new PositionCiblee(rs.getBoolean("dans_zones"), rs.getBoolean("dans_rayon")));
+			});
+		return positions;
 	}
 
 	public Optional<Hanout> hanout(UUID id) {

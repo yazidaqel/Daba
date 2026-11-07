@@ -66,7 +66,7 @@ class SyncController {
 	Journal.Lot tirer(Appelant appelant, @RequestParam(required = false) String curseur,
 			@RequestParam(defaultValue = "500") @Min(1) @Max(1000) int limite) {
 		if (curseur == null) {
-			// Synchronisation complète (nouveau compte, nouvel appareil) : offres ciblées par catégorie à jour (§9).
+			// Synchronisation complète (nouveau compte, nouvel appareil) : offres ciblées (catégorie, zone, rayon) à jour (§9).
 			promos.reevaluerCiblage(appelant.utilisateurId());
 		}
 		return journal.lire(appelant.utilisateurId(), curseur, limite);

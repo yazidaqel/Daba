@@ -5,8 +5,11 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,15 +45,20 @@ public class Stock {
 	public record LigneQuantite(@NotNull UUID produitId, @NotNull @Min(1) Integer quantite) {
 	}
 
+	/** Ligne chargée (chargement manuel, bon de sortie) : péremption (§3.2) et prix d'achat TTC (§3.8), facultatifs. */
+	public record LigneChargement(@NotNull UUID produitId, @NotNull @Min(1) Integer quantite, LocalDate datePeremption,
+			@Min(0) Long prixUnitaire) {
+	}
+
 	public record Mouvement(UUID id, String type, UUID produitId, int quantite, UUID auteurId, UUID appareilId,
 			Instant horodatage, Instant recuLe, UUID operationId, UUID documentId, UUID bonSortieId, UUID campagneId,
-			UUID reservationId, String motif) {
+			UUID reservationId, String motif, LocalDate datePeremption, Long prixUnitaire) {
 	}
 
 	public record StockPromo(UUID campagneId, UUID reservationId, int quantite) {
 	}
 
-	public record LigneStock(UUID produitId, int quantite, List<StockPromo> promo) {
+	public record LigneStock(UUID produitId, int quantite, List<StockPromo> promo, LocalDate peremptionProche) {
 	}
 
 	/** Mouvement à enregistrer ; quantité positive en entrée, négative en sortie. */
@@ -66,7 +74,7 @@ public class Stock {
 	public record InventaireLigne(@NotNull UUID produitId, @NotNull @Min(0) Integer quantiteComptee, String motifEcart) {
 	}
 
-	static final TypeReference<List<LigneQuantite>> LIGNES = new TypeReference<>() {
+	static final TypeReference<List<LigneChargement>> LIGNES = new TypeReference<>() {
 	};
 
 	private final JdbcClient jdbc;
@@ -91,6 +99,10 @@ public class Stock {
 	 */
 	@Transactional
 	public List<Anomalie> enregistrer(Geste geste, UUID auteurId, NouveauMouvement m) {
+		return enregistrer(geste, auteurId, m, null, null);
+	}
+
+	private List<Anomalie> enregistrer(Geste geste, UUID auteurId, NouveauMouvement m, LocalDate peremption, Long prix) {
 		var reservation = m.reservationId();
 		if (m.campagneId() != null && reservation == null && m.quantite() < 0) {
 			// Vente promo sans réservation précisée : on puise dans la plus ancienne réservation retirée qui en a encore.
@@ -104,14 +116,16 @@ public class Stock {
 		var id = UUID.randomUUID();
 		jdbc.sql("""
 				INSERT INTO mouvement (id, ambulant_id, organisation_id, type, produit_id, quantite, auteur_id, appareil_id,
-				  horodatage, operation_id, document_id, bon_sortie_id, campagne_id, reservation_id, motif)
-				VALUES (:id, :a, :org, :type, :p, :q, :auteur, :appareil, :h, :op, :doc, :bon, :c, :r, :motif)
+				  horodatage, operation_id, document_id, bon_sortie_id, campagne_id, reservation_id, motif, date_peremption,
+				  prix_unitaire)
+				VALUES (:id, :a, :org, :type, :p, :q, :auteur, :appareil, :h, :op, :doc, :bon, :c, :r, :motif, :peremption, :prix)
 				""")
 			.param("id", id).param("a", geste.ambulantId()).param("org", geste.organisationId()).param("type", m.type())
 			.param("p", m.produitId()).param("q", m.quantite()).param("auteur", auteurId)
 			.param("appareil", geste.appareilId()).param("h", Timestamp.from(geste.horodatage()))
 			.param("op", geste.operationId()).param("doc", m.documentId()).param("bon", m.bonSortieId())
 			.param("c", m.campagneId()).param("r", reservation).param("motif", m.motif())
+			.param("peremption", peremption).param("prix", prix)
 			.update();
 		journal.publier(geste.ambulantId(), "MOUVEMENT", id, mouvement(id));
 		publierLigne(geste.ambulantId(), m.produitId());
@@ -165,17 +179,18 @@ public class Stock {
 		}
 		for (var ligne : json.lire(bon.getValue(), LIGNES)) {
 			enregistrer(geste, geste.ambulantId(), new NouveauMouvement("CHARGEMENT", ligne.produitId(), ligne.quantite(),
-					null, bonId, null, null, null));
+					null, bonId, null, null, null), ligne.datePeremption(), ligne.prixUnitaire());
 		}
 		journal.publier(geste.ambulantId(), "BON_SORTIE", bonId, bonSortie(bonId));
 		return Effet.ok();
 	}
 
 	@Transactional
-	public Effet chargerManuel(Geste geste, List<LigneQuantite> lignes) {
-		verifierProduits(lignes.stream().map(LigneQuantite::produitId).toList());
+	public Effet chargerManuel(Geste geste, List<LigneChargement> lignes) {
+		verifierProduits(lignes.stream().map(LigneChargement::produitId).toList());
 		for (var ligne : lignes) {
-			enregistrer(geste, geste.ambulantId(), NouveauMouvement.de("CHARGEMENT", ligne.produitId(), ligne.quantite()));
+			enregistrer(geste, geste.ambulantId(), NouveauMouvement.de("CHARGEMENT", ligne.produitId(), ligne.quantite()),
+					ligne.datePeremption(), ligne.prixUnitaire());
 		}
 		return Effet.ok();
 	}
@@ -269,23 +284,57 @@ public class Stock {
 				""").param("p", produits).param("a", ambulants).query(UUID.class).list());
 	}
 
-	/** Ambulants rattachés à un grossiste (ils ont reçu au moins un bon de sortie). */
-	public List<UUID> ambulantsRattaches(UUID grossisteId) {
-		return jdbc.sql("SELECT DISTINCT ambulant_id FROM bon_sortie WHERE grossiste_id = :g").param("g", grossisteId)
-			.query(UUID.class).list();
+	/** Ambulants rattachés à un grossiste : déclaré à leur profil (§3.1) ou au moins un bon de sortie reçu. */
+	public Set<UUID> ambulantsRattaches(UUID grossisteId) {
+		var rattaches = new HashSet<>(comptes.ambulantsDeclares(grossisteId));
+		rattaches.addAll(jdbc.sql("SELECT DISTINCT ambulant_id FROM bon_sortie WHERE grossiste_id = :g").param("g", grossisteId)
+			.query(UUID.class).list());
+		return rattaches;
+	}
+
+	/** Grossistes auxquels l'ambulant est rattaché (même règle que {@link #ambulantsRattaches}). */
+	public Set<UUID> grossistesRattaches(UUID ambulantId) {
+		var rattaches = new HashSet<>(comptes.grossistesDeclares(ambulantId));
+		rattaches.addAll(jdbc.sql("SELECT DISTINCT grossiste_id FROM bon_sortie WHERE ambulant_id = :a").param("a", ambulantId)
+			.query(UUID.class).list());
+		return rattaches;
+	}
+
+	/**
+	 * Plus proche péremption des entrées encore en stock normal, par produit (§3.2).
+	 * ponytail: suppose une consommation premier entré, premier sorti (les plus anciennes entrées
+	 * sortent d'abord) ; un suivi par lot si l'ambulant vend en réalité dans un autre ordre.
+	 */
+	private Map<UUID, LocalDate> peremptions(UUID ambulantId) {
+		var peremptions = new HashMap<UUID, LocalDate>();
+		jdbc.sql("""
+				SELECT e.produit_id, min(e.date_peremption) AS peremption FROM (
+				  SELECT produit_id, date_peremption,
+				    sum(quantite) OVER (PARTITION BY produit_id ORDER BY horodatage DESC, recu_le DESC, id) - quantite AS plus_recentes
+				  FROM mouvement WHERE ambulant_id = :a AND campagne_id IS NULL AND quantite > 0) e
+				JOIN (SELECT produit_id, sum(quantite) AS q FROM mouvement WHERE ambulant_id = :a AND campagne_id IS NULL
+				      GROUP BY produit_id) s ON s.produit_id = e.produit_id
+				WHERE e.date_peremption IS NOT NULL AND e.plus_recentes < s.q
+				GROUP BY e.produit_id
+				""").param("a", ambulantId)
+			.query(rs -> {
+				peremptions.put(rs.getObject(1, UUID.class), rs.getObject(2, LocalDate.class));
+			});
+		return peremptions;
 	}
 
 	public List<LigneStock> stock(UUID ambulantId) {
+		var peremptions = peremptions(ambulantId);
 		var lignes = new LinkedHashMap<UUID, LigneStock>();
 		jdbc.sql("""
 				SELECT produit_id, campagne_id, reservation_id, sum(quantite) AS q FROM mouvement WHERE ambulant_id = :a
 				GROUP BY produit_id, campagne_id, reservation_id ORDER BY produit_id
 				""").param("a", ambulantId).query(rs -> {
 				var p = rs.getObject("produit_id", UUID.class);
-				var ligne = lignes.computeIfAbsent(p, k -> new LigneStock(k, 0, new ArrayList<>()));
+				var ligne = lignes.computeIfAbsent(p, k -> new LigneStock(k, 0, new ArrayList<>(), null));
 				var c = rs.getObject("campagne_id", UUID.class);
 				if (c == null) {
-					lignes.put(p, new LigneStock(p, rs.getInt("q"), ligne.promo()));
+					lignes.put(p, new LigneStock(p, rs.getInt("q"), ligne.promo(), null));
 				}
 				else if (rs.getInt("q") != 0) {
 					ligne.promo().add(new StockPromo(c, rs.getObject("reservation_id", UUID.class), rs.getInt("q")));
@@ -293,13 +342,14 @@ public class Stock {
 			});
 		return lignes.values().stream()
 			.filter(l -> l.quantite() != 0 || !l.promo().isEmpty())
-			.map(l -> new LigneStock(l.produitId(), l.quantite(), l.promo().isEmpty() ? null : l.promo()))
+			.map(l -> new LigneStock(l.produitId(), l.quantite(), l.promo().isEmpty() ? null : l.promo(),
+					peremptions.get(l.produitId())))
 			.toList();
 	}
 
 	private void publierLigne(UUID ambulantId, UUID produitId) {
 		var ligne = stock(ambulantId).stream().filter(l -> l.produitId().equals(produitId)).findFirst()
-			.orElse(new LigneStock(produitId, 0, null));
+			.orElse(new LigneStock(produitId, 0, null, null));
 		journal.publier(ambulantId, "STOCK", produitId, ligne);
 	}
 
@@ -313,7 +363,8 @@ public class Stock {
 				rs.getTimestamp("horodatage").toInstant(), rs.getTimestamp("recu_le").toInstant(),
 				rs.getObject("operation_id", UUID.class), rs.getObject("document_id", UUID.class),
 				rs.getObject("bon_sortie_id", UUID.class), rs.getObject("campagne_id", UUID.class),
-				rs.getObject("reservation_id", UUID.class), rs.getString("motif"));
+				rs.getObject("reservation_id", UUID.class), rs.getString("motif"), rs.getObject("date_peremption", LocalDate.class),
+				(Long) rs.getObject("prix_unitaire"));
 	}
 
 	void verifierProduits(Collection<UUID> produits) {
@@ -327,12 +378,12 @@ public class Stock {
 
 	// ---------------------------------------------------------------- bons de sortie (§4.3)
 
-	public record BonSortie(UUID id, String numero, UUID grossisteId, Reference ambulant, List<LigneQuantite> lignes,
+	public record BonSortie(UUID id, String numero, UUID grossisteId, Reference ambulant, List<LigneChargement> lignes,
 			Instant emisLe, String qrJeton, Instant chargeLe) {
 	}
 
 	record BonSortieSaisie(@NotNull UUID id, @NotNull @jakarta.validation.constraints.Pattern(regexp = "^\\+212[5-7][0-9]{8}$") String ambulantTelephone,
-			@NotNull @jakarta.validation.constraints.Size(min = 1, max = 30) List<@jakarta.validation.Valid LigneQuantite> lignes) {
+			@NotNull @jakarta.validation.constraints.Size(min = 1, max = 30) List<@jakarta.validation.Valid LigneChargement> lignes) {
 	}
 
 	/** Émet un bon de sortie pour un ambulant inscrit ; rejouer le même id rend le bon existant (cree = faux). */
@@ -348,7 +399,7 @@ public class Stock {
 		}
 		var ambulant = comptes.ambulantParTelephone(saisie.ambulantTelephone())
 			.orElseThrow(() -> Probleme.regle(null, "Ce numéro n'est pas un ambulant inscrit"));
-		verifierProduits(saisie.lignes().stream().map(LigneQuantite::produitId).toList());
+		verifierProduits(saisie.lignes().stream().map(LigneChargement::produitId).toList());
 		var numero = "BS-%06d".formatted(jdbc.sql("SELECT nextval('bon_sortie_numero')").query(Long.class).single());
 		jdbc.sql("""
 				INSERT INTO bon_sortie (id, numero, grossiste_id, ambulant_id, lignes) VALUES (:id, :numero, :g, :a, :lignes::jsonb)

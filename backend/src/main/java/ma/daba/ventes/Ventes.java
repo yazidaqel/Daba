@@ -66,7 +66,7 @@ public class Ventes implements ProduitsHabituels {
 	}
 
 	public record ConfirmationHanout(@NotNull @jakarta.validation.constraints.Pattern(regexp = "^(SIGNATURE|CONFIRMATION_ECRAN)$") String mode,
-			String signaturePng, @NotNull Instant le) {
+			@jakarta.validation.constraints.Size(max = 131072) String signaturePng, @NotNull Instant le) {
 	}
 
 	public record EmissionDocument(@NotNull UUID documentId,
@@ -404,34 +404,39 @@ public class Ventes implements ProduitsHabituels {
 		var restes = jdbc.sql(RESTES + " ORDER BY d.emis_le, d.sequence").param("a", geste.ambulantId()).param("h", v.hanoutId())
 			.query((rs, i) -> Map.entry(rs.getObject("id", UUID.class), rs.getLong("reste")))
 			.list();
-		var imputations = new ArrayList<Imputation>();
+		// Reste dû par pièce, selon le serveur : l'appareil a pu calculer sa répartition sur un état périmé
+		// (versement saisi sur un autre appareil). Chaque part choisie est plafonnée à ce reste, le surplus suit en FIFO.
+		var dus = new java.util.LinkedHashMap<UUID, Long>();
+		restes.forEach(e -> dus.put(e.getKey(), e.getValue()));
+		var parts = new java.util.LinkedHashMap<UUID, Long>();
+		long reste = v.montant();
 		if (v.imputations() != null && !v.imputations().isEmpty()) {
-			var pieces = restes.stream().map(Map.Entry::getKey).collect(java.util.stream.Collectors.toSet());
-			long somme = 0;
-			for (var imp : v.imputations()) {
-				if (!pieces.contains(imp.documentId())) {
-					throw Probleme.regle("RG-C2", "Imputation sur une pièce inconnue ou sans crédit : " + imp.documentId());
-				}
-				somme += imp.montant();
-				imputations.add(imp);
-			}
-			if (somme > v.montant()) {
+			if (v.imputations().stream().mapToLong(Imputation::montant).sum() > v.montant()) {
 				throw Probleme.regle("RG-C2", "Imputations supérieures au versement");
 			}
-		}
-		else {
-			long reste = v.montant();
-			for (var piece : restes) {
-				if (reste == 0) {
-					break;
+			for (var imp : v.imputations()) {
+				if (!dus.containsKey(imp.documentId())) {
+					throw Probleme.regle("RG-C2", "Imputation sur une pièce inconnue ou sans crédit : " + imp.documentId());
 				}
-				long part = Math.min(reste, piece.getValue());
+				long part = Math.min(imp.montant(), dus.get(imp.documentId()));
 				if (part > 0) {
-					imputations.add(new Imputation(piece.getKey(), part));
+					parts.merge(imp.documentId(), part, Long::sum);
+					dus.merge(imp.documentId(), -part, Long::sum);
 					reste -= part;
 				}
 			}
 		}
+		for (var piece : dus.entrySet()) {
+			if (reste == 0) {
+				break;
+			}
+			long part = Math.min(reste, piece.getValue());
+			if (part > 0) {
+				parts.merge(piece.getKey(), part, Long::sum);
+				reste -= part;
+			}
+		}
+		var imputations = parts.entrySet().stream().map(e -> new Imputation(e.getKey(), e.getValue())).toList();
 		jdbc.sql("""
 				INSERT INTO versement (id, ambulant_id, organisation_id, hanout_id, mode, montant, cheque_numero, cheque_banque,
 				  verse_le, operation_id)
@@ -499,8 +504,13 @@ public class Ventes implements ProduitsHabituels {
 		return Effet.ok();
 	}
 
+	/**
+	 * Paramètres de l'ambulant ; un champ absent garde sa valeur. {@code effacerMentions} : la saisie
+	 * portait {@code mentionsLegales: null}, les mentions sont retirées (une FACTURE devra porter les
+	 * siennes, RG-F2).
+	 */
 	@Transactional
-	public Effet parametres(Geste geste, ParametresSaisie p) {
+	public Effet parametres(Geste geste, ParametresSaisie p, boolean effacerMentions) {
 		var modifie = jdbc.sql("SELECT modifie_le_appareil FROM parametres_ambulant WHERE ambulant_id = :a")
 			.param("a", geste.ambulantId()).query(Timestamp.class).optional();
 		if (modifie.isPresent() && modifie.get() != null && modifie.get().toInstant().isAfter(geste.horodatage())) {
@@ -514,9 +524,10 @@ public class Ventes implements ProduitsHabituels {
 				ON CONFLICT (ambulant_id) DO UPDATE SET
 				  politique_depassement = coalesce(:pol, parametres_ambulant.politique_depassement),
 				  plafond_remise_pourcent = coalesce(:remise, parametres_ambulant.plafond_remise_pourcent),
-				  mentions_legales = coalesce(CAST(:mentions AS jsonb), parametres_ambulant.mentions_legales),
+				  mentions_legales = CASE WHEN :effacer THEN NULL
+				    ELSE coalesce(CAST(:mentions AS jsonb), parametres_ambulant.mentions_legales) END,
 				  modifie_le_appareil = :le
-				""").param("a", geste.ambulantId()).param("pol", p.politiqueDepassementCredit())
+				""").param("a", geste.ambulantId()).param("pol", p.politiqueDepassementCredit()).param("effacer", effacerMentions)
 			.param("mentions", json.ecrire(p.mentionsLegales()))
 			.param("remise", p.plafondRemisePonctuellePourcent()).param("le", Timestamp.from(geste.horodatage())).update();
 		journal.publier(geste.ambulantId(), "PARAMETRES", geste.ambulantId(), parametres(geste.ambulantId()));

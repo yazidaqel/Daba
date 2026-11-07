@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import ma.daba.canaux.Canaux;
@@ -52,14 +53,17 @@ public class Comptes implements Acces.VerificationCompte, Acces.Organisations {
 	/** Profil saisi hors ligne (opération PROFIL_AMBULANT, §3.1) : remplace tout le profil. */
 	public record ProfilSaisie(@NotBlank @Size(max = 100) String nom, @Pattern(regexp = "^[A-Z]{1,2}[0-9]{1,6}$") String cin,
 			@Size(max = 100) String vehicule, @Size(max = 50) List<@NotBlank String> villes,
-			@Size(max = 50) List<@NotBlank String> categories) {
+			@Size(max = 50) List<@NotBlank String> categories, @Size(max = 20) List<@NotNull UUID> grossisteIds) {
 	}
 
 	public record Profil(String nom, String cin, String vehicule, List<String> villes, List<String> categories,
-			Instant modifieLe) {
+			List<UUID> grossisteIds, Instant modifieLe) {
 	}
 
 	private static final TypeReference<List<String>> CODES = new TypeReference<>() {
+	};
+
+	private static final TypeReference<List<UUID>> IDS = new TypeReference<>() {
 	};
 
 	private final JdbcClient jdbc;
@@ -188,15 +192,17 @@ public class Comptes implements Acces.VerificationCompte, Acces.Organisations {
 
 	/**
 	 * Profil de l'ambulant (§3.1) : son nom devient celui que voient ses grossistes et ses hanouts
-	 * ({@link #nom}). Codes de ville ou de catégorie inconnus : REJETEE ; profil plus récent sur un
-	 * autre appareil : conservé (pas d'écrasement silencieux).
+	 * ({@link #nom}). Codes de ville ou de catégorie, ou grossistes déclarés inconnus : REJETEE ;
+	 * profil plus récent sur un autre appareil : conservé (pas d'écrasement silencieux).
 	 */
 	@Transactional
 	public Effet profil(Geste geste, ProfilSaisie p) {
 		var villes = p.villes() == null ? List.<String>of() : p.villes().stream().distinct().toList();
 		var categories = p.categories() == null ? List.<String>of() : p.categories().stream().distinct().toList();
-		var inconnus = new java.util.ArrayList<>(referentiel.villesInconnues(villes));
+		var grossistes = p.grossisteIds() == null ? List.<UUID>of() : p.grossisteIds().stream().distinct().toList();
+		var inconnus = new java.util.ArrayList<Object>(referentiel.villesInconnues(villes));
 		inconnus.addAll(referentiel.categoriesInconnues(categories));
+		inconnus.addAll(referentiel.grossistesInconnus(grossistes));
 		if (!inconnus.isEmpty()) {
 			throw Probleme.regle(null, "Codes inconnus du référentiel : " + inconnus);
 		}
@@ -207,12 +213,14 @@ public class Comptes implements Acces.VerificationCompte, Acces.Organisations {
 		jdbc.sql("UPDATE utilisateur SET nom = :nom WHERE id = :u").param("nom", p.nom().trim()).param("u", geste.ambulantId())
 			.update();
 		jdbc.sql("""
-				INSERT INTO profil_ambulant (utilisateur_id, cin, vehicule, villes, categories, modifie_le_appareil)
-				VALUES (:u, :cin, :vehicule, :villes::jsonb, :categories::jsonb, :le)
+				INSERT INTO profil_ambulant (utilisateur_id, cin, vehicule, villes, categories, grossistes, modifie_le_appareil)
+				VALUES (:u, :cin, :vehicule, :villes::jsonb, :categories::jsonb, :grossistes::jsonb, :le)
 				ON CONFLICT (utilisateur_id) DO UPDATE SET cin = excluded.cin, vehicule = excluded.vehicule,
-				  villes = excluded.villes, categories = excluded.categories, modifie_le_appareil = excluded.modifie_le_appareil
+				  villes = excluded.villes, categories = excluded.categories, grossistes = excluded.grossistes,
+				  modifie_le_appareil = excluded.modifie_le_appareil
 				""").param("u", geste.ambulantId()).param("cin", p.cin()).param("vehicule", p.vehicule())
 			.param("villes", json.ecrire(villes)).param("categories", json.ecrire(categories))
+			.param("grossistes", json.ecrire(grossistes))
 			.param("le", Timestamp.from(geste.horodatage())).update();
 		journal.publier(geste.ambulantId(), "PROFIL", geste.ambulantId(), profil(geste.ambulantId()).orElseThrow());
 		return Effet.ok();
@@ -220,13 +228,25 @@ public class Comptes implements Acces.VerificationCompte, Acces.Organisations {
 
 	public Optional<Profil> profil(UUID ambulantId) {
 		return jdbc.sql("""
-				SELECT u.nom, p.cin, p.vehicule, p.villes::text AS villes, p.categories::text AS categories, p.modifie_le_appareil
+				SELECT u.nom, p.cin, p.vehicule, p.villes::text AS villes, p.categories::text AS categories,
+				  p.grossistes::text AS grossistes, p.modifie_le_appareil
 				FROM profil_ambulant p JOIN utilisateur u ON u.id = p.utilisateur_id WHERE p.utilisateur_id = :u
 				""").param("u", ambulantId)
 			.query((rs, i) -> new Profil(rs.getString("nom"), rs.getString("cin"), rs.getString("vehicule"),
 					json.lire(rs.getString("villes"), CODES), json.lire(rs.getString("categories"), CODES),
-					rs.getTimestamp("modifie_le_appareil").toInstant()))
+					json.lire(rs.getString("grossistes"), IDS), rs.getTimestamp("modifie_le_appareil").toInstant()))
 			.optional();
+	}
+
+	/** Grossistes déclarés au profil de l'ambulant (§3.1). */
+	public List<UUID> grossistesDeclares(UUID ambulantId) {
+		return profil(ambulantId).map(Profil::grossisteIds).orElse(List.of());
+	}
+
+	/** Ambulants qui ont déclaré ce grossiste à leur profil (§3.1). */
+	public List<UUID> ambulantsDeclares(UUID grossisteId) {
+		return jdbc.sql("SELECT utilisateur_id FROM profil_ambulant WHERE grossistes @> jsonb_build_array(CAST(:g AS text))")
+			.param("g", grossisteId.toString()).query(UUID.class).list();
 	}
 
 	/** Catégories vendues déclarées au profil (ciblage d'une promo, §9) ; absent = aucune déclarée. */

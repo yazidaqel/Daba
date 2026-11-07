@@ -94,6 +94,81 @@ class ProfilAmbulantTest extends TestIntegration {
 	}
 
 	@Test
+	void rgF2_mentionsLegalesEffaceesParNull_factureEmiseHorsLigneAvantLEffacementResteValable() {
+		var ambulant = ambulant();
+		var produit = produit();
+		var hanout = hanout(33.57, -7.59);
+		var mentions = m("ice", "001234567000089", "identifiantFiscal", "12345678", "registreCommerce", "RC 4567",
+				"assujettiTva", false);
+		var avant = Instant.now().minus(1, ChronoUnit.HOURS);
+		pousser(ambulant, "PARAMETRES_AMBULANT", m("mentionsLegales", mentions), avant);
+		// Absentes : gardées ; null : effacées.
+		pousser(ambulant, "PARAMETRES_AMBULANT", m("politiqueDepassementCredit", "BLOQUER"), avant.plusSeconds(1));
+		assertThat(changement(ambulant, "PARAMETRES").get("donnees").has("mentionsLegales")).isTrue();
+		// Corps brut : le mapper des tests omet les valeurs null.
+		var corps = """
+				{"appareilId":"%s","operations":[{"id":"%s","type":"PARAMETRES_AMBULANT","creeLe":"%s",
+				"donnees":{"mentionsLegales":null}}]}""".formatted(ambulant.appareilId(), UUID.randomUUID(), Instant.now());
+		assertThat(lire(post(ambulant, "/v1/sync/operations", corps)).get("resultats").get(0).get("statut").asString())
+			.isEqualTo("APPLIQUEE");
+		var parametres = changement(ambulant, "PARAMETRES").get("donnees");
+		assertThat(parametres.has("mentionsLegales")).isFalse();
+		assertThat(parametres.get("politiqueDepassementCredit").asString()).isEqualTo("BLOQUER");
+
+		// Après l'effacement, une FACTURE sans mentions est rejetée (RG-F2)…
+		var facture = m("documentId", UUID.randomUUID(), "type", "FACTURE", "numero", ambulant.prefixe() + "-FA-000001",
+				"sequence", 1, "hanoutId", hanout,
+				"lignes", List.of(m("nature", "ARTICLE", "produitId", produit, "quantite", 1, "prixUnitaire", 100)));
+		var rejetee = pousser(ambulant, "EMISSION_DOCUMENT", facture, Instant.now());
+		assertThat(rejetee.get("statut").asString()).isEqualTo("REJETEE");
+		assertThat(rejetee.get("erreur").get("regle").asString()).isEqualTo("RG-F2");
+		// …mais celle émise hors ligne avant l'effacement porte sa copie des mentions et reste valable.
+		facture.put("documentId", UUID.randomUUID());
+		facture.put("mentionsLegales", mentions);
+		assertThat(pousser(ambulant, "EMISSION_DOCUMENT", facture, avant.plusSeconds(2)).get("statut").asString())
+			.isEqualTo("APPLIQUEE");
+	}
+
+	@Test
+	void grossistesDeclaresAuProfilRattachentLAmbulant_grossisteInconnuRejete() {
+		var grossiste = grossiste();
+		var ambulant = ambulant();
+		var inconnu = pousser(ambulant, "PROFIL_AMBULANT", m("nom", "Driss", "grossisteIds", List.of(UUID.randomUUID())),
+				Instant.now());
+		assertThat(inconnu.get("statut").asString()).isEqualTo("REJETEE");
+
+		assertThat(pousser(ambulant, "PROFIL_AMBULANT", m("nom", "Driss", "grossisteIds", List.of(grossiste.organisationId())),
+				Instant.now()).get("statut").asString()).isEqualTo("APPLIQUEE");
+		assertThat(changement(ambulant, "PROFIL").get("donnees").get("grossisteIds").get(0).asString())
+			.isEqualTo(grossiste.organisationId().toString());
+		// Rattaché par déclaration seule : nom (consentement actif), sans téléphone ni bon de sortie.
+		var page = lire(get(grossiste, "/v1/ambulants"));
+		assertThat(page.get("total").asInt()).isEqualTo(1);
+		var a = page.get("contenu").get(0);
+		assertThat(a.get("id").asString()).isEqualTo(ambulant.id().toString());
+		assertThat(a.get("declare").asBoolean()).isTrue();
+		assertThat(a.get("nom").asString()).isEqualTo("Driss");
+		assertThat(a.has("telephone")).isFalse();
+		assertThat(a.get("nombreBons").asInt()).isZero();
+		assertThat(a.has("premierBonLe")).isFalse();
+
+		// Un bon de sortie à un second ambulant : les deux sont rattachés, le servi d'abord.
+		var servi = ambulant();
+		post(grossiste, "/v1/bons-sortie", m("id", UUID.randomUUID(), "ambulantTelephone", servi.telephone(),
+				"lignes", List.of(m("produitId", produit(), "quantite", 2))));
+		var deux = lire(get(grossiste, "/v1/ambulants"));
+		assertThat(deux.get("total").asInt()).isEqualTo(2);
+		assertThat(deux.get("contenu").get(0).get("id").asString()).isEqualTo(servi.id().toString());
+		assertThat(deux.get("contenu").get(0).get("declare").asBoolean()).isFalse();
+		assertThat(deux.get("contenu").get(0).get("telephone").asString()).isEqualTo(servi.telephone());
+
+		// Retrait du consentement : téléphone masqué à la place du nom (règle commune).
+		retirerConsentement(ambulant);
+		assertThat(lire(get(grossiste, "/v1/ambulants")).get("contenu").get(1).get("nom").asString())
+			.isEqualTo(Comptes.masquer(ambulant.telephone()));
+	}
+
+	@Test
 	void nomDeLAmbulantMontreAuGrossisteEtAuHanout_telephoneMasqueSansProfil() {
 		var produit = produit();
 		var ambulant = ambulant();
@@ -159,7 +234,9 @@ class ProfilAmbulantTest extends TestIntegration {
 				op("PARAMETRES_AMBULANT", m("politiqueDepassementCredit", "BLOQUER")),
 				op("TARIF", m("produitId", produit, "prixUnitaire", 900)),
 				op("CREDIT_HANOUT", m("hanoutId", hanoutId, "plafond", 10000)),
-				op("RESOLUTION_CONTESTATION", m("contestationId", UUID.randomUUID())));
+				op("RESOLUTION_CONTESTATION", m("contestationId", UUID.randomUUID())),
+				op("TOURNEE", m("id", UUID.randomUUID(), "jours", List.of(1), "hanoutIds", List.of(hanoutId))),
+				op("VISITE", m("hanoutId", hanoutId, "horodatage", Instant.now().toString(), "motif", "FERME")));
 		for (var r : lot(ambulant, refusees)) {
 			assertThat(r.get("statut").asString()).as(r.toString()).isEqualTo("REJETEE");
 			assertThat(r.get("erreur").get("type").asString()).endsWith("/consentement-requis");

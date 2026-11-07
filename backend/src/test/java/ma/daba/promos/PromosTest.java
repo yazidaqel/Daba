@@ -55,7 +55,7 @@ class PromosTest extends TestIntegration {
 	}
 
 	String offre(Compte ambulant, Scenario s) {
-		var offres = lire(get(ambulant, "/v1/promos")).get("contenu");
+		var offres = lire(get(ambulant, "/v1/promos?taille=200")).get("contenu");
 		for (var o : offres) {
 			if (o.get("depotId").asString().equals(s.depotId())) {
 				return o.get("id").asString();
@@ -484,6 +484,124 @@ class PromosTest extends TestIntegration {
 			.param("u", a.id()).query(Long.class).single();
 		assertThat(compte.apply(vise)).isPositive();
 		assertThat(compte.apply(nonVise)).isZero();
+	}
+
+	// ---------------------------------------------------------------- ciblage par zone de tournée et rayon (§9)
+
+	/** Campagne au ciblage donné, reçue chez un nouveau grossiste de Casablanca (lon -7.6, lat 33.58). */
+	Scenario promoAvecCiblage(Map<String, Object> ciblage) {
+		var marque = grandClient();
+		var grossiste = grossiste();
+		var produit = produit(marque.organisationId());
+		var saisie = campagne(produit, 50, 5);
+		saisie.put("ciblage", ciblage);
+		var campagneId = lire(post(marque, "/v1/campagnes", saisie)).get("id").asString();
+		var depotId = lire(post(marque, "/v1/campagnes/" + campagneId + "/depots", m("grossisteId", grossiste.organisationId(),
+				"lignes", List.of(m("produitId", produit, "quantite", 10))))).get("id").asString();
+		post(grossiste, "/v1/depots/" + depotId + "/reponse", m("decision", "ACCEPTER"));
+		recevoir(grossiste, depotId, produit, 10);
+		return new Scenario(marque, grossiste, produit, campagneId, depotId);
+	}
+
+	void tournee(Compte ambulant, UUID... hanouts) {
+		pousser(ambulant, "TOURNEE", m("id", UUID.randomUUID(), "jours", List.of(1, 3), "hanoutIds", List.of(hanouts)));
+	}
+
+	void attendreLesNotifications(String depotId) throws InterruptedException {
+		for (int i = 0; i < 50 && jdbc.sql("""
+				SELECT count(*) FROM event_publication WHERE completion_date IS NULL AND serialized_event LIKE :d
+				""").param("d", "%" + depotId + "%").query(Long.class).single() > 0; i++) {
+			Thread.sleep(200);
+		}
+	}
+
+	long promosConfirmees(Compte ambulant) {
+		return jdbc.sql("SELECT count(*) FROM notification WHERE utilisateur_id = :u AND type = 'PROMO_CONFIRMEE'")
+			.param("u", ambulant.id()).query(Long.class).single();
+	}
+
+	@Test
+	void ciblageParRayon_zoneDeTourneeDesTournees_sinonDesVentesDes30Jours_sinonAucunFiltre() throws InterruptedException {
+		var proche = hanout(33.585, -7.6); // ~550 m du dépositaire
+		var loin = hanout(34.02, -6.84); // Rabat, ~85 km
+		var neuf = ambulant();
+		var enTourneeLoin = ambulant();
+		tournee(enTourneeLoin, loin);
+		var venduLoin = ambulant();
+		pousser(venduLoin, "EMISSION_DOCUMENT", m("documentId", UUID.randomUUID(), "type", "BON_LIVRAISON",
+				"numero", venduLoin.prefixe() + "-BL-000001", "sequence", 1, "hanoutId", loin,
+				"lignes", List.of(m("nature", "ARTICLE", "produitId", produit(), "quantite", 1, "prixUnitaire", 500))));
+		var s = promoAvecCiblage(m("rayonM", 5000));
+		var offre = offre(neuf, s);
+
+		// Compte neuf (ni tournée ni vente) : pas de filtre, son fil n'est pas vide.
+		assertThat(offre).isNotNull();
+		assertThat(offre(enTourneeLoin, s)).isNull();
+		assertThat(offre(venduLoin, s)).isNull();
+		assertThat(promosSurLAppareil(neuf)).contains(offre);
+		assertThat(promosSurLAppareil(enTourneeLoin)).doesNotContain(offre);
+		// Même règle pour la notification « promo confirmée ».
+		attendreLesNotifications(s.depotId());
+		assertThat(promosConfirmees(neuf)).isPositive();
+		assertThat(promosConfirmees(enTourneeLoin)).isZero();
+		assertThat(promosConfirmees(venduLoin)).isZero();
+
+		// Le hanout de la zone le plus proche du dépositaire compte ; l'offre arrive sur l'appareil.
+		tournee(enTourneeLoin, loin, proche);
+		assertThat(offre(enTourneeLoin, s)).isEqualTo(offre);
+		assertThat(promosSurLAppareil(enTourneeLoin)).contains(offre);
+		// Une tournée prime sur les ventes des 30 derniers jours.
+		tournee(venduLoin, proche);
+		assertThat(offre(venduLoin, s)).isEqualTo(offre);
+	}
+
+	@Test
+	void ciblageParZones_auMoinsUnHanoutDeLaTourneeDansUnPolygone() throws InterruptedException {
+		var dedans = hanout(33.581, -7.601);
+		var dehors = hanout(34.02, -6.84);
+		var carre = m("type", "Polygon", "coordinates", List.of(List.of(List.of(-7.61, 33.57), List.of(-7.59, 33.57),
+				List.of(-7.59, 33.59), List.of(-7.61, 33.59), List.of(-7.61, 33.57))));
+		var dansLaZone = ambulant();
+		tournee(dansLaZone, dehors, dedans);
+		var horsZone = ambulant();
+		tournee(horsZone, dehors);
+		var s = promoAvecCiblage(m("zones", List.of(carre)));
+		assertThat(offre(dansLaZone, s)).isNotNull();
+		assertThat(offre(horsZone, s)).isNull();
+		attendreLesNotifications(s.depotId());
+		assertThat(promosConfirmees(dansLaZone)).isPositive();
+		assertThat(promosConfirmees(horsZone)).isZero();
+
+		// Polygone illisible ou rayon hors bornes : campagne refusée.
+		var marque = grandClient();
+		var saisie = campagne(produit(marque.organisationId()), 10, 5);
+		saisie.put("ciblage", m("zones", List.of(m("type", "Polygon", "coordinates", List.of(List.of(List.of(0, 0), List.of(1, 1)))))));
+		assertThat(post(marque, "/v1/campagnes", saisie)).hasStatus(400);
+		saisie.put("ciblage", m("rayonM", 100));
+		assertThat(post(marque, "/v1/campagnes", saisie)).hasStatus(400);
+	}
+
+	@Test
+	void prioriteAuxAmbulantsRattaches_offresDuDepositaireRattacheDAbord_etNotifiesEnPremier() {
+		var autre = promoActive();
+		var fournisseur = promoActive();
+		var ambulant = ambulant();
+		pousser(ambulant, "PROFIL_AMBULANT", m("nom", "Rattaché", "grossisteIds", List.of(fournisseur.grossiste().organisationId())));
+		var contenu = lire(get(ambulant, "/v1/promos?taille=200")).get("contenu");
+		int iFournisseur = -1;
+		int iAutre = -1;
+		for (int i = 0; i < contenu.size(); i++) {
+			var depot = contenu.get(i).get("depotId").asString();
+			iFournisseur = depot.equals(fournisseur.depotId()) ? i : iFournisseur;
+			iAutre = depot.equals(autre.depotId()) ? i : iAutre;
+		}
+		assertThat(iFournisseur).isNotNegative().isLessThan(iAutre);
+		assertThat(contenu.get(iFournisseur).get("rattache").asBoolean()).isTrue();
+		assertThat(contenu.get(iAutre).get("rattache").asBoolean()).isFalse();
+		assertThat(contenu.get(0).get("rattache").asBoolean()).isTrue();
+
+		// « Promo confirmée » : les rattachés au dépositaire en tête du même envoi.
+		assertThat(promos.ambulantsVises(UUID.fromString(fournisseur.depotId())).getFirst()).isEqualTo(ambulant.id());
 	}
 
 	@Test

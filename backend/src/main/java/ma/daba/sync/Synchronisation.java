@@ -38,8 +38,10 @@ import ma.daba.promos.Promos;
 import ma.daba.referentiel.Referentiel;
 import ma.daba.stock.Stock;
 import ma.daba.stock.Stock.InventaireLigne;
+import ma.daba.stock.Stock.LigneChargement;
 import ma.daba.stock.Stock.LigneQuantite;
 import ma.daba.ventes.AvisHanout;
+import ma.daba.ventes.Tournees;
 import ma.daba.ventes.Ventes;
 import tools.jackson.databind.JsonNode;
 
@@ -52,7 +54,7 @@ class Synchronisation {
 
 	private static final Logger log = LoggerFactory.getLogger(Synchronisation.class);
 
-	record Chargement(String qrJeton, UUID grossisteId, List<@Valid LigneQuantite> lignes) {
+	record Chargement(String qrJeton, UUID grossisteId, List<@Valid LigneChargement> lignes) {
 	}
 
 	record Retour(@NotNull @Pattern(regexp = "^(HANOUT_VERS_AMBULANT|AMBULANT_VERS_GROSSISTE)$") String sens, UUID hanoutId,
@@ -96,10 +98,12 @@ class Synchronisation {
 	private final Depannage depannage;
 	private final AvisHanout avisHanout;
 	private final Comptes comptes;
+	private final Tournees tournees;
 
 	Synchronisation(JdbcClient jdbc, Json json, Journal journal, Validator validateur, TransactionTemplate transactions,
 			Stock stock, Ventes ventes, Referentiel referentiel, Promos promos, Depannage depannage, AvisHanout avisHanout,
-			Comptes comptes) {
+			Comptes comptes, Tournees tournees) {
+		this.tournees = tournees;
 		this.avisHanout = avisHanout;
 		this.comptes = comptes;
 		this.jdbc = jdbc;
@@ -145,8 +149,8 @@ class Synchronisation {
 		try {
 			return transactions.execute(s -> {
 				var effet = executer(geste, type, operation.get("donnees"));
-				// §9 : un achat ou des catégories déclarées changent les offres ciblées que voit l'ambulant.
-				if (effet.conflit() == null && Set.of("CHARGEMENT", "EMISSION_DOCUMENT", "PROFIL_AMBULANT").contains(type)) {
+				// §9 : un achat, des catégories déclarées ou une zone de tournée changent les offres ciblées que voit l'ambulant.
+				if (effet.conflit() == null && Set.of("CHARGEMENT", "EMISSION_DOCUMENT", "PROFIL_AMBULANT", "TOURNEE").contains(type)) {
 					promos.reevaluerCiblage(geste.ambulantId());
 				}
 				var anomalies = effet.anomalies().stream().map(a -> enregistrer(geste, a)).toList();
@@ -209,7 +213,11 @@ class Synchronisation {
 			case "VERSEMENT" -> ventes.verser(geste, lire(donnees, Ventes.VersementSaisie.class));
 			case "TARIF" -> ventes.tarif(geste, lire(donnees, Ventes.Tarif.class));
 			case "CREDIT_HANOUT" -> ventes.credit(geste, lire(donnees, Ventes.CreditHanout.class));
-			case "PARAMETRES_AMBULANT" -> ventes.parametres(geste, lire(donnees, Ventes.ParametresSaisie.class));
+			// mentionsLegales: null efface les mentions ; absentes, elles sont gardées.
+			case "PARAMETRES_AMBULANT" -> ventes.parametres(geste, lire(donnees, Ventes.ParametresSaisie.class),
+					donnees.has("mentionsLegales") && donnees.get("mentionsLegales").isNull());
+			case "TOURNEE" -> tournees.tournee(geste, lire(donnees, Tournees.TourneeSaisie.class));
+			case "VISITE" -> tournees.visite(geste, lire(donnees, Tournees.VisiteSaisie.class));
 			case "PROFIL_AMBULANT" -> comptes.profil(geste, lire(donnees, Comptes.ProfilSaisie.class));
 			case "RESOLUTION_CONTESTATION" -> avisHanout.resoudre(geste, lire(donnees, AvisHanout.Resolution.class));
 			case "HANOUT" -> {

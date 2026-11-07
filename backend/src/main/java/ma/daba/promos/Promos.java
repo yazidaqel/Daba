@@ -40,6 +40,7 @@ import ma.daba.referentiel.Referentiel;
 import ma.daba.referentiel.Referentiel.Grossiste;
 import ma.daba.referentiel.Referentiel.Produit;
 import ma.daba.stock.Stock;
+import ma.daba.ventes.Tournees;
 import ma.daba.ventes.Ventes;
 import tools.jackson.core.type.TypeReference;
 
@@ -124,7 +125,7 @@ public class Promos {
 
 	record OffrePromo(UUID id, UUID campagneId, Map<String, String> campagneNom, UUID depotId, Produit produit,
 			Map<String, Object> remise, Long prixReventeConseille, Grossiste grossiste, int quantiteDisponible,
-			int quantiteMaxParAmbulant, int quantiteDejaReservee, Instant fin, int delaiRetraitHeures) {
+			int quantiteMaxParAmbulant, int quantiteDejaReservee, Instant fin, int delaiRetraitHeures, Boolean rattache) {
 	}
 
 	record Reservation(UUID id, String statut, UUID campagneId, UUID depotId, UUID produitId, Grossiste grossiste,
@@ -174,10 +175,12 @@ public class Promos {
 	private final Comptes comptes;
 	private final Stock stock;
 	private final Ventes ventes;
+	private final Tournees tournees;
 	private final ApplicationEventPublisher evenements;
 
 	Promos(JdbcClient jdbc, Json json, Journal journal, Jetons jetons, Photos photos, Referentiel referentiel,
-			Comptes comptes, Stock stock, Ventes ventes, ApplicationEventPublisher evenements) {
+			Comptes comptes, Stock stock, Ventes ventes, Tournees tournees, ApplicationEventPublisher evenements) {
+		this.tournees = tournees;
 		this.jdbc = jdbc;
 		this.json = json;
 		this.journal = journal;
@@ -260,6 +263,42 @@ public class Promos {
 			}
 			verifierRemise(ligne.remise());
 		}
+		verifierCiblageGeo(saisie.ciblage());
+	}
+
+	/** Zones (polygones GeoJSON fermés, lisibles par PostGIS) et rayon du ciblage (§9) ; mal formés = 400. */
+	static void verifierCiblageGeo(Map<String, Object> ciblage) {
+		if (ciblage == null) {
+			return;
+		}
+		var zones = ciblage.get("zones");
+		if (zones != null && !(zones instanceof List<?> l && l.size() <= 20 && l.stream().allMatch(Promos::polygone))) {
+			throw Probleme.requete("Ciblage.zones : 20 polygones GeoJSON au plus, anneaux fermés d'au moins 4 positions [lon, lat]");
+		}
+		var rayon = ciblage.get("rayonM");
+		if (rayon != null && !(rayon instanceof Integer r && r >= 500 && r <= 50_000)) {
+			throw Probleme.requete("Ciblage.rayonM : entier de 500 à 50 000 mètres");
+		}
+	}
+
+	private static boolean polygone(Object zone) {
+		return zone instanceof Map<?, ?> z && "Polygon".equals(z.get("type")) && z.get("coordinates") instanceof List<?> anneaux
+				&& !anneaux.isEmpty() && anneaux.stream().allMatch(Promos::anneauFerme);
+	}
+
+	private static boolean anneauFerme(Object anneau) {
+		if (!(anneau instanceof List<?> points) || points.size() < 4 || !points.stream().allMatch(Promos::position)) {
+			return false;
+		}
+		var premier = (List<?>) points.getFirst();
+		var dernier = (List<?>) points.getLast();
+		return ((Number) premier.get(0)).doubleValue() == ((Number) dernier.get(0)).doubleValue()
+				&& ((Number) premier.get(1)).doubleValue() == ((Number) dernier.get(1)).doubleValue();
+	}
+
+	private static boolean position(Object point) {
+		return point instanceof List<?> p && p.size() == 2 && p.get(0) instanceof Number lon && p.get(1) instanceof Number lat
+				&& Math.abs(lon.doubleValue()) <= 180 && Math.abs(lat.doubleValue()) <= 90;
 	}
 
 	static void verifierRemise(Map<String, Object> remise) {
@@ -540,15 +579,17 @@ public class Promos {
 
 	/**
 	 * Offres visibles : produit d'une campagne ACTIVE en cours, dans un dépôt RECU (RG-P1), filtrées
-	 * par ville ciblée et par catégorie (§9, {@link #vise}). ponytail: filtre et pagination en
-	 * mémoire ; zones de tournée et rayon (Ciblage.zones, rayonM) pas encore appliqués.
+	 * par ville ciblée, catégorie, zones et rayon (§9, {@link #vise}) ; celles des grossistes
+	 * rattachés d'abord (§9). ponytail: filtre et pagination en mémoire, quelques requêtes par offre ;
+	 * à passer en SQL si le nombre d'offres en cours grandit.
 	 */
 	Page<OffrePromo> offres(UUID ambulantId, String categorie, int page, int taille) {
+		var rattaches = stock.grossistesRattaches(ambulantId);
 		var toutes = offresVisibles(null).stream()
 			.filter(o -> categorie == null || o.produit().categorie().code().equals(categorie))
 			.filter(o -> vise(o, ambulantId))
-			.map(o -> avecDejaReserve(o, ambulantId))
-			.sorted(Comparator.comparing(OffrePromo::fin))
+			.map(o -> pourAmbulant(o, ambulantId, rattaches))
+			.sorted(Comparator.comparing((OffrePromo o) -> !o.rattache()).thenComparing(OffrePromo::fin))
 			.toList();
 		var debut = Math.min(page * taille, toutes.size());
 		return Page.de(page, taille, toutes.size(), toutes.subList(debut, Math.min(debut + taille, toutes.size())));
@@ -573,14 +614,7 @@ public class Promos {
 			.single().split("\u0000");
 		var grossiste = referentiel.grossiste(rs.getObject("grossiste_id", UUID.class)).orElse(null);
 		var ciblage = json.lire("null".equals(campagne[3]) ? null : campagne[3], OBJET);
-		// Ciblage (§5.1) : ville ou région du grossiste dépositaire, avec les codes de GET /v1/regions.
-		var villeGrossiste = grossiste == null ? "" : Referentiel.codeVille(grossiste.ville());
-		if (ciblage != null && ciblage.get("villes") instanceof List<?> villes && !villes.isEmpty()
-				&& villes.stream().noneMatch(v -> Referentiel.codeVille(String.valueOf(v)).equals(villeGrossiste))) {
-			return null;
-		}
-		if (ciblage != null && ciblage.get("regions") instanceof List<?> regions && !regions.isEmpty()
-				&& referentiel.region(villeGrossiste).filter(r -> regions.stream().anyMatch(c -> r.equals(String.valueOf(c)))).isEmpty()) {
+		if (!dansVillesCiblees(ciblage, grossiste)) {
 			return null;
 		}
 		var ligne = jdbc.sql("SELECT remise, quantite_max_par_ambulant, prix_revente_conseille FROM campagne_ligne WHERE campagne_id = :c AND produit_id = :p")
@@ -591,13 +625,26 @@ public class Promos {
 		var remise = (Map<String, Object>) ligne[0];
 		return new OffrePromo(rs.getObject("id", UUID.class), campagneId, json.lire(campagne[0], LIBELLE),
 				rs.getObject("depot_id", UUID.class), referentiel.produit(produitId).orElseThrow(), remise, (Long) ligne[2],
-				grossiste, disponible, (int) ligne[1], 0, Instant.parse(campagne[2]), Integer.parseInt(campagne[1]));
+				grossiste, disponible, (int) ligne[1], 0, Instant.parse(campagne[2]), Integer.parseInt(campagne[1]), null);
 	}
 
-	private OffrePromo avecDejaReserve(OffrePromo o, UUID ambulantId) {
+	/** Ciblage (§5.1) : ville ou région du grossiste dépositaire, avec les codes de GET /v1/regions. */
+	private boolean dansVillesCiblees(Map<String, Object> ciblage, Grossiste grossiste) {
+		var villeGrossiste = grossiste == null ? "" : Referentiel.codeVille(grossiste.ville());
+		if (ciblage != null && ciblage.get("villes") instanceof List<?> villes && !villes.isEmpty()
+				&& villes.stream().noneMatch(v -> Referentiel.codeVille(String.valueOf(v)).equals(villeGrossiste))) {
+			return false;
+		}
+		return !(ciblage != null && ciblage.get("regions") instanceof List<?> regions && !regions.isEmpty()
+				&& referentiel.region(villeGrossiste).filter(r -> regions.stream().anyMatch(c -> r.equals(String.valueOf(c)))).isEmpty());
+	}
+
+	/** Offre vue par un ambulant : sa quantité déjà réservée (RG-P3) et son rattachement au dépositaire (§9). */
+	private OffrePromo pourAmbulant(OffrePromo o, UUID ambulantId, Set<UUID> grossistesRattaches) {
 		return new OffrePromo(o.id(), o.campagneId(), o.campagneNom(), o.depotId(), o.produit(), o.remise(),
 				o.prixReventeConseille(), o.grossiste(), o.quantiteDisponible(), o.quantiteMaxParAmbulant(),
-				dejaReserve(ambulantId, o.campagneId(), o.produit().id(), null), o.fin(), o.delaiRetraitHeures());
+				dejaReserve(ambulantId, o.campagneId(), o.produit().id(), null), o.fin(), o.delaiRetraitHeures(),
+				o.grossiste() != null && grossistesRattaches.contains(o.grossiste().id()));
 	}
 
 	/** Déjà réservé (en cours) ou retiré par l'ambulant sur ce produit de la campagne (RG-P3). */
@@ -861,18 +908,20 @@ public class Promos {
 
 	/**
 	 * Offre livrée hors ligne (entité PROMO) à tous les ambulants (destinataire null), ou à chaque
-	 * ambulant visé si la campagne cible des catégories (§9) ; retirée des appareils qui ne la voient plus.
+	 * ambulant visé si la campagne cible des catégories, des zones ou un rayon (§9) ; retirée des
+	 * appareils qui ne la voient plus.
 	 */
 	private void publierOffre(UUID offreId) {
 		var offre = offresVisibles(offreId).stream().findFirst().orElse(null);
 		var pour = new HashSet<UUID>();
 		if (offre != null) {
-			var categories = categoriesCiblees(offre.campagneId());
-			if (categories.isEmpty()) {
+			var ciblage = ciblage(offre.campagneId());
+			if (!restreint(ciblage)) {
 				pour.add(null);
 			}
 			else {
-				pour.addAll(ambulantsVises(categories, offre.produit().marque(), comptes.ambulants()));
+				pour.addAll(dansLaZone(ciblage, grossisteId(offre),
+						parCategorie(categories(ciblage), offre.produit().marque(), comptes.ambulants())));
 			}
 		}
 		pour.forEach(d -> journal.publier(d, "PROMO", offreId, offre));
@@ -880,20 +929,61 @@ public class Promos {
 			.forEach(d -> journal.supprimer(d, "PROMO", offreId));
 	}
 
-	// ---------------------------------------------------------------- ciblage par catégorie (§9)
+	// ---------------------------------------------------------------- ciblage par catégorie, zone et rayon (§9)
 
-	private List<String> categoriesCiblees(UUID campagneId) {
-		var ciblage = json.lire(jdbc.sql("SELECT ciblage::text FROM campagne WHERE id = :c").param("c", campagneId)
+	private Map<String, Object> ciblage(UUID campagneId) {
+		return json.lire(jdbc.sql("SELECT ciblage::text FROM campagne WHERE id = :c").param("c", campagneId)
 			.query(String.class).optional().orElse(null), OBJET);
+	}
+
+	private static List<String> categories(Map<String, Object> ciblage) {
 		return ciblage != null && ciblage.get("categories") instanceof List<?> l ? l.stream().map(String::valueOf).toList()
 				: List.of();
+	}
+
+	private static List<?> zones(Map<String, Object> ciblage) {
+		return ciblage != null && ciblage.get("zones") instanceof List<?> l && !l.isEmpty() ? l : null;
+	}
+
+	private static Integer rayon(Map<String, Object> ciblage) {
+		return ciblage != null && ciblage.get("rayonM") instanceof Number n ? n.intValue() : null;
+	}
+
+	/** Ciblage qui ne vise pas forcément tous les ambulants : l'offre est publiée à chaque ambulant visé. */
+	private static boolean restreint(Map<String, Object> ciblage) {
+		return !categories(ciblage).isEmpty() || zones(ciblage) != null || rayon(ciblage) != null;
+	}
+
+	private static UUID grossisteId(OffrePromo offre) {
+		return offre.grossiste() == null ? null : offre.grossiste().id();
+	}
+
+	/**
+	 * §9, zones et rayon : la zone de tournée de l'ambulant ({@link Tournees#zonesDeTournee}, hanouts
+	 * positionnés) doit avoir au moins un hanout dans un polygone ciblé, et son hanout le plus proche
+	 * du dépositaire à {@code rayonM} au plus. Sans zone de tournée, aucun filtre (compte neuf).
+	 */
+	private Set<UUID> dansLaZone(Map<String, Object> ciblage, UUID grossisteId, Set<UUID> ambulants) {
+		var zones = zones(ciblage);
+		var rayon = rayon(ciblage);
+		if (zones == null && rayon == null || ambulants.isEmpty()) {
+			return ambulants;
+		}
+		var tournees = this.tournees.zonesDeTournee(ambulants);
+		var positions = referentiel.positionsCiblees(
+				tournees.values().stream().flatMap(Set::stream).collect(Collectors.toSet()), zones, grossisteId, rayon);
+		return ambulants.stream().filter(a -> {
+			var zone = tournees.getOrDefault(a, Set.of()).stream().map(positions::get).filter(java.util.Objects::nonNull).toList();
+			return zone.isEmpty() || zone.stream().anyMatch(Referentiel.PositionCiblee::dansZones)
+					&& zone.stream().anyMatch(Referentiel.PositionCiblee::dansRayon);
+		}).collect(Collectors.toSet());
 	}
 
 	/**
 	 * §9 : sans catégorie ciblée, tous ; sinon l'ambulant qui vend une catégorie ciblée, qui a déjà
 	 * acheté la marque (chargement, retrait promo ou vente), ou qui n'a déclaré aucune catégorie.
 	 */
-	private Set<UUID> ambulantsVises(List<String> categories, String marque, Collection<UUID> ambulants) {
+	private Set<UUID> parCategorie(List<String> categories, String marque, Collection<UUID> ambulants) {
 		if (categories.isEmpty()) {
 			return Set.copyOf(ambulants);
 		}
@@ -906,29 +996,40 @@ public class Promos {
 	}
 
 	private boolean vise(OffrePromo offre, UUID ambulantId) {
-		return ambulantsVises(categoriesCiblees(offre.campagneId()), offre.produit().marque(), List.of(ambulantId))
+		var ciblage = ciblage(offre.campagneId());
+		return dansLaZone(ciblage, grossisteId(offre), parCategorie(categories(ciblage), offre.produit().marque(), List.of(ambulantId)))
 			.contains(ambulantId);
 	}
 
-	/** Ambulants visés par au moins une ligne du dépôt : destinataires de « promo confirmée » (§9). */
-	Set<UUID> ambulantsVises(UUID depotId) {
+	/**
+	 * Ambulants visés par au moins une ligne du dépôt (même règle que le fil) : destinataires de
+	 * « promo confirmée » (§9), les rattachés au dépositaire en premier dans le même envoi.
+	 */
+	List<UUID> ambulantsVises(UUID depotId) {
 		var depot = depot(depotId);
-		var categories = categoriesCiblees(depot.campagne().id());
+		var ciblage = ciblage(depot.campagne().id());
+		if (!dansVillesCiblees(ciblage, depot.grossiste())) {
+			return List.of();
+		}
 		var ambulants = comptes.ambulants();
 		var vises = new HashSet<UUID>();
 		referentiel.produits(depot.lignes().stream().map(LigneDepot::produitId).toList()).values().stream()
-			.map(Produit::marque).distinct().forEach(m -> vises.addAll(ambulantsVises(categories, m, ambulants)));
-		return vises;
+			.map(Produit::marque).distinct().forEach(m -> vises.addAll(parCategorie(categories(ciblage), m, ambulants)));
+		var grossisteId = depot.grossiste() == null ? null : depot.grossiste().id();
+		var rattaches = grossisteId == null ? Set.<UUID>of() : stock.ambulantsRattaches(grossisteId);
+		return dansLaZone(ciblage, grossisteId, vises).stream()
+			.sorted(Comparator.comparing((UUID a) -> !rattaches.contains(a)))
+			.toList();
 	}
 
 	/**
-	 * Profil ou historique d'achat de l'ambulant changé : ses offres ciblées par catégorie arrivent
-	 * sur son appareil ou en repartent. ponytail: relit toutes les offres en cours à chaque
-	 * chargement, vente ou profil ; à indexer par marque et catégorie si le nombre d'offres grandit.
+	 * Profil, historique d'achat ou zone de tournée de l'ambulant changé : ses offres ciblées
+	 * (catégorie, zone, rayon) arrivent sur son appareil ou en repartent. ponytail: relit toutes les
+	 * offres en cours à chaque chargement, vente, profil ou tournée ; à indexer si le nombre d'offres grandit.
 	 */
 	public void reevaluerCiblage(UUID ambulantId) {
 		for (var offre : offresVisibles(null)) {
-			if (categoriesCiblees(offre.campagneId()).isEmpty()) {
+			if (!restreint(ciblage(offre.campagneId()))) {
 				continue;
 			}
 			var voit = vise(offre, ambulantId);

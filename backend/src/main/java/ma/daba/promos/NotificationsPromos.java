@@ -45,8 +45,8 @@ class NotificationsPromos {
 
 	/**
 	 * « Promo confirmée chez un grossiste de sa zone » : moins de 2 minutes après la confirmation (§10),
-	 * aux ambulants visés par catégorie (§9, même règle que le fil). ponytail: pas encore de filtre par
-	 * zone de tournée (pilote sur une seule ville).
+	 * aux ambulants visés par ville, catégorie, zone et rayon (§9, même règle que le fil), les
+	 * ambulants rattachés au dépositaire en premier, dans le même envoi (aucun délai ajouté).
 	 */
 	@ApplicationModuleListener
 	void receptionConfirmee(Promos.ReceptionConfirmee evenement) {

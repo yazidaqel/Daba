@@ -263,7 +263,137 @@ class SyncTest extends TestIntegration {
 		assertThat(a.get("telephone").asString()).isEqualTo(ambulant.telephone());
 		assertThat(List.of(a.get("nombreBons").asInt(), a.get("quantiteTotale").asInt(), a.get("bons30Jours").asInt()))
 			.containsExactly(2, 7, 2);
+		assertThat(a.get("declare").asBoolean()).isFalse();
 		assertThat(lire(get(grossiste(), "/v1/ambulants")).get("total").asInt()).isZero();
+	}
+
+	/** Dernier état de chaque objet d'une entité après une synchronisation complète (null = supprimé). */
+	Map<String, JsonNode> surLAppareil(Compte ambulant, String entite) {
+		var objets = new java.util.HashMap<String, JsonNode>();
+		String curseur = null;
+		for (;;) {
+			var lot = lire(get(ambulant, "/v1/sync/changements?limite=1000" + (curseur == null ? "" : "&curseur=" + curseur)));
+			for (var c : lot.get("changements")) {
+				if (c.get("entite").asString().equals(entite)) {
+					objets.put(c.get("id").asString(), c.get("action").asString().equals("UPSERT") ? c.get("donnees") : null);
+				}
+			}
+			curseur = lot.get("curseur").asString();
+			if (!lot.get("plusDeChangements").asBoolean()) {
+				return objets;
+			}
+		}
+	}
+
+	@Test
+	void tourneePlanifieeRemplaceeEnEntier_tireeParLAppareil_versionPlusRecenteConservee() {
+		var ambulant = ambulant();
+		var h1 = hanout(33.57, -7.59);
+		var h2 = hanout(33.58, -7.6);
+		var id = UUID.randomUUID();
+		var t0 = Instant.now().minus(1, ChronoUnit.HOURS);
+		var r = pousser(ambulant, op("TOURNEE", m("id", id, "nom", "Lundi", "jours", List.of(1, 4), "hanoutIds", List.of(h2, h1)), t0));
+		assertThat(r.get(0).get("statut").asString()).isEqualTo("APPLIQUEE");
+		var tournee = surLAppareil(ambulant, "TOURNEE").get(id.toString());
+		assertThat(tournee.get("nom").asString()).isEqualTo("Lundi");
+		assertThat(List.of(tournee.get("jours").get(0).asInt(), tournee.get("jours").get(1).asInt())).containsExactly(1, 4);
+		assertThat(List.of(tournee.get("hanoutIds").get(0).asString(), tournee.get("hanoutIds").get(1).asString()))
+			.containsExactly(h2.toString(), h1.toString());
+
+		// Remplacée en entier : le nom absent est effacé.
+		pousser(ambulant, op("TOURNEE", m("id", id, "jours", List.of(2), "hanoutIds", List.of(h1)), t0.plusSeconds(60)));
+		tournee = surLAppareil(ambulant, "TOURNEE").get(id.toString());
+		assertThat(tournee.has("nom")).isFalse();
+		assertThat(tournee.get("hanoutIds").size()).isEqualTo(1);
+
+		// Une modification plus ancienne venue d'un autre appareil ne l'écrase pas.
+		var ancienne = pousser(ambulant, op("TOURNEE", m("id", id, "jours", List.of(5), "hanoutIds", List.of()), t0.plusSeconds(30)));
+		assertThat(ancienne.get(0).get("statut").asString()).isEqualTo("EN_CONFLIT");
+		assertThat(ancienne.get(0).get("conflit").get("resolution").asString()).isEqualTo("VERSION_SERVEUR_CONSERVEE");
+		assertThat(ancienne.get(0).get("conflit").get("versionServeur").get("jours").get(0).asInt()).isEqualTo(2);
+
+		// Mal formée ou hanout inconnu : REJETEE ; id d'un autre ambulant : REJETEE.
+		assertThat(pousser(ambulant, op("TOURNEE", m("id", UUID.randomUUID(), "jours", List.of(), "hanoutIds", List.of(h1))))
+			.get(0).get("statut").asString()).isEqualTo("REJETEE");
+		assertThat(pousser(ambulant, op("TOURNEE", m("id", UUID.randomUUID(), "jours", List.of(8)))).get(0).get("statut")
+			.asString()).isEqualTo("REJETEE");
+		assertThat(pousser(ambulant, op("TOURNEE", m("id", UUID.randomUUID(), "jours", List.of(1), "hanoutIds",
+				List.of(UUID.randomUUID())))).get(0).get("statut").asString()).isEqualTo("REJETEE");
+		assertThat(pousser(ambulant(), op("TOURNEE", m("id", id, "jours", List.of(1)))).get(0).get("statut").asString())
+			.isEqualTo("REJETEE");
+
+		// Supprimée : SUPPRESSION sur l'appareil ; une modification plus ancienne reste un conflit.
+		var curseur = lire(get(ambulant, "/v1/sync/changements?limite=1000")).get("curseur").asString();
+		pousser(ambulant, op("TOURNEE", m("id", id, "supprimee", true), t0.plusSeconds(120)));
+		var suppression = lire(get(ambulant, "/v1/sync/changements?curseur=" + curseur)).get("changements").findParents("entite")
+			.stream().filter(c -> c.get("entite").asString().equals("TOURNEE")).toList();
+		assertThat(suppression).hasSize(1);
+		assertThat(suppression.get(0).get("action").asString()).isEqualTo("SUPPRESSION");
+		assertThat(surLAppareil(ambulant, "TOURNEE")).doesNotContainKey(id.toString());
+		var apres = pousser(ambulant, op("TOURNEE", m("id", id, "jours", List.of(3)), t0.plusSeconds(90)));
+		assertThat(apres.get(0).get("statut").asString()).isEqualTo("EN_CONFLIT");
+		assertThat(apres.get(0).get("conflit").get("versionServeur").get("supprimee").asBoolean()).isTrue();
+	}
+
+	@Test
+	void visiteSansVenteDansLHistoriqueTireParLAmbulant() {
+		var ambulant = ambulant();
+		var hanout = hanout(33.57, -7.59);
+		var le = Instant.now().minus(10, ChronoUnit.MINUTES).truncatedTo(ChronoUnit.SECONDS);
+		var visite = op("VISITE", m("hanoutId", hanout, "horodatage", le.toString(), "motif", "GERANT_ABSENT"));
+		assertThat(pousser(ambulant, visite).get(0).get("statut").asString()).isEqualTo("APPLIQUEE");
+		assertThat(pousser(ambulant, visite).get(0).get("statut").asString()).isEqualTo("DEJA_APPLIQUEE");
+		var v = surLAppareil(ambulant, "VISITE").get(visite.get("id").toString());
+		assertThat(v.get("hanoutId").asString()).isEqualTo(hanout.toString());
+		assertThat(v.get("motif").asString()).isEqualTo("GERANT_ABSENT");
+		assertThat(Instant.parse(v.get("horodatage").asString())).isEqualTo(le);
+
+		assertThat(pousser(ambulant, op("VISITE", m("hanoutId", UUID.randomUUID(), "horodatage", le.toString(), "motif", "FERME")))
+			.get(0).get("statut").asString()).isEqualTo("REJETEE");
+		assertThat(pousser(ambulant, op("VISITE", m("hanoutId", hanout, "horodatage", le.toString(), "motif", "VACANCES")))
+			.get(0).get("statut").asString()).isEqualTo("REJETEE");
+	}
+
+	@Test
+	void chargementAvecPeremptionEtPrixDAchat_peremptionProcheDesQuantitesEncoreEnStock() {
+		var ambulant = ambulant();
+		var produit = produit();
+		var hanout = hanout(33.57, -7.59);
+		var t0 = Instant.now().minus(2, ChronoUnit.HOURS);
+		// Lot ancien (péremption proche) puis lot récent.
+		pousser(ambulant, op("CHARGEMENT", m("lignes", List.of(m("produitId", produit, "quantite", 5,
+				"datePeremption", "2026-12-01", "prixUnitaire", 800))), t0),
+				op("CHARGEMENT", m("lignes", List.of(m("produitId", produit, "quantite", 5, "datePeremption", "2027-03-01"))),
+						t0.plusSeconds(60)));
+		var mvt = lire(get(ambulant, "/v1/stock/mouvements?type=CHARGEMENT")).get("contenu");
+		assertThat(mvt.findValuesAsString("datePeremption")).containsExactlyInAnyOrder("2027-03-01", "2026-12-01");
+		assertThat(mvt.get(1).get("prixUnitaire").asLong()).isEqualTo(800);
+		assertThat(mvt.get(0).has("prixUnitaire")).isFalse();
+		assertThat(lire(get(ambulant, "/v1/stock")).get("lignes").get(0).get("peremptionProche").asString()).isEqualTo("2026-12-01");
+
+		// 6 vendus : le lot ancien est épuisé (premier entré, premier sorti), il reste 4 du lot récent.
+		pousser(ambulant, vente(ambulant, 1, hanout, produit, 6, 1000, 6000));
+		var ligne = lire(get(ambulant, "/v1/stock")).get("lignes").get(0);
+		assertThat(ligne.get("quantite").asInt()).isEqualTo(4);
+		assertThat(ligne.get("peremptionProche").asString()).isEqualTo("2027-03-01");
+		assertThat(surLAppareil(ambulant, "STOCK").get(produit.toString()).get("peremptionProche").asString())
+			.isEqualTo("2027-03-01");
+
+		// Bon de sortie : lignes avec péremption et prix, dans le QR et sur le mouvement chargé.
+		var grossiste = grossiste();
+		var autre = produit();
+		var bon = lire(post(grossiste, "/v1/bons-sortie", m("id", UUID.randomUUID(), "ambulantTelephone", ambulant.telephone(),
+				"lignes", List.of(m("produitId", autre, "quantite", 12, "datePeremption", "2026-11-30", "prixUnitaire", 450)))));
+		assertThat(bon.get("lignes").get(0).get("datePeremption").asString()).isEqualTo("2026-11-30");
+		var qr = bon.get("qrJeton").asString();
+		var charge = json.readTree(java.util.Base64.getUrlDecoder().decode(qr.split("\\.")[1]));
+		assertThat(charge.get("lignes").get(0).get("prixUnitaire").asLong()).isEqualTo(450);
+		pousser(ambulant, op("CHARGEMENT", m("qrJeton", qr)));
+		var charge2 = lire(get(ambulant, "/v1/stock/mouvements?type=CHARGEMENT&produitId=" + autre)).get("contenu").get(0);
+		assertThat(charge2.get("datePeremption").asString()).isEqualTo("2026-11-30");
+		assertThat(charge2.get("prixUnitaire").asLong()).isEqualTo(450);
+		assertThat(post(grossiste, "/v1/bons-sortie", m("id", UUID.randomUUID(), "ambulantTelephone", ambulant.telephone(),
+				"lignes", List.of(m("produitId", autre, "quantite", 1, "prixUnitaire", -1))))).hasStatus(400);
 	}
 
 	@Test
@@ -321,6 +451,14 @@ class SyncTest extends TestIntegration {
 				"imputations", List.of(m("documentId", recenteId, "montant", 500)))));
 		assertThat(jdbc.sql("SELECT montant FROM imputation WHERE versement_id = :v").param("v", choisi).query(Long.class).single())
 			.isEqualTo(500);
+
+		// Répartition calculée sur un état périmé (pièce déjà soldée ailleurs) : part plafonnée au reste dû, surplus en FIFO.
+		var perime = UUID.randomUUID();
+		var ancienneId = ((Map<?, ?>) ancienne.get("donnees")).get("documentId");
+		pousser(ambulant, op("VERSEMENT", m("versementId", perime, "hanoutId", hanout, "mode", "ESPECES", "montant", 1000,
+				"imputations", List.of(m("documentId", ancienneId, "montant", 1000)))));
+		assertThat(jdbc.sql("SELECT d.sequence, i.montant FROM imputation i JOIN document d ON d.id = i.document_id WHERE i.versement_id = :v")
+			.param("v", perime).query((rs, i) -> rs.getLong(1) + ":" + rs.getLong(2)).list()).containsExactly("2:1000");
 	}
 
 	@Test
