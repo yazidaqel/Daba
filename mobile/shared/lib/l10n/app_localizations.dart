@@ -1707,6 +1707,300 @@ abstract class T {
   /// In fr, this message translates to:
   /// **'Stock embarqué'**
   String get canalBasse;
+
+  /// No description provided for @retours.
+  ///
+  /// In fr, this message translates to:
+  /// **'Retours'**
+  String get retours;
+
+  /// No description provided for @retourHanout.
+  ///
+  /// In fr, this message translates to:
+  /// **'Retour d\'un hanout'**
+  String get retourHanout;
+
+  /// No description provided for @retourGrossiste.
+  ///
+  /// In fr, this message translates to:
+  /// **'Retour au grossiste'**
+  String get retourGrossiste;
+
+  /// No description provided for @choisirHanout.
+  ///
+  /// In fr, this message translates to:
+  /// **'Choisir le hanout'**
+  String get choisirHanout;
+
+  /// No description provided for @grossiste.
+  ///
+  /// In fr, this message translates to:
+  /// **'Grossiste'**
+  String get grossiste;
+
+  /// No description provided for @grossisteCode.
+  ///
+  /// In fr, this message translates to:
+  /// **'Grossiste {code}'**
+  String grossisteCode(String code);
+
+  /// No description provided for @aucunGrossiste.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aucun grossiste connu : chargez d\'abord un bon de sortie.'**
+  String get aucunGrossiste;
+
+  /// No description provided for @motif.
+  ///
+  /// In fr, this message translates to:
+  /// **'Motif'**
+  String get motif;
+
+  /// No description provided for @retourABIME.
+  ///
+  /// In fr, this message translates to:
+  /// **'Abîmé'**
+  String get retourABIME;
+
+  /// No description provided for @retourPERIME.
+  ///
+  /// In fr, this message translates to:
+  /// **'Périmé'**
+  String get retourPERIME;
+
+  /// No description provided for @retourINVENDU.
+  ///
+  /// In fr, this message translates to:
+  /// **'Invendu'**
+  String get retourINVENDU;
+
+  /// No description provided for @retourAUTRE.
+  ///
+  /// In fr, this message translates to:
+  /// **'Autre'**
+  String get retourAUTRE;
+
+  /// No description provided for @remisEnVente.
+  ///
+  /// In fr, this message translates to:
+  /// **'Remettre dans le stock vendable'**
+  String get remisEnVente;
+
+  /// No description provided for @retourAvoir.
+  ///
+  /// In fr, this message translates to:
+  /// **'Le remboursement ou la baisse du solde se fait ensuite par un avoir.'**
+  String get retourAvoir;
+
+  /// No description provided for @retourEnregistre.
+  ///
+  /// In fr, this message translates to:
+  /// **'Retour enregistré'**
+  String get retourEnregistre;
+
+  /// No description provided for @inventaireFinJournee.
+  ///
+  /// In fr, this message translates to:
+  /// **'Inventaire de fin de journée'**
+  String get inventaireFinJournee;
+
+  /// No description provided for @inventaireAide.
+  ///
+  /// In fr, this message translates to:
+  /// **'Comptez le stock normal : le stock promo est suivi à part.'**
+  String get inventaireAide;
+
+  /// No description provided for @attendu.
+  ///
+  /// In fr, this message translates to:
+  /// **'Attendu : {quantite}'**
+  String attendu(String quantite);
+
+  /// No description provided for @ecart.
+  ///
+  /// In fr, this message translates to:
+  /// **'Écart : {ecart}'**
+  String ecart(String ecart);
+
+  /// No description provided for @compte.
+  ///
+  /// In fr, this message translates to:
+  /// **'Compté'**
+  String get compte;
+
+  /// No description provided for @motifEcart.
+  ///
+  /// In fr, this message translates to:
+  /// **'Motif de l\'écart'**
+  String get motifEcart;
+
+  /// No description provided for @motifObligatoire.
+  ///
+  /// In fr, this message translates to:
+  /// **'Motif obligatoire'**
+  String get motifObligatoire;
+
+  /// No description provided for @erreurMotifEcart.
+  ///
+  /// In fr, this message translates to:
+  /// **'Écart trop grand : indiquez un motif.'**
+  String get erreurMotifEcart;
+
+  /// No description provided for @inventaireEnregistre.
+  ///
+  /// In fr, this message translates to:
+  /// **'Inventaire enregistré'**
+  String get inventaireEnregistre;
+
+  /// No description provided for @faireSigner.
+  ///
+  /// In fr, this message translates to:
+  /// **'Faire signer le hanout'**
+  String get faireSigner;
+
+  /// No description provided for @signatureHanout.
+  ///
+  /// In fr, this message translates to:
+  /// **'Signature du hanout'**
+  String get signatureHanout;
+
+  /// No description provided for @signeParHanout.
+  ///
+  /// In fr, this message translates to:
+  /// **'Signé par le hanout'**
+  String get signeParHanout;
+
+  /// No description provided for @effacer.
+  ///
+  /// In fr, this message translates to:
+  /// **'Effacer'**
+  String get effacer;
+
+  /// No description provided for @choisirPieces.
+  ///
+  /// In fr, this message translates to:
+  /// **'Choisir les pièces à régler'**
+  String get choisirPieces;
+
+  /// No description provided for @imputationFifo.
+  ///
+  /// In fr, this message translates to:
+  /// **'Sinon, le versement règle les pièces les plus anciennes.'**
+  String get imputationFifo;
+
+  /// No description provided for @resteDu.
+  ///
+  /// In fr, this message translates to:
+  /// **'Reste {montant}'**
+  String resteDu(String montant);
+
+  /// No description provided for @anciennete0a15.
+  ///
+  /// In fr, this message translates to:
+  /// **'0 à 15 j'**
+  String get anciennete0a15;
+
+  /// No description provided for @anciennete15a30.
+  ///
+  /// In fr, this message translates to:
+  /// **'15 à 30 j'**
+  String get anciennete15a30;
+
+  /// No description provided for @anciennetePlus30.
+  ///
+  /// In fr, this message translates to:
+  /// **'Plus de 30 j'**
+  String get anciennetePlus30;
+
+  /// No description provided for @topDebiteurs.
+  ///
+  /// In fr, this message translates to:
+  /// **'Plus gros débiteurs en premier'**
+  String get topDebiteurs;
+
+  /// No description provided for @favori.
+  ///
+  /// In fr, this message translates to:
+  /// **'Favori du hanout'**
+  String get favori;
+
+  /// No description provided for @tableauDeBord.
+  ///
+  /// In fr, this message translates to:
+  /// **'Tableau de bord'**
+  String get tableauDeBord;
+
+  /// No description provided for @aujourdhui.
+  ///
+  /// In fr, this message translates to:
+  /// **'Aujourd\'hui'**
+  String get aujourdhui;
+
+  /// No description provided for @cetteSemaine.
+  ///
+  /// In fr, this message translates to:
+  /// **'Cette semaine'**
+  String get cetteSemaine;
+
+  /// No description provided for @ceMois.
+  ///
+  /// In fr, this message translates to:
+  /// **'Ce mois'**
+  String get ceMois;
+
+  /// No description provided for @chiffreAffaires.
+  ///
+  /// In fr, this message translates to:
+  /// **'Chiffre d\'affaires'**
+  String get chiffreAffaires;
+
+  /// No description provided for @encaisse.
+  ///
+  /// In fr, this message translates to:
+  /// **'Encaissé'**
+  String get encaisse;
+
+  /// No description provided for @creditAccorde.
+  ///
+  /// In fr, this message translates to:
+  /// **'Crédit accordé'**
+  String get creditAccorde;
+
+  /// No description provided for @caisseDuJour.
+  ///
+  /// In fr, this message translates to:
+  /// **'Caisse du jour'**
+  String get caisseDuJour;
+
+  /// No description provided for @especesAttendues.
+  ///
+  /// In fr, this message translates to:
+  /// **'Espèces attendues'**
+  String get especesAttendues;
+
+  /// No description provided for @especesDeclarees.
+  ///
+  /// In fr, this message translates to:
+  /// **'Espèces comptées'**
+  String get especesDeclarees;
+
+  /// No description provided for @ecartCaisse.
+  ///
+  /// In fr, this message translates to:
+  /// **'Écart de caisse : {montant}'**
+  String ecartCaisse(String montant);
+
+  /// No description provided for @caisseJuste.
+  ///
+  /// In fr, this message translates to:
+  /// **'Caisse juste'**
+  String get caisseJuste;
+
+  /// No description provided for @caisseLocale.
+  ///
+  /// In fr, this message translates to:
+  /// **'Gardé sur ce téléphone seulement.'**
+  String get caisseLocale;
 }
 
 class _TDelegate extends LocalizationsDelegate<T> {

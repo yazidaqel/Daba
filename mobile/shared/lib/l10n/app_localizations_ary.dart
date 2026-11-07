@@ -887,6 +887,166 @@ class TAry extends T {
 
   @override
   String get canalBasse => 'السلعة لي معاك';
+
+  @override
+  String get retours => 'الروتور';
+
+  @override
+  String get retourHanout => 'روتور من الحانوت';
+
+  @override
+  String get retourGrossiste => 'روتور للگروسيست';
+
+  @override
+  String get choisirHanout => 'ختار الحانوت';
+
+  @override
+  String get grossiste => 'الگروسيست';
+
+  @override
+  String grossisteCode(String code) {
+    return 'الگروسيست $code';
+  }
+
+  @override
+  String get aucunGrossiste =>
+      'ما كاين حتى گروسيست: شارجي بون ديال الخروج لول.';
+
+  @override
+  String get motif => 'السبب';
+
+  @override
+  String get retourABIME => 'مخسر';
+
+  @override
+  String get retourPERIME => 'سالا التاريخ';
+
+  @override
+  String get retourINVENDU => 'ما تباعش';
+
+  @override
+  String get retourAUTRE => 'شي حاجة أخرى';
+
+  @override
+  String get remisEnVente => 'رجعها للسلعة لي كتبيع';
+
+  @override
+  String get retourAvoir =>
+      'الترجيع ديال الفلوس ولا نقص الكريدي كيدار من بعد بأفوار.';
+
+  @override
+  String get retourEnregistre => 'الروتور تسجل';
+
+  @override
+  String get inventaireFinJournee => 'الجرد ديال آخر النهار';
+
+  @override
+  String get inventaireAide =>
+      'حسب السلعة العادية: سلعة البروموسيون كتتبع بوحدها.';
+
+  @override
+  String attendu(String quantite) {
+    return 'خاصها تكون: $quantite';
+  }
+
+  @override
+  String ecart(String ecart) {
+    return 'الفرق: $ecart';
+  }
+
+  @override
+  String get compte => 'لي تحسب';
+
+  @override
+  String get motifEcart => 'علاش كاين الفرق';
+
+  @override
+  String get motifObligatoire => 'السبب ضروري';
+
+  @override
+  String get erreurMotifEcart => 'الفرق كبير: كتب السبب.';
+
+  @override
+  String get inventaireEnregistre => 'الجرد تسجل';
+
+  @override
+  String get faireSigner => 'خلي مول الحانوت يسيني';
+
+  @override
+  String get signatureHanout => 'سينياتور مول الحانوت';
+
+  @override
+  String get signeParHanout => 'مول الحانوت سيني';
+
+  @override
+  String get effacer => 'مسح';
+
+  @override
+  String get choisirPieces => 'ختار البونات لي غادي تخلص';
+
+  @override
+  String get imputationFifo => 'وإلا، كيتخلصو البونات القدام لولين.';
+
+  @override
+  String resteDu(String montant) {
+    return 'باقي $montant';
+  }
+
+  @override
+  String get anciennete0a15 => '0 حتى 15 يوم';
+
+  @override
+  String get anciennete15a30 => '15 حتى 30 يوم';
+
+  @override
+  String get anciennetePlus30 => 'كتر من 30 يوم';
+
+  @override
+  String get topDebiteurs => 'لي عليهم كتر كريدي لولين';
+
+  @override
+  String get favori => 'كيشريه بزاف';
+
+  @override
+  String get tableauDeBord => 'الحصيلة';
+
+  @override
+  String get aujourdhui => 'اليوم';
+
+  @override
+  String get cetteSemaine => 'هاد السيمانة';
+
+  @override
+  String get ceMois => 'هاد الشهر';
+
+  @override
+  String get chiffreAffaires => 'شحال بعتي';
+
+  @override
+  String get encaisse => 'لي دخل';
+
+  @override
+  String get creditAccorde => 'الكريدي لي عطيتي';
+
+  @override
+  String get caisseDuJour => 'الصندوق ديال اليوم';
+
+  @override
+  String get especesAttendues => 'الكاش لي خاصو يكون';
+
+  @override
+  String get especesDeclarees => 'الكاش لي حسبتي';
+
+  @override
+  String ecartCaisse(String montant) {
+    return 'الفرق فالصندوق: $montant';
+  }
+
+  @override
+  String get caisseJuste => 'الصندوق مضبوط';
+
+  @override
+  String get caisseLocale => 'محفوظ غير فهاد التيليفون.';
 }
 
 /// The translations for Moroccan Arabic, using the Latin script (`ary_Latn`).
@@ -1777,4 +1937,164 @@ class TAryLatn extends TAry {
 
   @override
   String get canalBasse => 'Sel3a li m3ak';
+
+  @override
+  String get retours => 'Retour';
+
+  @override
+  String get retourHanout => 'Retour men l7anout';
+
+  @override
+  String get retourGrossiste => 'Retour l grossiste';
+
+  @override
+  String get choisirHanout => 'Khtar l7anout';
+
+  @override
+  String get grossiste => 'Grossiste';
+
+  @override
+  String grossisteCode(String code) {
+    return 'Grossiste $code';
+  }
+
+  @override
+  String get aucunGrossiste =>
+      'Ma kayn 7ta grossiste: charji bon dyal lkhrouj lowel.';
+
+  @override
+  String get motif => 'Sabab';
+
+  @override
+  String get retourABIME => 'Mkhesser';
+
+  @override
+  String get retourPERIME => 'Sala tarikh';
+
+  @override
+  String get retourINVENDU => 'Ma tba3ch';
+
+  @override
+  String get retourAUTRE => 'Chi 7aja akhra';
+
+  @override
+  String get remisEnVente => 'Rejje3ha l sel3a li katbi3';
+
+  @override
+  String get retourAvoir =>
+      'Tarji3 dyal lflouss wla na9s lcrédit kaydar men b3d b avoir.';
+
+  @override
+  String get retourEnregistre => 'Retour tsajjel';
+
+  @override
+  String get inventaireFinJournee => 'Jard dyal akhir nhar';
+
+  @override
+  String get inventaireAide =>
+      '7seb sel3a l3adiya: sel3a dyal promo katteba3 bou7dha.';
+
+  @override
+  String attendu(String quantite) {
+    return 'Khassha tkoun: $quantite';
+  }
+
+  @override
+  String ecart(String ecart) {
+    return 'Lfar9: $ecart';
+  }
+
+  @override
+  String get compte => 'Li t7seb';
+
+  @override
+  String get motifEcart => '3lach kayn lfar9';
+
+  @override
+  String get motifObligatoire => 'Sabab daroui';
+
+  @override
+  String get erreurMotifEcart => 'Lfar9 kbir: kteb sabab.';
+
+  @override
+  String get inventaireEnregistre => 'Jard tsajjel';
+
+  @override
+  String get faireSigner => 'Khalli mol l7anout ysini';
+
+  @override
+  String get signatureHanout => 'Signature dyal mol l7anout';
+
+  @override
+  String get signeParHanout => 'Mol l7anout sina';
+
+  @override
+  String get effacer => 'Mse7';
+
+  @override
+  String get choisirPieces => 'Khtar lbounat li ghadi tkhless';
+
+  @override
+  String get imputationFifo => 'Wila, kaytkhlssou lbounat l9dam lowlin.';
+
+  @override
+  String resteDu(String montant) {
+    return 'Ba9i $montant';
+  }
+
+  @override
+  String get anciennete0a15 => '0 7tal 15 youm';
+
+  @override
+  String get anciennete15a30 => '15 7tal 30 youm';
+
+  @override
+  String get anciennetePlus30 => 'Kter men 30 youm';
+
+  @override
+  String get topDebiteurs => 'Li 3lihom kter crédit lowlin';
+
+  @override
+  String get favori => 'Kaychrih bzzaf';
+
+  @override
+  String get tableauDeBord => 'L7assila';
+
+  @override
+  String get aujourdhui => 'Lyoum';
+
+  @override
+  String get cetteSemaine => 'Had simana';
+
+  @override
+  String get ceMois => 'Had chhar';
+
+  @override
+  String get chiffreAffaires => 'Ch7al b3ti';
+
+  @override
+  String get encaisse => 'Li dkhel';
+
+  @override
+  String get creditAccorde => 'Lcrédit li 3titi';
+
+  @override
+  String get caisseDuJour => 'Sendou9 dyal lyoum';
+
+  @override
+  String get especesAttendues => 'Cash li khasso ykoun';
+
+  @override
+  String get especesDeclarees => 'Cash li 7sebti';
+
+  @override
+  String ecartCaisse(String montant) {
+    return 'Lfar9 f sendou9: $montant';
+  }
+
+  @override
+  String get caisseJuste => 'Sendou9 madbout';
+
+  @override
+  String get caisseLocale => 'Ma7fouz ghir f had tilifoun.';
 }

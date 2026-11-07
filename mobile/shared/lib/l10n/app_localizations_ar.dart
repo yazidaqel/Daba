@@ -887,4 +887,163 @@ class TAr extends T {
 
   @override
   String get canalBasse => 'المخزون المحمول';
+
+  @override
+  String get retours => 'المرتجعات';
+
+  @override
+  String get retourHanout => 'إرجاع من البقالة';
+
+  @override
+  String get retourGrossiste => 'إرجاع إلى تاجر الجملة';
+
+  @override
+  String get choisirHanout => 'اختر البقالة';
+
+  @override
+  String get grossiste => 'تاجر الجملة';
+
+  @override
+  String grossisteCode(String code) {
+    return 'تاجر الجملة $code';
+  }
+
+  @override
+  String get aucunGrossiste => 'لا يوجد تاجر جملة معروف: اشحن وصل خروج أولاً.';
+
+  @override
+  String get motif => 'السبب';
+
+  @override
+  String get retourABIME => 'تالف';
+
+  @override
+  String get retourPERIME => 'منتهي الصلاحية';
+
+  @override
+  String get retourINVENDU => 'غير مباع';
+
+  @override
+  String get retourAUTRE => 'أخرى';
+
+  @override
+  String get remisEnVente => 'إعادة إلى المخزون القابل للبيع';
+
+  @override
+  String get retourAvoir =>
+      'الاسترداد أو تخفيض الرصيد يتم بعد ذلك بإشعار دائن.';
+
+  @override
+  String get retourEnregistre => 'تم تسجيل الإرجاع';
+
+  @override
+  String get inventaireFinJournee => 'جرد نهاية اليوم';
+
+  @override
+  String get inventaireAide =>
+      'احسب المخزون العادي: مخزون العروض يُتابع على حدة.';
+
+  @override
+  String attendu(String quantite) {
+    return 'المتوقع: $quantite';
+  }
+
+  @override
+  String ecart(String ecart) {
+    return 'الفرق: $ecart';
+  }
+
+  @override
+  String get compte => 'المعدود';
+
+  @override
+  String get motifEcart => 'سبب الفرق';
+
+  @override
+  String get motifObligatoire => 'السبب إلزامي';
+
+  @override
+  String get erreurMotifEcart => 'الفرق كبير: اذكر السبب.';
+
+  @override
+  String get inventaireEnregistre => 'تم تسجيل الجرد';
+
+  @override
+  String get faireSigner => 'اطلب توقيع البقالة';
+
+  @override
+  String get signatureHanout => 'توقيع البقالة';
+
+  @override
+  String get signeParHanout => 'وقّعت البقالة';
+
+  @override
+  String get effacer => 'مسح';
+
+  @override
+  String get choisirPieces => 'اختر الوثائق المراد تسديدها';
+
+  @override
+  String get imputationFifo => 'وإلا، تُسدَّد الوثائق الأقدم أولاً.';
+
+  @override
+  String resteDu(String montant) {
+    return 'الباقي $montant';
+  }
+
+  @override
+  String get anciennete0a15 => '0 إلى 15 يوماً';
+
+  @override
+  String get anciennete15a30 => '15 إلى 30 يوماً';
+
+  @override
+  String get anciennetePlus30 => 'أكثر من 30 يوماً';
+
+  @override
+  String get topDebiteurs => 'أكبر المدينين أولاً';
+
+  @override
+  String get favori => 'مفضل لدى البقالة';
+
+  @override
+  String get tableauDeBord => 'لوحة القيادة';
+
+  @override
+  String get aujourdhui => 'اليوم';
+
+  @override
+  String get cetteSemaine => 'هذا الأسبوع';
+
+  @override
+  String get ceMois => 'هذا الشهر';
+
+  @override
+  String get chiffreAffaires => 'رقم المعاملات';
+
+  @override
+  String get encaisse => 'المحصَّل';
+
+  @override
+  String get creditAccorde => 'الدين الممنوح';
+
+  @override
+  String get caisseDuJour => 'صندوق اليوم';
+
+  @override
+  String get especesAttendues => 'النقود المتوقعة';
+
+  @override
+  String get especesDeclarees => 'النقود المعدودة';
+
+  @override
+  String ecartCaisse(String montant) {
+    return 'فرق الصندوق: $montant';
+  }
+
+  @override
+  String get caisseJuste => 'الصندوق مضبوط';
+
+  @override
+  String get caisseLocale => 'محفوظ في هذا الهاتف فقط.';
 }

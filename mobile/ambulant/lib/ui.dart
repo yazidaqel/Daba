@@ -45,6 +45,7 @@ String messageErreur(T t, Object e) => switch (e) {
       AutreAmbulantEnAttente() => t.erreurAutreAmbulant,
       OffreIndisponible() => t.offreNonCiblee,
       VenteRefusee(:final motif) => switch (motif) {
+          RefusVente.motifEcartRequis => t.erreurMotifEcart,
           RefusVente.factureSansMentions => t.erreurFactureSansMentions,
           RefusVente.factureTvaInconnue => t.erreurFactureTvaInconnue,
           RefusVente.creditBloque => t.erreurCreditBloque,

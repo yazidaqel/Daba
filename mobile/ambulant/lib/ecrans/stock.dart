@@ -28,6 +28,12 @@ class OngletStock extends StatelessWidget {
               onPressed: () => context.ouvrir(const EcranChargementManuel()), icon: const Ico(PhosphorIconsRegular.notePencil), label: Text(t.chargementManuel)),
           OutlinedButton.icon(
               onPressed: () => context.ouvrir(const EcranMouvements()), icon: const Ico(PhosphorIconsRegular.arrowsDownUp), label: Text(t.mouvements)),
+          OutlinedButton.icon(
+              onPressed: () => context.ouvrir(const EcranRetour()), icon: const Icon(PhosphorIconsRegular.arrowUUpLeft), label: Text(t.retours)),
+          OutlinedButton.icon(
+              onPressed: () => context.ouvrir(const EcranInventaire()),
+              icon: const Ico(PhosphorIconsRegular.listChecks),
+              label: Text(t.inventaireFinJournee)),
         ]),
       ),
       for (final b in aCharger)
@@ -117,33 +123,18 @@ class _EcranChargementManuelState extends State<EcranChargementManuel> {
   final _quantites = <String, int>{};
 
   Future<void> _ajouter() async {
-    final p = await showModalBottomSheet<Map<String, dynamic>>(
-        context: context, isScrollControlled: true, builder: (_) => const ChoixProduit());
-    if (p != null) setState(() => _quantites.update(p['id'] as String, (q) => q + 1, ifAbsent: () => 1));
+    if (await choisirProduit(context) case final id?) setState(() => _quantites.update(id, (q) => q + 1, ifAbsent: () => 1));
   }
 
   @override
   Widget build(BuildContext context) {
     final t = context.t;
-    final m = context.daba.m;
     return Scaffold(
       appBar: AppBar(title: Text(t.chargementManuel)),
       floatingActionButton: FloatingActionButton(heroTag: 'ajout-chargement', onPressed: _ajouter, child: const Ico(PhosphorIconsRegular.plus)),
       body: ListView(children: [
         if (_quantites.isEmpty) Vide(t.ajouterProduits),
-        for (final e in _quantites.entries)
-          ListTile(
-            title: Text(context.lib(m.produit(e.key)?['libelle'])),
-            trailing: SizedBox(
-              width: 90,
-              child: TextFormField(
-                initialValue: '${e.value}',
-                keyboardType: TextInputType.number,
-                textAlign: TextAlign.center,
-                onChanged: (v) => _quantites[e.key] = int.tryParse(v) ?? 0,
-              ),
-            ),
-          ),
+        ...lignesQuantites(context, _quantites),
         Padding(
           padding: const EdgeInsets.all(16),
           child: FilledButton(
@@ -194,5 +185,287 @@ class EcranMouvements extends StatelessWidget {
               },
             ),
     );
+  }
+}
+
+Future<String?> choisirProduit(BuildContext context, {String? hanoutId}) async =>
+    (await showModalBottomSheet<Map<String, dynamic>>(
+        context: context, isScrollControlled: true, builder: (_) => ChoixProduit(hanoutId: hanoutId)))?['id'] as String?;
+
+/// Lignes produit × quantité saisissables (chargement manuel, retour).
+List<Widget> lignesQuantites(BuildContext context, Map<String, int> quantites) => [
+      for (final e in quantites.entries)
+        ListTile(
+          key: ValueKey(e.key),
+          title: Text(context.lib(context.daba.m.produit(e.key)?['libelle'])),
+          trailing: SizedBox(
+            width: 90,
+            child: TextFormField(
+              initialValue: '${e.value}',
+              keyboardType: TextInputType.number,
+              textAlign: TextAlign.center,
+              onChanged: (v) => quantites[e.key] = int.tryParse(v) ?? 0,
+            ),
+          ),
+        ),
+    ];
+
+/// Retour d'un hanout vers l'ambulant ou de l'ambulant vers le grossiste, avec motif (§3.2), hors
+/// ligne (opération RETOUR). Depuis la fiche d'un hanout, le sens et le hanout sont fixés.
+class EcranRetour extends StatefulWidget {
+  const EcranRetour({super.key, this.hanoutId});
+  final String? hanoutId;
+
+  @override
+  State<EcranRetour> createState() => _EcranRetourState();
+}
+
+class _EcranRetourState extends State<EcranRetour> {
+  late bool _versGrossiste = widget.hanoutId == null;
+  late String? _hanoutId = widget.hanoutId;
+  String? _grossisteId;
+  String _motif = 'ABIME';
+  bool _remisEnVente = false;
+  final _quantites = <String, int>{};
+
+  Future<void> _ajouter() async {
+    if (await choisirProduit(context) case final id?) setState(() => _quantites.update(id, (q) => q + 1, ifAbsent: () => 1));
+  }
+
+  Future<void> _choisirHanout() async {
+    final id = await showModalBottomSheet<String>(context: context, isScrollControlled: true, builder: (_) => const _ChoixHanout());
+    if (id != null) setState(() => _hanoutId = id);
+  }
+
+  void _enregistrer() {
+    final t = context.t;
+    final daba = context.daba;
+    if (_versGrossiste && _grossisteId == null) return context.message(t.champObligatoire(t.grossiste));
+    if (!_versGrossiste && _hanoutId == null) return context.message(t.choisirHanout);
+    if (!_quantites.values.any((q) => q > 0)) return context.message(t.ajouterProduits);
+    daba.m.retour(
+      versGrossiste: _versGrossiste,
+      motif: _motif,
+      quantites: _quantites,
+      hanoutId: _versGrossiste ? null : _hanoutId,
+      grossisteId: _versGrossiste ? _grossisteId : null,
+      remisEnVente: _remisEnVente,
+    );
+    daba.apresGeste();
+    Navigator.pop(context);
+    context.message(t.retourEnregistre);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.t;
+    final m = context.daba.m;
+    final grossistes = m.grossistes();
+    final motifs = {'ABIME': t.retourABIME, 'PERIME': t.retourPERIME, 'INVENDU': t.retourINVENDU, 'AUTRE': t.retourAUTRE};
+    return Scaffold(
+      appBar: AppBar(title: Text(t.retours)),
+      floatingActionButton: FloatingActionButton(heroTag: 'ajout-retour', onPressed: _ajouter, child: const Ico(PhosphorIconsRegular.plus)),
+      body: ListView(padding: const EdgeInsets.only(bottom: 96), children: [
+        if (widget.hanoutId == null)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: SegmentedButton<bool>(
+              segments: [
+                ButtonSegment(value: false, label: Text(t.retourHanout)),
+                ButtonSegment(value: true, label: Text(t.retourGrossiste)),
+              ],
+              selected: {_versGrossiste},
+              onSelectionChanged: (s) => setState(() => _versGrossiste = s.first),
+            ),
+          ),
+        if (_versGrossiste)
+          grossistes.isEmpty
+              ? Padding(padding: const EdgeInsets.all(16), child: Statut(Ton.avertissement, t.aucunGrossiste))
+              : Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _grossisteId,
+                    decoration: InputDecoration(labelText: t.grossiste),
+                    items: [
+                      for (final g in grossistes.entries)
+                        DropdownMenuItem(value: g.key, child: Text(g.value ?? t.grossisteCode(g.key.substring(0, 8)))),
+                    ],
+                    onChanged: (v) => setState(() => _grossisteId = v),
+                  ),
+                )
+        else ...[
+          ListTile(
+            leading: const Ico(PhosphorIconsRegular.storefront),
+            title: Text(_hanoutId == null ? t.choisirHanout : (m.hanout(_hanoutId!)?['nom'] as String? ?? '')),
+            trailing: widget.hanoutId == null ? const Icon(PhosphorIconsRegular.caretRight) : null,
+            onTap: widget.hanoutId == null ? _choisirHanout : null,
+          ),
+          SwitchListTile(value: _remisEnVente, onChanged: (v) => setState(() => _remisEnVente = v), title: Text(t.remisEnVente)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(t.retourAvoir, style: Theme.of(context).textTheme.bodySmall),
+          ),
+        ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+          child: Text(t.motif, style: Theme.of(context).textTheme.titleSmall),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Wrap(spacing: 8, children: [
+            for (final e in motifs.entries)
+              ChoiceChip(label: Text(e.value), selected: _motif == e.key, onSelected: (_) => setState(() => _motif = e.key)),
+          ]),
+        ),
+        const Divider(),
+        if (_quantites.isEmpty) Vide(t.ajouterProduits),
+        ...lignesQuantites(context, _quantites),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: FilledButton(onPressed: _quantites.isEmpty ? null : _enregistrer, child: Text(t.enregistrer)),
+        ),
+      ]),
+    );
+  }
+}
+
+class _ChoixHanout extends StatefulWidget {
+  const _ChoixHanout();
+
+  @override
+  State<_ChoixHanout> createState() => _ChoixHanoutState();
+}
+
+class _ChoixHanoutState extends State<_ChoixHanout> {
+  String _q = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final hanouts = context.daba.m.hanouts(q: _q);
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * .8,
+      child: Column(children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: TextField(
+            autofocus: true,
+            decoration: InputDecoration(prefixIcon: const Ico(PhosphorIconsRegular.magnifyingGlass), hintText: context.t.rechercherHanout),
+            onChanged: (v) => setState(() => _q = v),
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: hanouts.length,
+            itemBuilder: (_, i) => ListTile(
+              leading: const Ico(PhosphorIconsRegular.storefront),
+              title: Text(hanouts[i]['nom'] as String),
+              subtitle: Text((hanouts[i]['adresse'] ?? '') as String),
+              onTap: () => Navigator.pop(context, hanouts[i]['id'] as String),
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+/// Inventaire de fin de journée du stock normal (§3.2) : quantité comptée, écart au stock attendu,
+/// motif exigé au-delà du seuil fixé par l'administrateur (RG-S4). Hors ligne (opération INVENTAIRE).
+class EcranInventaire extends StatefulWidget {
+  const EcranInventaire({super.key});
+
+  @override
+  State<EcranInventaire> createState() => _EcranInventaireState();
+}
+
+class _EcranInventaireState extends State<EcranInventaire> {
+  late final _produits = [for (final (p, _) in context.dabaLu.m.stockEmbarque()) p['id'] as String];
+  final _comptes = <String, TextEditingController>{};
+  final _motifs = <String, TextEditingController>{};
+
+  TextEditingController _c(Map<String, TextEditingController> m, String id) => m.putIfAbsent(id, TextEditingController.new);
+
+  @override
+  void dispose() {
+    for (final c in [..._comptes.values, ..._motifs.values]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _ajouter() async {
+    final id = await choisirProduit(context);
+    if (id != null && !_produits.contains(id)) setState(() => _produits.add(id));
+  }
+
+  void _enregistrer() {
+    final t = context.t;
+    final daba = context.daba;
+    final lignes = {
+      for (final id in _produits)
+        if (int.tryParse(_c(_comptes, id).text.trim()) case final n? when n >= 0) id: (compte: n, motif: _c(_motifs, id).text),
+    };
+    if (lignes.isEmpty) return context.message(t.ajouterProduits);
+    try {
+      daba.m.inventaire(lignes);
+    } on VenteRefusee catch (e) {
+      return context.erreur(e);
+    }
+    daba.apresGeste();
+    Navigator.pop(context);
+    context.message(t.inventaireEnregistre);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.t;
+    final m = context.daba.m;
+    return Scaffold(
+      appBar: AppBar(title: Text(t.inventaireFinJournee)),
+      floatingActionButton: FloatingActionButton(heroTag: 'ajout-inventaire', onPressed: _ajouter, child: const Ico(PhosphorIconsRegular.plus)),
+      body: ListView(padding: const EdgeInsets.only(bottom: 96), children: [
+        Padding(padding: const EdgeInsets.all(16), child: Text(t.inventaireAide)),
+        if (_produits.isEmpty) Vide(t.ajouterProduits),
+        for (final id in _produits) _ligne(context, id, m.stock(id)),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: FilledButton(onPressed: _produits.isEmpty ? null : _enregistrer, child: Text(t.enregistrer)),
+        ),
+      ]),
+    );
+  }
+
+  Widget _ligne(BuildContext context, String id, int attendu) {
+    final t = context.t;
+    final m = context.daba.m;
+    final compte = int.tryParse(_c(_comptes, id).text.trim());
+    final ecart = compte == null ? 0 : compte - attendu;
+    final requis = compte != null && Ambulant.motifRequis(compte, attendu, m.seuilEcart);
+    return Column(key: ValueKey(id), children: [
+      ListTile(
+        leading: PhotoProduit(m.produit(id)),
+        title: Text(context.lib(m.produit(id)?['libelle'])),
+        subtitle: Text([t.attendu('$attendu'), if (ecart != 0) t.ecart(ecart > 0 ? '+$ecart' : '$ecart')].join(' · ')),
+        trailing: SizedBox(
+          width: 90,
+          child: TextField(
+            controller: _c(_comptes, id),
+            keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
+            decoration: InputDecoration(hintText: '$attendu', labelText: t.compte),
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+      ),
+      if (requis)
+        Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(72, 0, 16, 8),
+          child: TextField(
+            controller: _c(_motifs, id),
+            maxLength: 500,
+            decoration: InputDecoration(labelText: t.motifEcart, helperText: t.motifObligatoire),
+          ),
+        ),
+    ]);
   }
 }

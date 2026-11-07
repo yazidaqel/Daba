@@ -471,5 +471,89 @@
   "profilConsentementRequis": "Acceptez d'abord le nouveau texte sur vos données pour enregistrer votre profil.",
   "canalHaute": "Urgent : dépannage, promos, réservations",
   "canalMoyenne": "Suivi : crédit, demandes, contestations",
-  "canalBasse": "Stock embarqué"
+  "canalBasse": "Stock embarqué",
+  "retours": "Retours",
+  "retourHanout": "Retour d'un hanout",
+  "retourGrossiste": "Retour au grossiste",
+  "choisirHanout": "Choisir le hanout",
+  "grossiste": "Grossiste",
+  "grossisteCode": "Grossiste {code}",
+  "@grossisteCode": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "aucunGrossiste": "Aucun grossiste connu : chargez d'abord un bon de sortie.",
+  "motif": "Motif",
+  "retourABIME": "Abîmé",
+  "retourPERIME": "Périmé",
+  "retourINVENDU": "Invendu",
+  "retourAUTRE": "Autre",
+  "remisEnVente": "Remettre dans le stock vendable",
+  "retourAvoir": "Le remboursement ou la baisse du solde se fait ensuite par un avoir.",
+  "retourEnregistre": "Retour enregistré",
+  "inventaireFinJournee": "Inventaire de fin de journée",
+  "inventaireAide": "Comptez le stock normal : le stock promo est suivi à part.",
+  "attendu": "Attendu : {quantite}",
+  "@attendu": {
+    "placeholders": {
+      "quantite": {
+        "type": "String"
+      }
+    }
+  },
+  "ecart": "Écart : {ecart}",
+  "@ecart": {
+    "placeholders": {
+      "ecart": {
+        "type": "String"
+      }
+    }
+  },
+  "compte": "Compté",
+  "motifEcart": "Motif de l'écart",
+  "motifObligatoire": "Motif obligatoire",
+  "erreurMotifEcart": "Écart trop grand : indiquez un motif.",
+  "inventaireEnregistre": "Inventaire enregistré",
+  "faireSigner": "Faire signer le hanout",
+  "signatureHanout": "Signature du hanout",
+  "signeParHanout": "Signé par le hanout",
+  "effacer": "Effacer",
+  "choisirPieces": "Choisir les pièces à régler",
+  "imputationFifo": "Sinon, le versement règle les pièces les plus anciennes.",
+  "resteDu": "Reste {montant}",
+  "@resteDu": {
+    "placeholders": {
+      "montant": {
+        "type": "String"
+      }
+    }
+  },
+  "anciennete0a15": "0 à 15 j",
+  "anciennete15a30": "15 à 30 j",
+  "anciennetePlus30": "Plus de 30 j",
+  "topDebiteurs": "Plus gros débiteurs en premier",
+  "favori": "Favori du hanout",
+  "tableauDeBord": "Tableau de bord",
+  "aujourdhui": "Aujourd'hui",
+  "cetteSemaine": "Cette semaine",
+  "ceMois": "Ce mois",
+  "chiffreAffaires": "Chiffre d'affaires",
+  "encaisse": "Encaissé",
+  "creditAccorde": "Crédit accordé",
+  "caisseDuJour": "Caisse du jour",
+  "especesAttendues": "Espèces attendues",
+  "especesDeclarees": "Espèces comptées",
+  "ecartCaisse": "Écart de caisse : {montant}",
+  "@ecartCaisse": {
+    "placeholders": {
+      "montant": {
+        "type": "String"
+      }
+    }
+  },
+  "caisseJuste": "Caisse juste",
+  "caisseLocale": "Gardé sur ce téléphone seulement."
 }

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:daba_shared/daba_shared.dart';
 
 /// Refus locaux d'une vente ; l'interface les traduit.
-enum RefusVente { factureSansMentions, factureTvaInconnue, creditBloque, creditAvertissement, remiseHorsPlafond, qrAutreAmbulant, qrIllisible, bonDejaCharge }
+enum RefusVente { motifEcartRequis, factureSansMentions, factureTvaInconnue, creditBloque, creditAvertissement, remiseHorsPlafond, qrAutreAmbulant, qrIllisible, bonDejaCharge }
 
 class VenteRefusee implements Exception {
   const VenteRefusee(this.motif);
@@ -239,6 +239,66 @@ class Ambulant {
     return parProduit.values.toList();
   }
 
+  /// Produits les plus achetés par le hanout (quantités de ses documents), du premier au dernier (§3.4).
+  List<String> favoris(String hanoutId, {int limite = 10}) {
+    final q = <String, int>{};
+    for (final d in s.objets('DOCUMENT', where: "${_j}hanout.id') = ? AND ${_j}type') <> 'AVOIR'", args: [hanoutId])) {
+      for (final l in (d['lignes'] as List).cast<Map>()) {
+        if (l['nature'] == 'ARTICLE') {
+          q.update(l['produitId'] as String, (v) => v + (l['quantite'] as int), ifAbsent: () => l['quantite'] as int);
+        }
+      }
+    }
+    return (q.keys.toList()..sort((a, b) => q[b]!.compareTo(q[a]!))).take(limite).toList();
+  }
+
+  // ------------------------------------------------------------------ tableau de bord (§3.8)
+  static bool _depuis(String? iso, DateTime depuis) => iso != null && !DateTime.parse(iso).toLocal().isBefore(depuis);
+
+  /// Chiffre d'affaires (avoirs déduits), encaissements (règlements à la livraison + versements) et
+  /// crédit accordé, depuis [depuis] (heure locale). Documents refusés par le serveur exclus.
+  ({int ca, int encaisse, int credit}) activite(DateTime depuis) {
+    var ca = 0, encaisse = 0, credit = 0;
+    for (final d in s.objets('DOCUMENT', where: "${_j}rejete') IS NOT 1")) {
+      if (!_depuis(d['emisLe'] as String?, depuis)) continue;
+      if (d['type'] == 'AVOIR') {
+        ca -= d['total'] as int;
+      } else {
+        ca += d['total'] as int;
+        encaisse += d['montantRegle'] as int;
+        credit += d['montantCredit'] as int;
+      }
+    }
+    for (final v in s.objets('VERSEMENT', where: "${_j}documentId') IS NULL")) {
+      if (_depuis(v['recuLe'] as String?, depuis)) encaisse += v['montant'] as int;
+    }
+    return (ca: ca, encaisse: encaisse, credit: credit);
+  }
+
+  /// Espèces attendues en caisse depuis [depuis] : versements en espèces et règlements en espèces
+  /// des ventes (ceux des documents locaux tant que le serveur n'a pas renvoyé leurs versements).
+  int especesAttendues(DateTime depuis) {
+    var total = 0;
+    final versements = s.objets('VERSEMENT', where: "${_j}mode') = 'ESPECES'");
+    final avecVersement = {for (final v in versements) v['documentId']};
+    for (final v in versements) {
+      if (_depuis(v['recuLe'] as String?, depuis)) total += v['montant'] as int;
+    }
+    for (final d in s.objets('DOCUMENT', where: "${_j}reglements') IS NOT NULL AND ${_j}rejete') IS NOT 1")) {
+      if (!_depuis(d['emisLe'] as String?, depuis) || avecVersement.contains(d['id'])) continue;
+      for (final r in (d['reglements'] as List).cast<Map>()) {
+        if (r['mode'] == 'ESPECES') total += r['montant'] as int;
+      }
+    }
+    return total;
+  }
+
+  // ponytail: caisse déclarée gardée sur le téléphone seulement, jamais synchronisée ; ajouter une
+  // opération au contrat si RED la veut côté serveur.
+  int? caisseDeclaree(DateTime jour) => int.tryParse(s.lire('caisse.${_jour(jour)}') ?? '');
+  void declarerCaisse(DateTime jour, int montant) => s.ecrire('caisse.${_jour(jour)}', '$montant');
+  static String _jour(DateTime j) => j.toIso8601String().substring(0, 10);
+
   // ------------------------------------------------------------------ vente (§3.4, RG-F*, RG-C3)
   /// Émet un bon de livraison (par défaut) ou une facture, hors ligne. Renvoie le document local.
   Map<String, dynamic> emettre({
@@ -247,6 +307,7 @@ class Ambulant {
     String type = 'BON_LIVRAISON',
     List<Reglement> reglements = const [],
     bool confirmeParHanout = false,
+    String? signaturePng, // base64, signature du hanout sur l'écran (§3.4)
     bool avertissementAccepte = false,
     String? demandeDepannageId,
   }) {
@@ -322,7 +383,9 @@ class Ambulant {
           : null;
 
       final maintenant = Stockage.maintenant();
-      final confirmation = confirmeParHanout ? {'mode': 'CONFIRMATION_ECRAN', 'le': maintenant} : null;
+      final confirmation = signaturePng != null
+          ? {'mode': 'SIGNATURE', 'signaturePng': signaturePng, 'le': maintenant}
+          : confirmeParHanout ? {'mode': 'CONFIRMATION_ECRAN', 'le': maintenant} : null;
       final opId = s.enfiler('EMISSION_DOCUMENT', {
         'documentId': documentId,
         'type': type,
@@ -356,6 +419,9 @@ class Ambulant {
         'demandeDepannageId': ?demandeDepannageId,
         'confirmationHanout': ?confirmation,
         if (type == 'FACTURE') 'mentionsLegales': mentions,
+        // Hors contrat, local seulement : espèces de la caisse du jour tant que le serveur n'a pas
+        // renvoyé ses versements de livraison (le document du serveur remplace celui-ci).
+        'reglements': [for (final r in reglements) r.toJson()],
       };
       s.enregistrer('DOCUMENT', documentId, document, local: true);
       _mouvementsLocaux(opId, 'VENTE', {for (final e in deltas.entries) if (e.key.$1 == 'STOCK') e.key.$2: e.value},
@@ -369,17 +435,87 @@ class Ambulant {
       {'fr': campagneId.substring(0, 8)};
 
   // ------------------------------------------------------------------ versements, crédit, paramètres
-  void versement(String hanoutId, int montant, {String mode = 'ESPECES', String? chequeNumero, String? chequeBanque}) {
+  /// Versement imputé FIFO par le serveur (RG-C2) ; avec [pieces], ces documents passent d'abord,
+  /// le reste du montant suit l'ordre FIFO.
+  void versement(String hanoutId, int montant,
+      {String mode = 'ESPECES', String? chequeNumero, String? chequeBanque, Iterable<String> pieces = const []}) {
     s.transaction(() {
       final id = Stockage.nouvelId();
+      final imputations = pieces.isEmpty
+          ? null
+          : [
+              for (final e in imputer(montant, [for (final r in restesDus(hanoutId)) (r.$1['id'] as String, r.$2)],
+                  prioritaires: pieces).entries)
+                {'documentId': e.key, 'montant': e.value}
+            ];
       final saisie = {
         'versementId': id, 'hanoutId': hanoutId, 'mode': mode, 'montant': montant,
-        'chequeNumero': ?chequeNumero, 'chequeBanque': ?chequeBanque,
+        'chequeNumero': ?chequeNumero, 'chequeBanque': ?chequeBanque, 'imputations': ?imputations,
       };
       s.enfiler('VERSEMENT', saisie, deltas: {('SOLDE', hanoutId): -montant});
-      s.enregistrer('VERSEMENT', id,
-          {...saisie, 'imputations': [], 'recuLe': Stockage.maintenant(), 'ambulantId': utilisateurId}, local: true);
+      // `fifo` (local) : imputé par le serveur, rejoué FIFO ici en attendant son retour.
+      s.enregistrer('VERSEMENT', id, {
+        ...saisie, 'imputations': imputations ?? [], if (imputations == null) 'fifo': true,
+        'recuLe': Stockage.maintenant(), 'ambulantId': utilisateurId,
+      }, local: true);
     });
+  }
+
+  /// Répartit [montant] sur les restes dus (du plus ancien au plus récent), [prioritaires] d'abord.
+  static Map<String, int> imputer(int montant, List<(String, int)> restes, {Iterable<String> prioritaires = const []}) {
+    final p = prioritaires.toSet();
+    final r = <String, int>{};
+    for (final (id, reste) in [...restes.where((x) => p.contains(x.$1)), ...restes.where((x) => !p.contains(x.$1))]) {
+      final part = montant < reste ? montant : reste;
+      if (part <= 0) continue;
+      r[id] = part;
+      montant -= part;
+    }
+    return r;
+  }
+
+  /// Reste dû de chaque pièce à crédit, de la plus ancienne à la plus récente : crédit − imputations
+  /// − avoirs, comme le serveur (RG-C2) ; un versement pas encore remonté sans choix est imputé FIFO.
+  List<(Map<String, dynamic>, int)> restesDus(String hanoutId) {
+    final docs = s.objets('DOCUMENT',
+        where: "${_j}hanout.id') = ? AND ${_j}type') <> 'AVOIR' AND ${_j}montantCredit') > 0 AND ${_j}rejete') IS NOT 1",
+        args: [hanoutId],
+        orderBy: "${_j}emisLe'), ${_j}sequence')");
+    final reste = {for (final d in docs) d['id'] as String: d['montantCredit'] as int};
+    for (final a in s.objets('DOCUMENT', where: "${_j}hanout.id') = ? AND ${_j}type') = 'AVOIR'", args: [hanoutId])) {
+      if (reste.containsKey(a['documentOrigineId'])) reste[a['documentOrigineId'] as String] = reste[a['documentOrigineId']]! - (a['total'] as int);
+    }
+    for (final v in s.objets('VERSEMENT',
+        where: "${_j}hanoutId') = ? AND ${_j}documentId') IS NULL", args: [hanoutId], orderBy: "${_j}recuLe')")) {
+      final imputations = v['fifo'] == true
+          ? imputer(v['montant'] as int, [for (final e in reste.entries) (e.key, e.value)])
+          : {for (final i in (v['imputations'] as List).cast<Map>()) i['documentId'] as String: i['montant'] as int};
+      imputations.forEach((id, m) {
+        if (reste.containsKey(id)) reste[id] = reste[id]! - m;
+      });
+    }
+    return [for (final d in docs) if (reste[d['id']]! > 0) (d, reste[d['id']]!)];
+  }
+
+  /// Vue globale du karni (§3.5) : créances par ancienneté du document (0-15 j, 15-30 j, +30 j).
+  /// Le total de chaque hanout est son solde RG-C1 (serveur + gestes locaux) : un solde au-delà des
+  /// pièces connues de l'appareil compte en +30 j, un solde en deçà réduit d'abord les plus anciennes.
+  ({int total, int de0a15, int de15a30, int plusDe30}) anciennete({DateTime? maintenant}) {
+    final now = maintenant ?? DateTime.now();
+    final t = [0, 0, 0];
+    for (final (h, solde) in comptes()) {
+      if (solde <= 0) continue;
+      final restes = restesDus(h['id'] as String);
+      var trop = restes.fold<int>(0, (a, r) => a + r.$2) - solde;
+      if (trop < 0) t[2] -= trop;
+      for (final (d, r) in restes) {
+        final retire = trop > 0 ? (trop < r ? trop : r) : 0;
+        trop -= retire;
+        final age = now.difference(DateTime.parse(d['emisLe'] as String)).inDays;
+        t[age < 15 ? 0 : age < 30 ? 1 : 2] += r - retire;
+      }
+    }
+    return (total: t[0] + t[1] + t[2], de0a15: t[0], de15a30: t[1], plusDe30: t[2]);
   }
 
   void definirCredit(String hanoutId, {int? plafond, int? delaiMaxJours}) {
@@ -502,6 +638,61 @@ class Ambulant {
         'lignes': [for (final e in quantites.entries) {'produitId': e.key, 'quantite': e.value}],
       }, deltas: {for (final e in quantites.entries) ('STOCK', e.key): e.value});
       _mouvementsLocaux(opId, 'CHARGEMENT', quantites);
+    });
+  }
+
+  // ------------------------------------------------------------------ retours et inventaire (§3.2)
+  /// Grossistes connus de l'appareil (promos, réservations, bons de sortie), nom null si inconnu.
+  Map<String, String?> grossistes() => {
+        for (final b in s.objets('BON_SORTIE')) b['grossisteId'] as String: null,
+        for (final p in [...s.objets('PROMO'), ...s.objets('RESERVATION')])
+          if (p['grossiste'] case {'id': final String id, 'nom': final String nom}) id: nom,
+      };
+
+  /// Retour d'un hanout (entrée en stock seulement si [remisEnVente]) ou au grossiste (sortie).
+  /// Le remboursement ou la baisse du solde passe par un avoir distinct (contrat `Retour`).
+  void retour({required bool versGrossiste, required String motif, required Map<String, int> quantites,
+      String? hanoutId, String? grossisteId, bool remisEnVente = false}) {
+    if (versGrossiste ? grossisteId == null : hanoutId == null) throw ArgumentError('hanoutId ou grossisteId');
+    final signe = versGrossiste ? -1 : (remisEnVente ? 1 : 0);
+    final lignes = {for (final e in quantites.entries) if (e.value > 0) e.key: e.value};
+    if (lignes.isEmpty) throw ArgumentError.value(quantites, 'quantites');
+    s.transaction(() {
+      final opId = s.enfiler('RETOUR', {
+        'sens': versGrossiste ? 'AMBULANT_VERS_GROSSISTE' : 'HANOUT_VERS_AMBULANT',
+        if (versGrossiste) 'grossisteId': grossisteId else ...{'hanoutId': hanoutId, 'remisEnVente': remisEnVente},
+        'motif': motif,
+        'lignes': [for (final e in lignes.entries) {'produitId': e.key, 'quantite': e.value}],
+      }, deltas: {if (signe != 0) for (final e in lignes.entries) ('STOCK', e.key): signe * e.value});
+      if (signe != 0) _mouvementsLocaux(opId, 'RETOUR', lignes.map((k, v) => MapEntry(k, signe * v)));
+    });
+  }
+
+  /// RG-S4 : un écart au-delà du seuil (en % du stock théorique) exige un motif ; théorique nul ou
+  /// négatif : tout écart l'exige (même règle que le serveur).
+  static bool motifRequis(int compte, int theorique, num seuilPourcent) =>
+      compte != theorique && (theorique <= 0 || (compte - theorique).abs() * 100 > seuilPourcent * theorique);
+
+  num get seuilEcart => (parametres['seuilEcartInventairePourcent'] as num?) ?? 0;
+
+  /// Inventaire de fin de journée du stock normal (le stock promo est suivi par réservation) :
+  /// le stock local devient la quantité comptée ; le serveur crée les AJUSTEMENT.
+  void inventaire(Map<String, ({int compte, String? motif})> lignes) {
+    if (lignes.isEmpty) throw ArgumentError.value(lignes, 'lignes');
+    String? net(String? m) => m == null || m.trim().isEmpty ? null : m.trim();
+    final ecarts = {for (final e in lignes.entries) if (e.value.compte != stock(e.key)) e.key: e.value.compte - stock(e.key)};
+    for (final e in lignes.entries) {
+      if (motifRequis(e.value.compte, stock(e.key), seuilEcart) && net(e.value.motif) == null) {
+        throw const VenteRefusee(RefusVente.motifEcartRequis);
+      }
+    }
+    s.transaction(() {
+      final opId = s.enfiler('INVENTAIRE', {
+        'lignes': [
+          for (final e in lignes.entries) {'produitId': e.key, 'quantiteComptee': e.value.compte, 'motifEcart': ?net(e.value.motif)}
+        ],
+      }, deltas: {for (final e in ecarts.entries) ('STOCK', e.key): e.value});
+      _mouvementsLocaux(opId, 'AJUSTEMENT', ecarts);
     });
   }
 

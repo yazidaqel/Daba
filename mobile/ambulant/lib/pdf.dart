@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:daba_shared/daba_shared.dart';
@@ -61,6 +62,11 @@ Future<File> documentPdf(Map<String, dynamic> doc, T t, Locale locale) async {
       pw.Text('${t.total} : ${dh(doc['total'] as int)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
       pw.Text('${t.regle} : ${dh(doc['montantRegle'] as int)}'),
       pw.Text('${t.resteACredit} : ${dh(doc['montantCredit'] as int)}'),
+      if (doc['confirmationHanout']?['signaturePng'] case final String png) ...[
+        pw.SizedBox(height: 12),
+        pw.Text(t.signatureHanout),
+        pw.Image(pw.MemoryImage(base64Decode(png)), height: 48),
+      ],
     ]),
   ));
   final fichier = File('${(await getTemporaryDirectory()).path}/${doc['numero']}.pdf');

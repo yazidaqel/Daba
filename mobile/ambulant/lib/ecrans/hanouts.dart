@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../ui.dart';
 import 'karni.dart';
+import 'stock.dart';
 import 'vente.dart';
 
 const _casablanca = LatLng(33.5731, -7.5898);
@@ -170,6 +171,11 @@ class EcranHanout extends StatelessWidget {
             onPressed: () => reglerCredit(context, id),
             icon: const Ico(PhosphorIconsRegular.slidersHorizontal),
             label: Text(t.plafondCredit),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => context.ouvrir(EcranRetour(hanoutId: id)),
+            icon: const Icon(PhosphorIconsRegular.arrowUUpLeft),
+            label: Text(t.retours),
           ),
         ]),
         for (final c in m.contestations(hanoutId: id)) CarteContestation(c),

@@ -288,7 +288,10 @@ void main() {
       'EMISSION_DOCUMENT': 'EmissionDocument', 'VERSEMENT': 'VersementSaisie', 'CHARGEMENT': 'Chargement',
       'HANOUT': 'NouveauHanout', 'CREDIT_HANOUT': 'CreditHanoutSaisie', 'PARAMETRES_AMBULANT': 'ParametresAmbulantSaisie',
       'RESOLUTION_CONTESTATION': 'ResolutionContestation', 'TARIF': 'Tarif', 'PROFIL_AMBULANT': 'ProfilAmbulantSaisie',
+      'RETOUR': 'Retour', 'INVENTAIRE': 'Inventaire',
     };
+    Set<Object?> cles(YamlMap schema) => (schema['properties'] as YamlMap).keys.toSet();
+    Set<Object?> valeurs(YamlMap schema, String champ) => (schema['properties'][champ]['enum'] as YamlList).toSet();
 
     final m = monter(parametres: {
       'politiqueDepassementCredit': 'AVERTIR', 'seuilEcartInventairePourcent': 5,
@@ -305,6 +308,11 @@ void main() {
     m.resoudreContestation('99999999-9999-4999-8999-999999999999', commentaire: 'Avoir émis');
     m.definirProfil(nom: 'Said', cin: 'BK123456', vehicule: 'Triporteur', villes: ['CASABLANCA'], categories: ['BOISSONS']);
     m.definirMentions({'ice': '001234567000089', 'identifiantFiscal': '1', 'registreCommerce': '2', 'assujettiTva': true});
+    m.retour(versGrossiste: false, motif: 'INVENDU', quantites: {coca: 2}, hanoutId: hanoutId, remisEnVente: true);
+    m.retour(versGrossiste: true, motif: 'PERIME', quantites: {coca: 1}, grossisteId: '77777777-7777-4777-8777-777777777777');
+    m.inventaire({coca: (compte: 50, motif: 'Casse')});
+    final credit = m.emettre(hanoutId: hanoutId, lignes: [coca1(2)], signaturePng: 'iVBORw0KGgo=');
+    m.versement(hanoutId, 300, pieces: [credit['id'] as String]);
 
     final champsSaisie = (schemas['LigneDocumentSaisie']['properties'] as YamlMap).keys.toSet();
     for (final op in m.s.enAttente()) {
@@ -321,6 +329,29 @@ void main() {
       }
       if (donnees['mentionsLegales'] case final Map ml when op['type'] == 'PARAMETRES_AMBULANT') {
         expect(ml.keys.toSet(), (schemas['MentionsLegales']['properties'] as YamlMap).keys.toSet());
+      }
+      if (op['type'] == 'RETOUR') {
+        expect(valeurs(schema, 'sens'), contains(donnees['sens']));
+        expect(valeurs(schema, 'motif'), contains(donnees['motif']));
+        expect(donnees, contains(donnees['sens'] == 'HANOUT_VERS_AMBULANT' ? 'hanoutId' : 'grossisteId'));
+        if (donnees['sens'] == 'AMBULANT_VERS_GROSSISTE') expect(donnees, isNot(contains('remisEnVente')));
+      }
+      if (op['type'] == 'INVENTAIRE') {
+        final ligne = schema['properties']['lignes']['items'] as YamlMap;
+        for (final l in (donnees['lignes'] as List).cast<Map>()) {
+          expect(cles(ligne), containsAll(l.keys));
+          expect(l, containsPair('motifEcart', 'Casse'));
+        }
+      }
+      if (donnees['imputations'] case final List imputations when op['type'] == 'VERSEMENT') {
+        expect(imputations, isNotEmpty);
+        for (final i in imputations.cast<Map>()) {
+          expect(cles(schemas['Imputation'] as YamlMap), containsAll(i.keys));
+        }
+      }
+      if (donnees['confirmationHanout'] case final Map c) {
+        expect(cles(schemas['ConfirmationHanout'] as YamlMap), containsAll(c.keys));
+        expect(valeurs(schemas['ConfirmationHanout'] as YamlMap, 'mode'), contains(c['mode']));
       }
       if (op['type'] == 'EMISSION_DOCUMENT') {
         expect(RegExp(schemas['NumeroDocument']['pattern'] as String).hasMatch(donnees['numero'] as String), isTrue);

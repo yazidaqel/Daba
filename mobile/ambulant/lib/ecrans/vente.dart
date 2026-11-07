@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:daba_shared/daba_shared.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphoricons_flutter/phosphoricons_flutter.dart';
@@ -6,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../domaine.dart';
 import '../pdf.dart';
 import '../ui.dart';
+import 'signature.dart';
 
 /// Prise de commande rapide, hors ligne (§3.4) : bon de livraison par défaut, facture si le
 /// profil a ses mentions légales, règlement espèces / chèque / crédit / partiel.
@@ -27,6 +30,12 @@ class _EcranVenteState extends State<EcranVente> {
   final _chequeNumero = TextEditingController();
   final _chequeBanque = TextEditingController();
   bool _especesSaisies = false, _confirme = false;
+  String? _signature; // PNG base64
+
+  Future<void> _signer() async {
+    final s = await context.ouvrir<String>(const EcranSignature());
+    if (s != null) setState(() => _signature = s);
+  }
 
   int get _total => _lignes.fold(0, (a, l) => a + l.brut - l.remise);
 
@@ -41,7 +50,7 @@ class _EcranVenteState extends State<EcranVente> {
     final p = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => const ChoixProduit(),
+      builder: (_) => ChoixProduit(hanoutId: widget.hanoutId),
     );
     if (p == null || !mounted) return;
     final id = p['id'] as String;
@@ -115,6 +124,7 @@ class _EcranVenteState extends State<EcranVente> {
             Reglement('CHEQUE', _montantCheque, chequeNumero: _chequeNumero.text.trim(), chequeBanque: _chequeBanque.text.trim()),
         ],
         confirmeParHanout: _confirme,
+        signaturePng: _signature,
         avertissementAccepte: avertissementAccepte,
         demandeDepannageId: widget.demandeDepannageId,
       );
@@ -192,7 +202,25 @@ class _EcranVenteState extends State<EcranVente> {
             ]),
           ]),
         ),
-        CheckboxListTile(value: _confirme, onChanged: (v) => setState(() => _confirme = v!), title: Text(t.confirmationHanout)),
+        CheckboxListTile(
+            value: _confirme || _signature != null,
+            onChanged: _signature != null ? null : (v) => setState(() => _confirme = v!),
+            title: Text(t.confirmationHanout)),
+        ListTile(
+          leading: const Ico(PhosphorIconsRegular.signature),
+          title: Text(_signature == null ? t.faireSigner : t.signeParHanout),
+          subtitle: _signature == null
+              ? null
+              : Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: ColoredBox(color: Zellige.clair.surface, child: Image.memory(base64Decode(_signature!), height: 48)),
+                ),
+          trailing: _signature == null
+              ? null
+              : IconButton(
+                  tooltip: t.effacer, icon: const Ico(PhosphorIconsRegular.eraser), onPressed: () => setState(() => _signature = null)),
+          onTap: _signer,
+        ),
         Padding(
           padding: const EdgeInsets.all(16),
           child: FilledButton.icon(
@@ -232,7 +260,10 @@ class _EcranVenteState extends State<EcranVente> {
 }
 
 class ChoixProduit extends StatefulWidget {
-  const ChoixProduit({super.key});
+  const ChoixProduit({super.key, this.hanoutId});
+
+  /// Hanout de la vente : ses produits favoris passent en tête (§3.4).
+  final String? hanoutId;
 
   @override
   State<ChoixProduit> createState() => ChoixProduitState();
@@ -244,9 +275,14 @@ class ChoixProduitState extends State<ChoixProduit> {
   @override
   Widget build(BuildContext context) {
     final m = context.daba.m;
-    // Produits en stock d'abord.
+    // Favoris du hanout d'abord (les plus achetés en tête), puis les produits en stock.
+    final favoris = widget.hanoutId == null ? const <String>[] : m.favoris(widget.hanoutId!);
+    int rang(Map p) => switch (favoris.indexOf(p['id'] as String)) { -1 => favoris.length, final i => i };
     final produits = m.produits(q: _q).map((p) => (p, m.stockTotal(p['id'] as String))).toList()
-      ..sort((a, b) => (b.$2 > 0 ? 1 : 0).compareTo(a.$2 > 0 ? 1 : 0));
+      ..sort((a, b) {
+        final r = rang(a.$1).compareTo(rang(b.$1));
+        return r != 0 ? r : (b.$2 > 0 ? 1 : 0).compareTo(a.$2 > 0 ? 1 : 0);
+      });
     return SizedBox(
       height: MediaQuery.sizeOf(context).height * .8,
       child: Column(children: [
@@ -267,7 +303,14 @@ class ChoixProduitState extends State<ChoixProduit> {
                     leading: PhotoProduit(produits[i].$1),
                     title: Text(context.lib(produits[i].$1['libelle'])),
                     subtitle: Text('${produits[i].$1['marque']} · ${produits[i].$1['ean']}'),
-                    trailing: Text('${produits[i].$2}'),
+                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (favoris.contains(produits[i].$1['id']))
+                        Padding(
+                          padding: const EdgeInsetsDirectional.only(end: 8),
+                          child: Tooltip(message: context.t.favori, child: const Ico(PhosphorIconsRegular.star, size: 18)),
+                        ),
+                      Text('${produits[i].$2}'),
+                    ]),
                     onTap: () => Navigator.pop(context, produits[i].$1),
                   ),
                 ),

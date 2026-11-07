@@ -904,4 +904,165 @@ class TFr extends T {
 
   @override
   String get canalBasse => 'Stock embarqué';
+
+  @override
+  String get retours => 'Retours';
+
+  @override
+  String get retourHanout => 'Retour d\'un hanout';
+
+  @override
+  String get retourGrossiste => 'Retour au grossiste';
+
+  @override
+  String get choisirHanout => 'Choisir le hanout';
+
+  @override
+  String get grossiste => 'Grossiste';
+
+  @override
+  String grossisteCode(String code) {
+    return 'Grossiste $code';
+  }
+
+  @override
+  String get aucunGrossiste =>
+      'Aucun grossiste connu : chargez d\'abord un bon de sortie.';
+
+  @override
+  String get motif => 'Motif';
+
+  @override
+  String get retourABIME => 'Abîmé';
+
+  @override
+  String get retourPERIME => 'Périmé';
+
+  @override
+  String get retourINVENDU => 'Invendu';
+
+  @override
+  String get retourAUTRE => 'Autre';
+
+  @override
+  String get remisEnVente => 'Remettre dans le stock vendable';
+
+  @override
+  String get retourAvoir =>
+      'Le remboursement ou la baisse du solde se fait ensuite par un avoir.';
+
+  @override
+  String get retourEnregistre => 'Retour enregistré';
+
+  @override
+  String get inventaireFinJournee => 'Inventaire de fin de journée';
+
+  @override
+  String get inventaireAide =>
+      'Comptez le stock normal : le stock promo est suivi à part.';
+
+  @override
+  String attendu(String quantite) {
+    return 'Attendu : $quantite';
+  }
+
+  @override
+  String ecart(String ecart) {
+    return 'Écart : $ecart';
+  }
+
+  @override
+  String get compte => 'Compté';
+
+  @override
+  String get motifEcart => 'Motif de l\'écart';
+
+  @override
+  String get motifObligatoire => 'Motif obligatoire';
+
+  @override
+  String get erreurMotifEcart => 'Écart trop grand : indiquez un motif.';
+
+  @override
+  String get inventaireEnregistre => 'Inventaire enregistré';
+
+  @override
+  String get faireSigner => 'Faire signer le hanout';
+
+  @override
+  String get signatureHanout => 'Signature du hanout';
+
+  @override
+  String get signeParHanout => 'Signé par le hanout';
+
+  @override
+  String get effacer => 'Effacer';
+
+  @override
+  String get choisirPieces => 'Choisir les pièces à régler';
+
+  @override
+  String get imputationFifo =>
+      'Sinon, le versement règle les pièces les plus anciennes.';
+
+  @override
+  String resteDu(String montant) {
+    return 'Reste $montant';
+  }
+
+  @override
+  String get anciennete0a15 => '0 à 15 j';
+
+  @override
+  String get anciennete15a30 => '15 à 30 j';
+
+  @override
+  String get anciennetePlus30 => 'Plus de 30 j';
+
+  @override
+  String get topDebiteurs => 'Plus gros débiteurs en premier';
+
+  @override
+  String get favori => 'Favori du hanout';
+
+  @override
+  String get tableauDeBord => 'Tableau de bord';
+
+  @override
+  String get aujourdhui => 'Aujourd\'hui';
+
+  @override
+  String get cetteSemaine => 'Cette semaine';
+
+  @override
+  String get ceMois => 'Ce mois';
+
+  @override
+  String get chiffreAffaires => 'Chiffre d\'affaires';
+
+  @override
+  String get encaisse => 'Encaissé';
+
+  @override
+  String get creditAccorde => 'Crédit accordé';
+
+  @override
+  String get caisseDuJour => 'Caisse du jour';
+
+  @override
+  String get especesAttendues => 'Espèces attendues';
+
+  @override
+  String get especesDeclarees => 'Espèces comptées';
+
+  @override
+  String ecartCaisse(String montant) {
+    return 'Écart de caisse : $montant';
+  }
+
+  @override
+  String get caisseJuste => 'Caisse juste';
+
+  @override
+  String get caisseLocale => 'Gardé sur ce téléphone seulement.';
 }

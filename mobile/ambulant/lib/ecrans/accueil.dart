@@ -15,6 +15,7 @@ import 'profil.dart';
 import 'promos.dart';
 import 'stock.dart';
 import 'synchro.dart';
+import 'tableau.dart';
 import 'vente.dart';
 
 class EcranAccueil extends StatefulWidget {
@@ -95,9 +96,11 @@ class _EcranAccueilState extends State<EcranAccueil> {
             onSelected: (v) => switch (v) {
               0 => context.ouvrir(const EcranParametres()),
               2 => context.ouvrir(const EcranProfil()),
+              3 => context.ouvrir(const EcranTableauDeBord()),
               _ => _deconnecter(),
             },
             itemBuilder: (_) => [
+              PopupMenuItem(value: 3, child: Text(t.tableauDeBord)),
               PopupMenuItem(value: 2, child: Text(t.profil)),
               PopupMenuItem(value: 0, child: Text(t.parametres)),
               PopupMenuItem(value: 1, child: Text(t.deconnexion)),
